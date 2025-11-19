@@ -1,0 +1,11 @@
+{{- if not .Values.global.controller.Only }}
+{{- if and .Values.enabled .Values.bdosd.config.entries}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.bdosd.config.name }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{ toYaml .Values.bdosd.config.entries | indent 2 }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,123 @@
+f5-tmm:
+  enabled: true
+  cert-orchestrator:
+    enabled: true
+  f5-toda-logging:
+    enabled: false
+  blobd:
+    enabled: false
+    image:
+      repository: repo.f5.com/images
+
+  debug:
+    image:
+      repository: repo.f5.com/images
+    rabbitmqNamespace: f5-utils
+  f5-toda-logging:
+    enabled: false
+    fluentbit:
+      tls:
+        enabled: false
+    fluentd:
+      host: f5-toda-fluentd.f5-utils.svc.cluster.local.
+      port: 54321
+    tmstats:
+      enabled: false
+      config:
+        image:
+          repository: repo.f5.com/images
+  tmm:
+    image:
+      repository: repo.f5.com/images
+    nodeSelector:
+      node-type: high-performance
+    
+    tolerations:
+      - key: f5.com/spk-node
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      - key: high-performance
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    #nodeSelector:
+    #  spk-tmm: "true"
+    customEnvVars:
+      - name: ROBIN_VFIO_RESOURCE_1
+        value: "external_netdevice" #<--- value from configmap "sriovdp-config" above
+      - name: ROBIN_VFIO_RESOURCE_2
+        value: "internal_netdevice" #<--- value from configmap "sriovdp-config" above
+      - name: PCIDEVICE_INTEL_COM_EXTERNAL_NETDEVICE
+        value: "0000:00:07.0"
+      - name: PCIDEVICE_INTEL_COM_INTERNAL_NETDEVICE
+        value: "0000:00:06.0"
+      - name: TMM_IGNORE_GATEWAYS #Oracle has localhost IP address setup as gateway, same as Calico but different mac. This eneds to be supported before we can discover the gateway. If not set, we will go into crashloop.
+        value: "TRUE"
+      - name: PAL_CPU_SET
+        value: "0"
+      - name: TMM_MAPRES_IGNORE_MEM_LIMIT
+        value: "TRUE"
+      - name: SESSIONDB_EXTERNAL_SERVICE
+        value: "f5-dssm-sentinel.f5-utils.svc.cluster.local:26379"
+      #- name: TMM_MAPRES_HALT
+      #  value: "TRUE"
+     # - name: TMM_GENERIC_SOCKET_DRIVER
+     #   value: "TRUE"
+     # - name: TMM_MAPRES_KEEP_NICS
+     #   value: "TRUE"
+     # - name: TMM_MAPRES_USE_VETH_NAME
+     #   value: "TRUE"
+    debug:
+      enabled: true
+    dynamicRouting:
+      enabled: false
+    cniNetworks: f5-spk/external-netdevice, f5-spk/internal-netdevice
+    grpc:
+      enabled: true
+    icni2:
+      enabled: false
+    hugepages:
+      enabled: true
+
+    # for SBI
+    tlsStore:
+      enabled: false
+
+    resources:
+      limits:
+        cpu: 2
+        hugepages-2Mi: "3Gi"
+        memory: "3Gi"
+
+controller:
+  image:
+    repository: repo.f5.com/images
+  tmm_pod_manager:
+    image:
+      repository: repo.f5.com/images
+  f5_lic_helper:
+    image:
+      repository: repo.f5.com/images
+    enabled: true
+    name: f5-lic-helper
+    rabbitmqNamespace: "f5-utils"
+    rabbitmqCerts:
+      ca_root_cert:
+      client_cert:
+      client_key:
+  watchNamespace: f5-spk
+  fluentbit_sidecar:
+    enabled: false
+    fluentd:
+      host: localhost
+  otel_sidecar:
+    enabled: false
+    prometheus_nodePort: 30000
+  grafana:
+    enabled: false
+    port: 32000
+  prometheus:
+    enabled: false
+    port: 30000
+  createTmmLBService: false

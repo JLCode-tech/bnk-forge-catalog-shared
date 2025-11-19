@@ -1,0 +1,202 @@
+enabled: false
+
+dwbld:
+  name: f5-dwbld
+  enabled: false
+  debug: false
+  log_level: info
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19891
+  ## dwbld pod assignment/selector values.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  ## Enables the dwbld pods to use the host's network namespace.
+  hostNetwork: false
+
+  ## dwbld annotations
+  annotations: {}
+
+  ## below params can be used as dwbld.serviceAccount.name
+  serviceAccount:
+    create: true
+    ## The name of the service account to use.
+    ## If not set and create is true, a name is generated using .Values.dwbld.name.
+    # name: ""  
+      
+  blobd:
+    grpc:
+      name: grpc-blobd-svc
+      # If this value is empty, then dwbld sends blob directly to tmm
+      port: 9222
+
+  ## dwbld image values
+  image:
+    name: f5-dwbld
+    tag: v1.161.0-0.2.11
+    pullPolicy: IfNotPresent
+
+  ## dwbld security values
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsUser: 1001
+    runAsGroup: 2000
+    privileged: ""
+
+  ## dwbld resources, review with team
+  resources:
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+    requests:
+      cpu: "0.5"
+      memory: "256Mi"
+
+  ## dwbld blob values
+  blob:
+    maxFwBlobSizeMb: "512"
+    maxNatBlobSizeMb: "512"
+
+  ## dwbld ConfigMap values
+  config:
+    name: f5-dwbld-config
+    entries: {}
+
+  ## dwbld GRPC values
+  grpc:
+    name: grpc-dwbld-svc
+    port: 8750
+    ca: "ca_root.crt"
+    cert: "grpc-svc.crt"
+    key: "grpc-svc.key"
+    client_ca: "ca_root.crt"
+    client_cert: "grpc-dwbld-client.crt"
+    client_key: "grpc-dwbld-client.key"
+
+  ## Fluentbit sidecar values
+  fluentbit_sidecar:
+    # Enable/Disable sidecar
+    enabled: true
+    name: fluentbit
+    # Redirect logs to stdout
+    debug: true
+    # Image container definition
+    image:
+        name: f5-fluentbit
+        tag: v1.2.8-0.0.5
+        pullPolicy: IfNotPresent
+    ## securityContext for Fluentbit sidecar
+    securityContext:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsUser: 1001
+      runAsGroup: 2000
+      privileged: ""
+    # Environment variables used in config file for fluentbit
+    env:
+      - name: NODE
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      - name: POD_ID
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.uid
+      - name: POD
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+    volumeMounts:
+      - name: f5-log-pipes
+        mountPath: /var/run/f5
+        readOnly: true
+      - name: f5-dwbld-fluentbit-config
+        mountPath: /fluent-bit/etc/
+    volumeMountsTls:
+      - name: f5-dwbld-fluentbit-secrets
+        mountPath: /fluent-bit/ssl/
+    fluentbit:
+      # Interval to flush output (seconds)
+      flush_interval: 1
+      # Error/warning/info/debug/trace
+      logLevel: info
+      # Pipe reading parameters
+      input:
+        pipes:
+          bufSize: 8096
+          intervalSec: 1
+          intervalNsec: 0
+      tls:
+        enabled: false
+        # TLS debug verbosity level, values: 0 (No debug), 1 (Error), 2 (State change), 3 (Informational) and 4 (Verbose)
+        debug: 1
+        # Force certificate validation
+        verify: Off
+        # key string known by the remote Fluentd used for authorization.
+        shared_key: f5-toda-shared-key
+
+    fluentd:
+      host: '127.0.0.1'
+      port: 54321
+
+## Global params which are being used by more than one pod.
+
+# below params can be used as gobal.serviceAccount.name
+global:
+  serviceAccount:
+    name:
+    create: false
+
+  certmgr:
+    external: false
+    ## If using an external cert-manager installation, the issuerRef must be populated with the required fields.
+    # issuerRef:
+    #   name: cert-issuer
+    #   kind: Issuer
+    #   namespace: cert-manager
+
+# The below global variables are being used by dwbld, dwbld, afm and downloader subcharts only.
+
+  controller:
+    Only: false
+    crdupdater:
+      enabled: false
+      grpc:
+        port: 8750
+  imageCredentials:
+    name: f5ingress-regsecret
+  tmm:
+    grpc:
+      enabled: true
+      name: grpc-svc
+  blobd:
+    enabled: false
+    grpc:
+      port: 9222
+  afm:
+    enabled: false
+    pccd:
+      enabled: false
+      grpc:
+        name: grpc-pccd-svc
+## dwbld GRPC values
+  dwbld:
+    enabled: false
+    grpc:
+      name: grpc-dwbld-svc
+      port: 8750
+      ca: "ca_root.crt"
+      cert: "grpc-svc.crt"
+      key: "grpc-svc.key"
+      client_ca: "ca_root.crt"
+      client_cert: "grpc-dwbld-client.crt"
+      client_key: "grpc-dwbld-client.key"
+
+spk-common:
+  skipF5logCreation: true      

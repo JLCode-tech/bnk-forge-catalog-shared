@@ -1,0 +1,309 @@
+{{- if not .Values.controller.Only }}
+{{- if .Values.gslbEngine.enabled }}
+{{- $release := $.Release.Name -}}
+{{- $namespace := $.Release.Namespace -}}
+{{- $metadataName := printf "%s-%s" $release (sha1sum $namespace) -}}
+{{- $dataplaneVlanName := printf "%s-%s" "dp-ep" (sha1sum $namespace) | trunc 15 -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.gslbEngine.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.gslbEngine.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.gslbEngine.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.gslbEngine.name }}
+      {{- if .Values.gslbEngine.annotations }}
+      annotations: 
+{{ toYaml .Values.gslbEngine.annotations | indent 8 }}
+      {{- end }}
+      {{- if and (index .Values "f5-tmm").enabled (index .Values "f5-tmm").tmm.cniNetworks }}
+      {{- if eq (index .Values "f5-tmm").tmm.robinNetworks "true"}}
+        robin.io/networks: {{ toYaml (index .Values "f5-tmm").tmm.cniNetworks }}
+      {{- else }}
+        k8s.v1.cni.cncf.io/networks: "{{ (index .Values "f5-tmm").tmm.cniNetworks }}"
+      {{- end }}
+      {{- end }}
+    spec:
+      hostname: {{ .Values.gslbEngine.name }}
+      subdomain: {{ .Values.gslbEngine.grpc.name }}
+      {{- if .Values.gslbEngine.nodeSelector }}
+      nodeSelector:
+        {{ toYaml .Values.gslbEngine.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if and .Values.imageCredentials .Values.imageCredentials.name }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.name }}
+      {{- else }}
+      imagePullSecrets: []
+      {{- end }}
+      containers:
+      - image: "{{ .Values.gslbEngine.image.repository }}/{{ .Values.gslbEngine.image.name }}:{{ .Values.gslbEngine.image.tag }}"
+        name: {{ .Values.gslbEngine.name }}
+        imagePullPolicy: {{ .Values.gslbEngine.image.pullPolicy }}
+        {{- if not .Values.gslbEngine.start }}
+        command: ["tail", "-f", "/dev/null"]
+        {{- else if .Values.gslbEngine.command }}
+        command: ["/bin/bash", "-c", "{{ .Values.gslbEngine.command }}" ]
+        {{- end }}
+        {{- if.Values.gslbEngine.f5_csm_qkview.enabled }}
+        ports:
+        - name: qk-grpc-port
+          containerPort: {{ .Values.gslbEngine.f5_csm_qkview.grpc_port | int }}
+          protocol: TCP
+        {{- end }}
+        {{- if .Values.gslbEngine.securityContext }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          capabilities:
+            add: ["NET_ADMIN"]
+          privileged: {{ .Values.gslbEngine.securityContext.privileged }}
+          {{- if .Values.gslbEngine.securityContext.runAsUser }}
+          runAsUser: {{ .Values.gslbEngine.securityContext.runAsUser }}
+          {{- end }}
+          {{- if .Values.gslbEngine.securityContext.runAsGroup }}
+          runAsGroup: {{ .Values.gslbEngine.securityContext.runAsGroup }}
+          {{- end }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.gslbEngine.resources | nindent 10 }}
+        volumeMounts:
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        - name: vol-mount-tmp
+          mountPath: /tmp
+          readOnly: false
+        - name: vol-mount-run
+          mountPath: /var/run
+          readOnly: false
+        - name: vol-mount-f5docker
+          mountPath: /home/f5docker/.ssh
+          readOnly: false
+        - name: vol-mount-logs
+          mountPath: /logs
+          readOnly: false
+        - name: vol-mount-var-logs 
+          mountPath: /var/log
+          readOnly: false
+        - name: vol-mount-root-run
+          mountPath: /run
+          readOnly: false
+        - name: vol-mount-etc-ha-table
+          mountPath: /etc/ha_table
+          readOnly: false
+        - name: vol-mount-tmstat-private
+          mountPath: /var/tmstat/private
+          readOnly: false
+        - name: vol-mount-shared-core
+          mountPath: /shared/core
+          readOnly: false
+        - name: vol-mount-config-gtm
+          mountPath: /config/gtm
+          readOnly: false
+        {{- if .Values.gslbEngine.f5_csm_qkview.enabled }}
+        - name: tls-qkview-gslb-grpc-svr-volume
+          mountPath: /tls/qkview-gslb/grpc/svr
+          readOnly: true
+        {{- end }}
+        - name: tls-gslb-grpc-svr-volume
+          mountPath: /tls/gslb/grpc/svr
+          readOnly: true
+        - name: tls-gslb-grpc-clt-volume
+          mountPath: /tls/gslb/grpc/clt
+          readOnly: true
+        - name: tls-gslb-dssm-clt-volume
+          mountPath: /tls/gslb/dssm/clt
+          readOnly: true
+        {{- if and .Values.gslbEngine.tmstat.enabled (index .Values "f5-tmm").enabled (index .Values "f5-tmm").debug.enabled }}
+        - name: gslb-tmstat
+          mountPath: /var/tmstat
+          readOnly: false
+        {{- end }}
+        {{- if .Values.gslbEngine.fluentbit_sidecar.enabled }}
+        - name: f5-log-pipes
+          mountPath: /var/log/f5
+          readOnly: false
+        {{- end }}
+        {{- if (eq .Values.global.platformType "robin") }}
+        - mountPath: /var/crash
+          name: f5-core-store
+          readOnly: false
+        {{- end }}
+        env:
+        - name: GRPC_PORT
+          value: "{{ .Values.gslbEngine.grpc.port }}"
+        {{- include "env.spk" (dict "cName" .Values.gslbEngine.name "cVersion" .Values.gslbEngine.image.tag ) | nindent 8 }}
+        - name: GRPC_CLIENT_CERT_PATH
+          value: /tls/gslb/grpc/clt/tls.crt
+        - name: GRPC_CLIENT_KEY_PATH
+          value: /tls/gslb/grpc/clt/tls.key
+        - name: GRPC_CLIENT_CA_ROOT_PATH
+          value: /tls/gslb/grpc/clt/ca.crt
+        - name: GRPC_CERT_PATH
+          value: /tls/gslb/grpc/svr/tls.crt
+        - name: GRPC_KEY_PATH
+          value: /tls/gslb/grpc/svr/tls.key
+        - name: GRPC_CA_ROOT_PATH
+          value: /tls/gslb/grpc/svr/ca.crt
+        - name: PLATFORM
+          value: "{{ .Values.global.platformType }}"
+        {{- if ne .Values.global.platformType "mbip-ve" }}
+        - name: KUBERNETES_SERVICE_NETWORK
+          value: "{{ .Values.gslbEngine.kubernetes_service_network }}"
+        {{- end }}
+        - name: SSL_NAME_TMM
+          value: "{{ .Values.gslbEngine.grpc.services.tmm }}"
+        - name: SSL_NAME_GSLB
+          value: "{{ .Values.gslbEngine.grpc.services.gslb_engine }}"
+        - name: SSL_NAME_PROBE_AGENT
+          value: "{{ .Values.gslbEngine.grpc.services.probe_agent }}"
+        - name: EXPORT_TELEMETRY
+          value: {{ if .Values.gslbEngine.fluentbit_sidecar.enabled }}"true"{{ else }}"false"{{ end }}
+        {{- if .Values.gslbEngine.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.gslbEngine.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: /tls/qkview-gslb/grpc/svr/ca.crt
+        - name: QK_TLS_CERT_FILE
+          value: /tls/qkview-gslb/grpc/svr/tls.crt
+        - name: QK_TLS_KEY_FILE
+          value: /tls/qkview-gslb/grpc/svr/tls.key
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: SPK_QKVIEW_ENABLED
+          value: "{{ .Values.gslbEngine.f5_csm_qkview.enabled }}"
+        {{- end }}
+        - name: GSLB_LOG_LEVEL
+          value: "{{ .Values.gslbEngine.logLevel }}"
+        - name: FQDN_RESOLVER_NAME
+          value: "{{ .Values.f5_fqdn_resolver.name }}"
+        - name: SESSIONDB_EXTERNAL_SERVICE
+          value: "{{ .Values.gslbEngine.dssm.service }}"
+        - name: SESSIONDB_EXTERNAL_PORT
+          value: "{{ .Values.gslbEngine.dssm.port }}"
+        - name: GSLB_SSM_LIB_LOG_LEVEL
+          value: "{{ .Values.gslbEngine.dssm.logLevel }}"
+        - name: DSSM_CERTS
+          value: "{{ .Values.gslbEngine.dssm.mountPath }}/{{ .Values.gslbEngine.dssm.cert }}"
+        - name: DSSM_KEYS
+          value: "{{ .Values.gslbEngine.dssm.mountPath }}/{{ .Values.gslbEngine.dssm.key }}"
+        - name: DSSM_CA_CERT
+          value: "{{ .Values.gslbEngine.dssm.mountPath }}/{{ .Values.gslbEngine.dssm.caCert }}"
+        - name: GSLB_SERVER_NAME
+          value: {{ required "A valid .Values.gslbEngine.gslbEngineServerName entry required!" .Values.gslbEngine.gslbEngineServerName }}
+        - name: PROBE_AGENT_SERVER_NAME
+          value: {{ required "A valid .Values.gslbProbeAgent.gslbProbeAgentServerName entry required!" .Values.gslbProbeAgent.gslbProbeAgentServerName }}
+        - name: GSLB_INSTANCE_NAME
+          value: "{{ .Values.gslbEngine.instanceName }}"
+{{ if .Values.gslbEngine.customEnvVars }}
+{{ toYaml .Values.gslbEngine.customEnvVars | indent 8 }}
+{{ end }}
+        {{- if .Values.gslbEngine.k8sprobes.enabled }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.gslbEngine.grpc.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 1
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.gslbEngine.grpc.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 16
+          failureThreshold: 3
+        {{- end }}
+      {{- if .Values.gslbEngine.fluentbit_sidecar.enabled }}
+      - image: "{{ .Values.gslbEngine.fluentbit_sidecar.image.repository }}/{{ .Values.gslbEngine.fluentbit_sidecar.image.name }}:{{ .Values.gslbEngine.fluentbit_sidecar.image.tag }}"
+        name: {{ .Values.gslbEngine.fluentbit_sidecar.name }}
+        imagePullPolicy: {{ .Values.gslbEngine.fluentbit_sidecar.image.pullPolicy }}
+        {{- if .Values.gslbEngine.securityContext }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          privileged: {{ .Values.gslbEngine.securityContext.privileged }}
+          {{- if .Values.gslbEngine.securityContext.runAsUser }}
+          runAsUser: {{ .Values.gslbEngine.securityContext.runAsUser }}
+          {{- end }}
+        {{- end }}
+        stdin: true
+        tty: true
+        env: {{- toYaml .Values.gslbEngine.fluentbit_sidecar.env | nindent 12 }}
+        volumeMounts:
+        - name: vol-mount-tmp
+          mountPath: /tmp
+          readOnly: false
+        - name: vol-mount-run
+          mountPath: /var/run
+          readOnly: false
+        - name: f5-log-pipes
+          mountPath: /var/log/f5
+          readOnly: false
+        {{- if .Values.gslbEngine.fluentbit_sidecar.fluentbit.tls.enabled }}
+        {{- toYaml .Values.gslbEngine.fluentbit_sidecar.volumeMountsTls | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      volumes:
+      {{- include "volumes.spk" . | nindent 6 }}
+      - name: vol-mount-tmp
+        emptyDir: {}
+      - name: vol-mount-run
+        emptyDir: {}
+      - name: vol-mount-f5docker
+        emptyDir: {}
+      - name: vol-mount-logs 
+        emptyDir: {}
+      - name: vol-mount-var-logs
+        emptyDir: {}
+      - name: vol-mount-root-run
+        emptyDir: {}
+      - name: vol-mount-etc-ha-table
+        emptyDir: {}
+      - name: vol-mount-tmstat-private
+        emptyDir: {}
+      - name: vol-mount-shared-core
+        emptyDir: {}
+      - name: vol-mount-config-gtm
+        emptyDir: {}
+      - name: tls-gslb-grpc-svr-volume
+        secret:
+          secretName: tls-gslb-grpc-svr-secret
+      - name: tls-gslb-grpc-clt-volume
+        secret:
+          secretName: tls-gslb-grpc-clt-secret
+      - name: tls-gslb-dssm-clt-volume
+        secret:
+          secretName: tls-gslb-dssm-clt-secret
+      {{- if .Values.gslbEngine.f5_csm_qkview.enabled }}
+      - name: tls-qkview-gslb-grpc-svr-volume
+        secret:
+          secretName: tls-qkview-gslb-grpc-svr-secret
+      {{- end }}
+      {{- if and .Values.gslbEngine.tmstat.enabled (index .Values "f5-tmm").enabled (index .Values "f5-tmm").debug.enabled }}
+      - name: gslb-tmstat
+        persistentVolumeClaim:
+          claimName: gslb-tmstat
+      {{- end }}
+      {{- if .Values.gslbEngine.fluentbit_sidecar.enabled }}
+      - name: f5-log-pipes
+        emptyDir: {}
+      - name: f5-gslb-engine-fluentbit-config
+        configMap:
+          name: f5-gslb-engine-fluentbit-config
+      {{- if .Values.gslbEngine.fluentbit_sidecar.fluentbit.tls.enabled }}
+      - name: f5-gslb-engine-fluentbit-secrets
+        secret:
+          secretName: f5-toda-fluentbit-secret
+      {{- end }}
+      {{- end }}
+      {{- if (eq .Values.global.platformType "robin") }}
+      - name: f5-core-store
+        hostPath:
+          path: /home/crash/f5
+      {{- end }}
+{{- end }}
+{{- end }}

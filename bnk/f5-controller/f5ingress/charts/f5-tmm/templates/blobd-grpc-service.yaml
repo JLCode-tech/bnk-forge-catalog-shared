@@ -1,0 +1,18 @@
+{{- if and .Values.enabled .Values.blobd.enabled .Values.tmm.grpc.enabled }}
+{{ $base_port := (.Values.blobd.grpc.port | int )}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.blobd.grpc.name }}
+  labels:
+    app: {{ .Values.blobd.name }}
+    type: grpc
+spec:
+  selector:
+    app: {{ .Values.blobd.name }}
+  ports:
+    - protocol: TCP
+      name: grpc-blobd
+      port: {{ $base_port }}
+      targetPort: {{ $base_port }}
+{{- end }}

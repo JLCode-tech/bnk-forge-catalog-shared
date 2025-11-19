@@ -1,0 +1,55 @@
+# External VLAN for AZ-A
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata:
+  name: external-vlan-ap-southeast-2a
+  namespace: f5-spk
+spec:
+  name: external-ap-southeast-2a
+  interfaces: ["1.1"]
+  selfip_v4s: ["172.16.100.200"]
+  prefixlen_v4: 23
+  mtu: 1380
+  internal: false
+---
+# External VLAN for AZ-B
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata:
+  name: external-vlan-ap-southeast-2b
+  namespace: f5-spk
+spec:
+  name: external-ap-southeast-2b
+  interfaces: ["1.1"]
+  selfip_v4s: ["172.16.102.200"]
+  prefixlen_v4: 23
+  mtu: 1380
+  internal: false
+---
+# Internal VLAN for AZ-A
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata:
+  name: internal-vlan-ap-southeast-2a
+  namespace: f5-spk
+spec:
+  name: internal-ap-southeast-2a
+  interfaces: ["1.2"]
+  selfip_v4s: ["172.16.104.200"]
+  prefixlen_v4: 23
+  mtu: 1380
+  internal: true
+---
+# Internal VLAN for AZ-B
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata:
+  name: internal-vlan-ap-southeast-2b
+  namespace: f5-spk
+spec:
+  name: internal-ap-southeast-2b
+  interfaces: ["1.2"]
+  selfip_v4s: ["172.16.106.200"]
+  prefixlen_v4: 23
+  mtu: 1380
+  internal: true

@@ -1,0 +1,27 @@
+{{- if .Values.dnsx.enabled -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: dnsx-storage
+spec:
+  accessModes:
+    - {{ .Values.dnsx.storage.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.dnsx.storage.size | quote }}
+  storageClassName: {{ .Values.dnsx.storage.storageClassName | quote }}
+{{- if and .Values.dnsx.tmstat.enabled (index .Values "f5-tmm").enabled (index .Values "f5-tmm").debug.enabled }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: dnsx-tmstat
+spec:
+  accessModes:
+    - {{ .Values.dnsx.tmstat.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.dnsx.tmstat.size | quote }}
+  storageClassName: {{ .Values.dnsx.tmstat.storageClassName | quote }}
+{{- end -}}
+{{- end -}}

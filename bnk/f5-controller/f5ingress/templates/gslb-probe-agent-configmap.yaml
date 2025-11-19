@@ -1,0 +1,11 @@
+{{- if not .Values.controller.Only }}
+{{- if and .Values.gslbProbeAgent.enabled .Values.gslbProbeAgent.config.entries}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.gslbProbeAgent.config.name }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{ toYaml .Values.gslbProbeAgent.config.entries | indent 2 }}
+{{- end }}
+{{- end }}

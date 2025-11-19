@@ -1,0 +1,457 @@
+enabled: false
+tmm:
+  kind: deployment
+  name: f5-tmm
+  platformSmartnic:
+    enabled: false
+    initSmartnic:
+      image:
+        initName: f5-tmm-init-img
+        tag: v0.1.9
+        pullPolicy: Always
+  logLevel: Info
+  timezone:
+    enable: false
+  serviceAccount:
+    create: true
+    name: ''
+  rbac:
+    create: true
+  replicaCount: 1
+  scaling:
+    enable: false
+    metric: memory
+    upperLimit: 35555555
+    prometheus:
+      port: 6669
+    podMonitor:
+      labels: {}
+  grpc_port: 19893
+  add_k8s_routes: true
+  create_k8s_routes_sa: true
+  k8s_routes_sa_name: ''
+  prometheus:
+    create: true
+  configview:
+    grpc_port: 8850
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19893
+  cniNetworks: ''
+  pod:
+    annotations:
+      openshift.io/scc: privileged
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  hostNetwork: false
+  hostAliases:
+    - ip: 169.254.0.255
+      hostnames:
+        - tmm-bcast
+    - ip: 169.254.0.254
+      hostnames:
+        - tmm-shared
+    - ip: 169.254.0.253
+      hostnames:
+        - tmm
+    - ip: 169.254.0.1
+      hostnames:
+        - tmm0
+    - ip: 169.254.0.2
+      hostnames:
+        - tmm1
+    - ip: 169.254.0.3
+      hostnames:
+        - tmm2
+    - ip: 169.254.0.4
+      hostnames:
+        - tmm3
+    - ip: 169.254.0.5
+      hostnames:
+        - tmm4
+    - ip: 169.254.0.6
+      hostnames:
+        - tmm5
+    - ip: 169.254.0.7
+      hostnames:
+        - tmm6
+    - ip: 169.254.0.8
+      hostnames:
+        - tmm7
+    - ip: 169.254.0.9
+      hostnames:
+        - tmm8
+    - ip: 169.254.0.10
+      hostnames:
+        - tmm9
+    - ip: 169.254.0.11
+      hostnames:
+        - tmm10
+    - ip: 169.254.0.12
+      hostnames:
+        - tmm11
+    - ip: 169.254.0.13
+      hostnames:
+        - tmm12
+    - ip: 169.254.0.14
+      hostnames:
+        - tmm13
+    - ip: 169.254.0.15
+      hostnames:
+        - tmm14
+    - ip: 169.254.0.16
+      hostnames:
+        - tmm15
+    - ip: 169.254.0.17
+      hostnames:
+        - tmm16
+    - ip: 169.254.0.18
+      hostnames:
+        - tmm17
+    - ip: 169.254.0.19
+      hostnames:
+        - tmm18
+    - ip: 169.254.0.20
+      hostnames:
+        - tmm19
+    - ip: 169.254.0.21
+      hostnames:
+        - tmm20
+    - ip: 169.254.0.22
+      hostnames:
+        - tmm21
+    - ip: 169.254.0.23
+      hostnames:
+        - tmm22
+    - ip: 169.254.0.24
+      hostnames:
+        - tmm23
+  image:
+    name: tmm-img
+    repository: local.registry/f5-tmm-docker
+    tag: v10.50.7-0.2.9
+    pullPolicy: Always
+  hugepages:
+    enabled: true
+  customPorts: []
+  customEnvVars:
+    - name: TMM_MAPRES_IGNORE_MEM_LIMIT
+      value: 'TRUE'
+    - name: TMM_CALICO_ROUTER
+      value: default
+  startupProbe:
+    timeoutSeconds: 120
+  resources:
+    limits:
+      cpu: 2
+      hugepages-2Mi: 3Gi
+      memory: 2Gi
+    requests:
+      cpu: 2
+      hugepages-2Mi: 3Gi
+      memory: 2Gi
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: true
+    privileged: true
+    runAsUser: 0
+  config:
+    entries: {}
+  persistence:
+    enabled: false
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    storageclassname: ''
+  k8sprobes:
+    enabled: true
+    readinessProbe:
+      exec:
+        command:
+          - cat
+          - /var/run/tmm.ready
+      initialDelaySeconds: 2
+      periodSeconds: 5
+    livenessProbe:
+      exec:
+        command:
+          - /bin/sh
+          - -c
+          - nc -z 169.254.0.1 6666 && [ ! -f /var/run/extdb_tmm.status ] || exit 1
+      initialDelaySeconds: 240
+      periodSeconds: 10
+      timeoutSeconds: 16
+      failureThreshold: 3
+    startupProbe:
+      failureThreshold: 60
+      periodSeconds: 5
+      successThreshold: 1
+      tcpSocket:
+        port: 6666
+      timeoutSeconds: 1
+  readinessGates:
+    enabled: true
+  dynamicRouting:
+    enabled: false
+    configMapName: ''
+    peerGroups: []
+    exportZebosLogs: true
+    exportTmroutedLogs: true
+    tmmRouting:
+      name: f5-tmm-routing
+      qkviewPort: 19895
+      qkviewGrpcSvc: f5-tmm-routing-svc
+      image:
+        name: f5dr-img
+        initName: f5dr-img-init
+        tag: v3.2.14-0.0.4
+        pullPolicy: Always
+      k8sprobes:
+        enabled: true
+    tmrouted:
+      name: f5-tmm-tmrouted
+      image:
+        name: tmrouted-img
+        tag: v2.3.0-0.0.3
+        pullPolicy: Always
+      k8sprobes:
+        enabled: false
+  icni2:
+    enabled: false
+  bfdToOVN:
+    enabled: false
+  ovn_meg:
+    enabled: false
+  pseudoCNI:
+    enabled: false
+  network:
+    attachment:
+      definitionName: ''
+      address: ''
+    vfio:
+      enabled: false
+  vxlan:
+    enabled: false
+    name: vxlan_tun
+    localIp: ''
+    selfIp: ''
+    workaroundFdbOverrides: ''
+    useFlannel: false
+    port: '4789'
+    key: '4097'
+    staticRouteNodeNetmask: 255.255.255.0
+    staticRoutePoolMemberNetmask: 255.255.255.255
+  egress:
+    useSnatpools: false
+    dnsNat46Enabled: false
+    dnsNat46UpstreamDnsIP: ''
+    dnsNat46Ipv4Subnet: ''
+    dnsNat46SorryIP: ''
+    dnsCacheName: ''
+  service:
+    create: true
+    name: f5-tmm-service
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    annotations: {}
+    externalIPs: []
+    customPorts: []
+  tlsStore:
+    enabled: false
+  grpc:
+    enabled: true
+    name: grpc-svc
+    port: 8750
+    annotations:
+      f5.com/grpc-services: enabled
+  sessiondb:
+    useExternalStorage: 'false'
+    extRetryWaitSec: '0'
+  qkview:
+    enabled: 'true'
+  tmmgrpcsecretstorefix:
+    enabled: false
+  nat:
+    ipReservationTimeout: 900
+  bigdb:
+    tcpsegmentationoffload:
+      enabled: true
+    tcpwoodsidefasterrecovery:
+      enabled: false
+    tcplargereceiveoffload:
+      enabled: true
+  robinNetworks: 'false'
+blobd:
+  enabled: true
+  name: blobd
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19897
+  image:
+    name: f5-blobd
+    tag: v1.23.1-0.0.5
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 900m
+      memory: 4Gi
+    requests:
+      cpu: 900m
+      memory: 4Gi
+  securityContext:
+    readOnlyRootFilesystem: true
+  volumeMounts:
+    - name: urlcat-sh-mem
+      mountPath: /dev/shm
+    - name: cec-sh-mem
+      mountPath: /var/download/dpi
+    - name: afm-sh-vol
+      mountPath: /shared/pktclass
+  grpc:
+    name: grpc-blobd-svc
+    port: 9222
+    tls:
+      enabled: true
+      cert: grpc-svc.crt
+      key: grpc-svc.key
+      cacert: ca_root.crt
+    client:
+      tls:
+        cert: grpc-blobd-client.crt
+        key: grpc-blobd-client.key
+        cacert: ca_root.crt
+        enabled: true
+debug:
+  enabled: true
+  name: debug
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19892
+  rabbitmqNamespace: default
+  image:
+    name: f5-debug-sidecar
+    tag: v10.5.0-0.1.32
+    pullPolicy: Always
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  securityContext:
+    readOnlyRootFilesystem: true
+  persistence:
+    enabled: false
+    storageClass: ''
+    accessMode: ReadWriteOnce
+    size: 1Gi
+tmrouted:
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19896
+  resources:
+    limits:
+      cpu: 300m
+      memory: 512Mi
+    requests:
+      cpu: 300m
+      memory: 512Mi
+  securityContext:
+    readOnlyRootFilesystem: true
+tmmRouting:
+  resources:
+    limits:
+      cpu: 700m
+      memory: 1Gi
+    requests:
+      cpu: 700m
+      memory: 1Gi
+  securityContext:
+    readOnlyRootFilesystem: true
+observer:
+  enabled: false
+  name: observer
+  image:
+    name: f5-toda-observer
+    tag: v5.7.5-0.1.0
+    pullPolicy: IfNotPresent
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19891
+  resources:
+    limits:
+      cpu: 700m
+      memory: 1Gi
+    requests:
+      cpu: 700m
+      memory: 1Gi
+  securityContext:
+    readOnlyRootFilesystem: true
+cert-orchestrator:
+  enabled: true
+global:
+  certmgr:
+    external: false
+  stats:
+    enabled: false
+controller:
+  Only: false
+prometheus:
+  create: true
+  port: 9113
+  enabled: false
+  image: prom/prometheus
+prometheus-adapter:
+  prometheus:
+    url: http://promstack-kube-prometheus-prometheus.prometheus.svc
+    port: 9090
+  rules:
+    custom:
+      - seriesQuery: tmm_memory_stat_metric{kubernetes_namespace!="",kubernetes_pod_name!=""}
+        resources:
+          overrides:
+            kubernetes_namespace:
+              resource: namespace
+            kubernetes_pod_name:
+              resource: pod
+f5_csm_qkview:
+  enabled: true
+spk-common:
+  skipF5logCreation: true
+fluentbit:
+  enabled: false
+  name: f5-toda-fluentbit
+  image:
+    repository: ''
+    name: f5-fluentbit
+    tag: v1.2.8-0.0.5
+    pullPolicy: IfNotPresent
+  tls:
+    enabled: false
+    debug: 1
+    verify: false
+    shared_key: f5-toda-shared-key
+  flush: 1
+  logLevel: info
+  input:
+    pipes:
+      bufSize: 8096
+      intervalSec: 1
+      intervalNsec: 0
+  resources:
+    limits:
+      cpu: 700m
+      memory: 1Gi
+    requests:
+      cpu: 700m
+      memory: 1Gi
+  securityContext:
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  type: generic
+  fluentd:
+    host: 127.0.0.1
+    port: 54321

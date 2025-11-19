@@ -1,0 +1,21 @@
+{{- if and .Values.enabled .Values.tmm.scaling.enable }}
+{{ $scalingMetric := .Values.tmm.scaling.metric | default "memory" }}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "tmm.appName" . }}-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ default (include "tmm.name" .) .Values.tmm.name }}
+  minReplicas: {{ .Values.tmm.scaling.minReplicas | default 1 | int }}
+  maxReplicas: {{ .Values.tmm.scaling.maxReplicas | default 2 | int }}
+  metrics:
+  - type: Pods
+    pods:
+{{- if (eq $scalingMetric "memory") }}
+      metricName: tmm_memory_stat_metric
+      targetAverageValue: {{ ( .Values.tmm.scaling.upperLimit | int ) }}
+{{- end }}
+{{- end }}

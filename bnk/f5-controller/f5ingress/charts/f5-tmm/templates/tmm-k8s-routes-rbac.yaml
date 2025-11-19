@@ -1,0 +1,85 @@
+{{- $CNF_CONFIGMAP_NAME := "tmm-k8s-routes-configmap" -}}
+{{- $POD_NAMESPACE := .Release.Namespace -}}
+{{- if and .Values.enabled .Values.tmm.add_k8s_routes }}
+{{- if .Values.tmm.create_k8s_routes_sa }}
+{{- if .Capabilities.APIVersions.Has "config.openshift.io/v1" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tmm-k8s-routes-prehook-cluster-role-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+rules:
+- apiGroups: ["config.openshift.io"]
+  resources: ["networks"]
+  verbs: ["get"]
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tmm-k8s-routes-prehook-cluster-role-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["kubeadm-config", "node-local-dns"]
+  verbs: ["get"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tmm-k8s-routes-prehook-cluster-binding-{{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tmm-k8s-routes-prehook-cluster-role-{{ .Release.Namespace }}
+subjects:
+- kind: ServiceAccount
+  name: tmm-k8s-routes-prehook-sa-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tmm-k8s-routes-prehook-role-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["{{ printf "%s-%s" $CNF_CONFIGMAP_NAME $POD_NAMESPACE }}"]
+  verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tmm-k8s-routes-prehook-binding-{{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tmm-k8s-routes-prehook-role-{{ .Release.Namespace }}
+subjects:
+- kind: ServiceAccount
+  name: tmm-k8s-routes-prehook-sa-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

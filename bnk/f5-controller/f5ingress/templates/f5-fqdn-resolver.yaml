@@ -1,0 +1,273 @@
+{{- if and (not .Values.controller.Only) .Values.gslbEngine.enabled .Values.f5_fqdn_resolver.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.f5_fqdn_resolver.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.f5_fqdn_resolver.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.f5_fqdn_resolver.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.f5_fqdn_resolver.name }}
+      {{- if .Values.f5_fqdn_resolver.annotations }}
+      annotations: {{- toYaml .Values.f5_fqdn_resolver.annotations | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if and .Values.imageCredentials .Values.imageCredentials.name }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.name }}
+      {{- else }}
+      imagePullSecrets: []
+      {{- end }}
+      containers:
+      - image: {{ .Values.f5_fqdn_resolver.image.repository }}/{{ .Values.f5_fqdn_resolver.image.name }}:{{ .Values.f5_fqdn_resolver.image.tag }}
+        name: {{ .Values.f5_fqdn_resolver.name }}
+        args:
+        {{- if .Values.f5_fqdn_resolver.port }}
+        - -listen=:{{ .Values.f5_fqdn_resolver.port }}
+        {{- end }}
+        {{- if .Values.f5_fqdn_resolver.debugLevel }}
+        - -debug={{ .Values.f5_fqdn_resolver.debugLevel }}
+        {{- end }}
+        {{- if .Values.f5_fqdn_resolver.nameserver }}
+        - -nameserver={{ .Values.f5_fqdn_resolver.nameserver }}
+        {{- end }}
+        resources: {{- toYaml .Values.f5_fqdn_resolver.resources | nindent 10 }}
+        {{- if .Values.f5_fqdn_resolver.f5_csm_qkview.enabled }}
+        ports:
+        - name: qk-grpc-port
+          containerPort: {{ .Values.f5_fqdn_resolver.f5_csm_qkview.grpc_port | int }}
+          protocol: TCP
+        {{- end }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          privileged: false
+          runAsUser: 7053
+          runAsGroup: 7053
+        volumeMounts:
+        - name: vol-mount-tmp
+          mountPath: /tmp
+          readOnly: false
+        - name: vol-mount-run
+          mountPath: /var/run
+          readOnly: false
+        - name: vol-mount-f5docker
+          mountPath: /home/f5docker/.ssh
+          readOnly: false  
+        {{- if .Values.f5_fqdn_resolver.f5_csm_qkview.enabled }}
+        - name: tls-qkview-f5-fqdn-resolver-grpc-svr-volume
+          mountPath: /tls/qkview-f5-fqdn-resolver/grpc/svr
+          readOnly: true
+        {{- end }}
+        - name: tls-f5-fqdn-resolver-grpc-svr-volume
+          mountPath: /tls/f5-fqdn-resolver/grpc/svr
+          readOnly: true
+        {{- if .Values.f5_fqdn_resolver.fluentbit_sidecar.enabled }}
+        - name: f5-log-pipes
+          mountPath: /var/log/f5
+          readOnly: false
+          subPath: {{ .Values.f5_fqdn_resolver.name }}
+        {{- end }}
+        env:
+        - name: PLATFORM
+          value: "{{ .Values.global.platformType }}"
+        - name: F5_CONSOLE_LOGGING_ENABLED
+          value: "true"
+        - name: CONTAINER_NAME
+          value: {{ .Values.f5_fqdn_resolver.name }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: LOG_PATH
+          value: /var/log/f5
+        {{- if .Values.f5_fqdn_resolver.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.f5_fqdn_resolver.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: /tls/qkview-f5-fqdn-resolver/grpc/svr/ca.crt
+        - name: QK_TLS_CERT_FILE
+          value: /tls/qkview-f5-fqdn-resolver/grpc/svr/tls.crt
+        - name: QK_TLS_KEY_FILE
+          value: /tls/qkview-f5-fqdn-resolver/grpc/svr/tls.key
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: SPK_QKVIEW_ENABLED
+          value: "{{ .Values.f5_fqdn_resolver.f5_csm_qkview.enabled }}"
+        {{- end }}
+      {{- if .Values.f5_fqdn_resolver.fluentbit_sidecar.enabled }}
+      - image: {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.image.repository }}/{{ .Values.f5_fqdn_resolver.fluentbit_sidecar.image.name }}:{{ .Values.f5_fqdn_resolver.fluentbit_sidecar.image.tag }}
+        name: {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.name }}
+        imagePullPolicy: {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.image.pullPolicy }}
+        resources: {{- toYaml .Values.f5_fqdn_resolver.fluentbit_sidecar.resources | nindent 10 }}
+        env: {{- toYaml .Values.f5_fqdn_resolver.fluentbit_sidecar.env | nindent 8 }}
+        volumeMounts:
+        - name: f5-log-pipes
+          mountPath: /var/log/f5
+          readOnly: false
+        - name: f5-fqdn-resolver-fluentbit-config
+          mountPath: /fluent-bit/etc/
+        {{- if .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.tls.enabled }}
+        - name: tls-f5-fqdn-resolver-fluentbit-tcp-clt-volume
+          mountPath: /tls/f5-fqdn-resolver-fluentbit/tcp/clt
+          readOnly: true
+        {{- end }}
+      {{- end }}
+      volumes:
+      - name: vol-mount-tmp
+        emptyDir: {}
+      - name: vol-mount-run
+        emptyDir: {}
+      - name: vol-mount-f5docker
+        emptyDir: {}
+      - name: tls-f5-fqdn-resolver-grpc-svr-volume
+        secret:
+          secretName: tls-f5-fqdn-resolver-grpc-svr-secret
+      {{- if .Values.f5_fqdn_resolver.f5_csm_qkview.enabled }}
+      - name: tls-qkview-f5-fqdn-resolver-grpc-svr-volume
+        secret:
+          secretName: tls-qkview-f5-fqdn-resolver-grpc-svr-secret
+      {{- end }}
+      {{- if .Values.f5_fqdn_resolver.fluentbit_sidecar.enabled }}
+      - name: f5-log-pipes
+        emptyDir: {}
+      - name: f5-fqdn-resolver-fluentbit-config
+        configMap:
+          name: f5-fqdn-resolver-fluentbit-config
+      {{- if and .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.tls.enabled (ne .Values.global.platformType "mbip-ve") }}
+      - name: tls-f5-fqdn-resolver-fluentbit-tcp-clt-volume
+        secret:
+          secretName: tls-f5-fqdn-resolver-fluentbit-tcp-clt-secret
+      {{- end }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.f5_fqdn_resolver.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.f5_fqdn_resolver.name }}
+spec:
+  selector:
+    app: {{ .Values.f5_fqdn_resolver.name }}
+  ports:
+    - protocol: TCP
+      name: {{ .Values.f5_fqdn_resolver.name }}
+      port: 443
+      targetPort: {{ .Values.f5_fqdn_resolver.port }}
+  {{- if .Values.f5_fqdn_resolver.f5_csm_qkview.enabled }}
+  {{ $grpcport_fqdn := (.Values.f5_fqdn_resolver.f5_csm_qkview.grpc_port | int)}}
+    - protocol: TCP
+      name: qk-grpc-fqdn
+      port: {{ $grpcport_fqdn }}
+      targetPort: {{ $grpcport_fqdn }}
+  {{- end }}
+{{- if .Values.f5_fqdn_resolver.fluentbit_sidecar.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: f5-fqdn-resolver-fluentbit-config
+  labels:
+    k8s-app: fluent-bit
+data:
+  # Configuration files: server, input, filters and output
+  # ======================================================
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.flush_interval }}
+        Log_Level     {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.logLevel }}
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   off
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+    @INCLUDE input.conf
+    @INCLUDE filter-k8s.conf
+    @INCLUDE output-fluentd.conf
+    {{- if eq .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.logLevel "debug" }}
+    @INCLUDE output-stdout.conf
+    {{- end }}
+
+  input.conf: |
+    [INPUT]
+        Name              named_pipe
+        Tag               kube.f5.fqdn-resolver.log
+        Path              /var/log/f5/*/*.pipe
+        Path_Key          path
+        buf_size          {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.input.pipes.bufSize }}
+        interval_sec      {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.input.pipes.intervalSec }}
+        interval_nsec     {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.input.pipes.intervalNsec }}
+
+  filter-k8s.conf: |
+    [FILTER]
+        Name    record_modifier
+        Match   kube.f5.fqdn-resolver.log
+        Record  namespace ${NAMESPACE}
+        Record  node ${NODE}
+        Record  pod ${POD}
+        Record  pod_id ${POD_ID}
+        Record  service f5-fqdn-resolver
+
+    [FILTER]
+        Name          parser
+        Match         kube.f5.fqdn-resolver.log
+        Key_Name      pod
+        Parser        podname
+        Preserve_Key  True
+        Reserve_Data  True
+
+    [FILTER]
+        Name          parser
+        Match         kube.f5.fqdn-resolver.log
+        Key_Name      path
+        Parser        logtype
+        Reserve_Data  True
+
+  output-stdout.conf: |
+    [OUTPUT]
+        Name            stdout
+        Match           kube.f5.fqdn-resolver.log
+
+  output-fluentd.conf: |
+    [OUTPUT]
+        Name          forward
+        Match         kube.f5.fqdn-resolver.log
+        Host          {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentd.host }}
+        Port          {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentd.port }}
+        {{- if .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.tls.enabled }}
+        tls               On
+        tls.debug         {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.tls.debug }}
+        tls.verify        {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.tls.verify }}
+        {{- if (eq .Values.global.platformType "mbip-ve") }}
+        tls.ca_file       /tls/f5-fqdn-resolver-fluentbit/tcp/clt/ca.pem
+        tls.crt_file      /tls/f5-fqdn-resolver-fluentbit/tcp/clt/f5-fqdn-resolver-fluentbit-tcp-clt.pem
+        tls.key_file      /tls/f5-fqdn-resolver-fluentbit/tcp/clt/f5-fqdn-resolver-fluentbit-tcp-clt-key.pem
+        {{- else }}
+        tls.ca_file       /tls/f5-fqdn-resolver-fluentbit/tcp/clt/ca.crt
+        tls.crt_file      /tls/f5-fqdn-resolver-fluentbit/tcp/clt/tls.crt
+        tls.key_file      /tls/f5-fqdn-resolver-fluentbit/tcp/clt/tls.key
+        {{- end }}
+        Shared_Key        {{ .Values.f5_fqdn_resolver.fluentbit_sidecar.fluentbit.tls.shared_key }}
+        {{- end }}
+
+  parsers.conf: |
+    [PARSER]
+        Name logtype
+        Format regex
+        Regex [^(stdout|stderr)]+(?<type>(stdout|stderr)).pipe$
+ 
+    [PARSER]
+        Name podname
+        Format regex
+        Regex (?<pod_name>.+)-[a-z0-9]{9,10}-[a-z0-9]{5}$
+{{- end -}}
+{{- end }}

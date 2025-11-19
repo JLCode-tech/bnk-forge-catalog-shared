@@ -1,0 +1,19 @@
+{{- if and (index .Values "f5-tmm").enabled (index .Values "f5-tmm").tmm.scaling.enable }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: spk-podmonitor-controller-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- if and (index .Values "f5-tmm").enabled (index .Values "f5-tmm").tmm.scaling.podMonitor.labels }}
+      {{ toYaml (index .Values "f5-tmm").tmm.scaling.podMonitor.labels | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      metrics-prometheus: publish 
+  podMetricsEndpoints:
+  - port: prometheus
+    interval: 15s
+
+{{- end }}

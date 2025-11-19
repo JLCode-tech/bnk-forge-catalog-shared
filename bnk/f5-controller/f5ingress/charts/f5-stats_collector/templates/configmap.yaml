@@ -1,0 +1,72 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: opentelemetry
+    component: otel-collector-conf
+  name: f5-otel-collector-conf
+  namespace: {{ .Release.Namespace }}
+data:
+  otel-collector-conf: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: {{ .Values.receivers.otlp.protocols.grpc.endpoint}}
+            max_recv_msg_size_mib: {{ .Values.receivers.otlp.protocols.grpc.max_recv_msg_size_mib}}
+            tls:
+              client_ca_file: {{ .Values.receivers.otlp.protocols.grpc.tls.client_ca_file}}
+              cert_file: {{ .Values.receivers.otlp.protocols.grpc.tls.cert_file}}
+              key_file: {{ .Values.receivers.otlp.protocols.grpc.tls.key_file}}
+              reload_interval: {{ .Values.receivers.otlp.protocols.grpc.tls.reload_interval}}
+
+    extensions:
+      zpages: {}
+
+    processors:
+      memory_limiter/with-settings:
+        # check_interval is the time between measurements of memory usage for the
+        # purposes of avoiding going over the limits. Defaults to zero, so no
+        # checks will be performed. Values below 1 second are not recommended since
+        # it can result in unnecessary CPU consumption.
+        check_interval: 5s
+
+        # Maximum amount of memory, in MiB, targeted to be allocated by the process heap.
+        # Note that typically the total memory usage of process will be about 50MiB higher
+        # than this value.
+        limit_mib: 800
+
+        # The maximum, in MiB, spike expected between the measurements of memory usage.
+        spike_limit_mib: 500
+
+    exporters:
+      debug:
+        verbosity: normal
+        sampling_initial: 5
+        sampling_thereafter: 200
+      prometheus:
+        endpoint: "0.0.0.0:9090"
+        namespace: {{ .Values.exporters.prometheus.namespace}}
+        tls:
+          client_ca_file: {{ .Values.exporters.prometheus.tls.client_ca_file}}
+          cert_file: {{ .Values.exporters.prometheus.tls.cert_file}}
+          key_file: {{ .Values.exporters.prometheus.tls.key_file}}
+          reload_interval: {{ .Values.exporters.prometheus.tls.reload_interval}}
+    service:
+      telemetry:
+        logs:
+          level: "info"
+        metrics:
+          level: "detailed"          # Options: none, basic, normal, detailed
+          address: "0.0.0.0:8888"
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter/with-settings]
+          exporters: {{.Values.service.pipelines.metrics.exporters}}
+  {{- if .Values.otelCustomConf }}
+  custom-otel-collector-conf: |
+    {{- .Values.otelCustomConf | nindent 4 }}
+  {{- end }}
+{{- end }}

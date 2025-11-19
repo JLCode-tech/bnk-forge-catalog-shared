@@ -1,0 +1,43 @@
+{{- if .Values.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: f5-tmstatsd
+data:
+  # Configuration files for tmstatsd
+  #
+  # 
+  # For otel tmm_stat_tables you need to specify the 
+  # *_stat table and columns that you want to send to OTEL
+  # You can also leave the columns empty to send all columns
+  # 
+  # "row_name" is optional and is for tables without a "name" column.  
+  # The value in the "name" column is used to tie together all the metric values for the row record
+  # When a table does not have a "name", like "tmm_stat" you can provide a column with a unique 
+  # value, in this case the column "cpu" has a unique identifying value.
+  #
+  # You can also provide composite row_name incase if row_name is not unique, with delimiter as '&'
+  # Example: name&vs_name
+  # If a table does not have a "name" column and no "row_name" is provided, the tmstatsd OTEL code
+  # will use a row counter to tie together all the metric value for the row record.
+  #
+  # Example:
+  # "tmm_stat_tables": [
+  #   {
+  #     "name": "tmm_stat",
+  #     "row_name": "cpu",
+  #     "columns": [
+  #       "tot_tmms",
+  #       "cpu"
+  #     ]
+  #   },
+  #   {
+  #     "name": "interface_stat",
+  #     "columns": []
+  #   }
+  # ]
+  # 
+  # ====================================================== 
+  tmstatsd_default.json:
+  {{ toYaml .Values.tmstats.tableConfig | indent 4 }}
+{{- end -}}

@@ -1,0 +1,23 @@
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: external-netdevice
+  namespace: ${namespace}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: intel.com/external_netdevice
+spec:
+  config: |
+    {
+      "type": "host-device",
+      "cniVersion": "0.3.1",
+      "pciBusID": "0000:00:07.0",
+      "name": "external-network",
+      "ipam": {
+        "type": "host-local",
+        "ranges": [
+%{ for cidr in external_cidrs ~}
+          [{ "subnet": "${cidr}" }]${cidr != element(external_cidrs, length(external_cidrs) - 1) ? "," : ""}
+%{ endfor ~}
+        ]
+      }
+    }

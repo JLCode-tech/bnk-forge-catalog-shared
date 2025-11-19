@@ -1,0 +1,18 @@
+---
+{{- if and (.Values.tmstats.enabled) (.Values.tmstats.f5_csm_qkview.enabled) }}
+{{ $grpc_port := (.Values.tmstats.f5_csm_qkview.grpc_port | int )}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: f5-toda-tmstatsd
+  labels:
+    run: f5-tmstatsd
+spec:
+  ports:
+  - port: {{ $grpc_port }}
+    name: grpc-port
+    protocol: TCP
+    targetPort: {{ $grpc_port }}
+  selector:
+    run: f5-tmstatsd
+{{- end }}

@@ -1,0 +1,17 @@
+{{- if and .Values.enabled .Values.tmm.persistence.enabled -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: tmm-pvc
+  {{- if .Values.tmm.persistence.annotations }}
+  annotations:
+    {{- toYaml .Values.tmm.persistence.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    - {{ .Values.tmm.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.tmm.persistence.size | quote }}
+  storageClassName: {{ .Values.tmm.persistence.storageclassname | quote}}
+{{- end -}}
