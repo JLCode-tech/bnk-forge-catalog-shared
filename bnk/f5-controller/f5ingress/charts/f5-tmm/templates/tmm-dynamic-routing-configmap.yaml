@@ -1,0 +1,320 @@
+{{- if and .Values.enabled .Values.tmm.dynamicRouting.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: f5-tmm-dynamic-routing
+  namespace: {{ .Release.Namespace }}
+data:
+  cluster_node_ip__apps: |
+    {"vlanName": "", "clusterNodeIPs": []}
+---
+{{- if not .Values.tmm.dynamicRouting.configMapName }}
+{{- if not .Values.tmm.bfdToOVN.enabled }}
+  {{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+    {{- if not .Values.tmm.dynamicRouting.tmmRouting.config.bgp }}
+      {{ fail "tmmRouting->config->bgp not provided. BGP Config is required." }}
+    {{- end -}}
+  {{- else }}
+    {{ fail "tmmRouting->config not provided. BGP Config is required." }}
+  {{- end }}
+{{- end -}}
+
+{{- $bgp := dict -}}
+{{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+  {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bgp }}
+    {{- $bgp = .Values.tmm.dynamicRouting.tmmRouting.config.bgp -}}
+    {{- if not $bgp.asn -}}
+      {{ fail "BGP Router ASN is required." }}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $ipNeighbors := list -}}
+{{- $groupNeighbors := list -}}
+{{- $neighbors := dict -}}
+{{- if $bgp.neighbors -}}
+  {{- $neighbors = $bgp.neighbors -}}
+  {{ range  $bgp.neighbors -}}
+    {{- if not (and (or (hasKey . "ip") (hasKey . "nodeLookup")) (hasKey . "asn")) -}}
+      {{ fail "BGP Neighbor configuration error. Neighbor IP and ASN required." }}
+    {{- end -}}
+    {{- if (hasKey . "ip") -}} {{$ipNeighbors = append $ipNeighbors .}} {{- end -}}
+    {{- if (hasKey . "nodeLookup") -}} {{$groupNeighbors = append $groupNeighbors .}} {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $ipv4neighbors := list -}}
+{{- $ipv6neighbors := list -}}
+{{- if $neighbors -}}
+{{- range $neighbors -}} {{- if .acceptsIPv4 -}}{{ $ipv4neighbors = append $ipv4neighbors . }} {{- end -}}{{- end -}}
+{{- range $neighbors -}} {{- if .acceptsIPv6 -}}{{ $ipv6neighbors = append $ipv6neighbors . }} {{- end -}}{{- end -}}
+{{- end -}}
+
+{{- $bfd := dict -}}
+{{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+  {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bfd }}
+    {{- $bfd = .Values.tmm.dynamicRouting.tmmRouting.config.bfd -}}
+  {{- end -}}
+{{- end -}}
+{{- $bfdInterval := 50 }}
+{{- $bfdMinRx := 50 }}
+{{- $bfdMultiplier := 10 }}
+
+{{- $v4prefixList := list -}}
+{{- $v6prefixList := list -}}
+{{- $v6prefixNames := list -}}
+{{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+  {{- if .Values.tmm.dynamicRouting.tmmRouting.config.prefixList -}}
+    {{- range .Values.tmm.dynamicRouting.tmmRouting.config.prefixList -}}
+      {{- if and (contains ":" .prefix) (not (has .name $v6prefixNames)) }}
+        {{ $v6prefixNames = append $v6prefixNames .name }}
+      {{- end -}}
+    {{- end -}}
+    {{- range .Values.tmm.dynamicRouting.tmmRouting.config.prefixList -}}
+      {{- if has .name $v6prefixNames  }}
+        {{ $v6prefixList = append $v6prefixList . }}
+      {{- else -}}
+        {{ $v4prefixList = append $v4prefixList . }}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $routeMaps := list -}}
+{{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+  {{- if .Values.tmm.dynamicRouting.tmmRouting.config.routeMaps -}}
+    {{- $routeMaps = .Values.tmm.dynamicRouting.tmmRouting.config.routeMaps -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $zebos_cluster_conf := "" }}
+{{- $configmap := lookup "v1" "ConfigMap" .Release.Namespace "f5-tmm-dynamic-routing-template" }}
+{{- if $configmap }}
+  {{- range $key, $value := $configmap.data }}
+    {{- if eq $key "ZebOS.conf" }}
+      {{ $zebos_cluster_conf = $value }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: f5-tmm-dynamic-routing-template
+  namespace: {{ .Release.Namespace }}
+data:
+{{- if $zebos_cluster_conf }}
+  ZebOS.conf: |-
+    {{- /*
+    Any new config addition or change in config can be added before or after
+    below cluster config. If there is any existing config change, this will be
+    overwritten by cluster configuration if configuration is added before
+    cluster config.
+    Incase the config is added after cluster config, the cluster config will be
+    overwritten.
+    */}}
+    {{- $zebos_cluster_conf | nindent 4 }}
+{{- else }}
+  ZebOS.conf: |
+    !
+    {{- if $bgp.logFile }}
+    log file {{ $bgp.logFile }}
+    {{- end }}
+    !
+    {{- if and .Values.tmm.dynamicRouting.exportZebosLogs (index .Values "f5-toda-logging" "enabled")}}
+    log file {{ "/var/log/f5/f5-tmm-routing_%%HOSTNAME%%_stdout.pipe" }}
+    {{- end }}
+    !
+    {{- if $bgp.debugs }}
+      {{- range $debug := $bgp.debugs }}
+    debug {{ $debug }}
+      {{-  end }}
+    {{- end }}
+    !
+    {{- if $bfd.debugs }}
+      {{- range $debug := $bfd.debugs }}
+    debug bfd {{ $debug }}
+      {{-  end }}
+    {{- end }}
+    !
+    service password-encryption
+    !
+    {{- if or $bfd.interface $bfd.multihop_peer }}
+      {{- if and ( ge ( $bfd.interval | int ) 50 ) ( le ( $bfd.interval | int ) 999 ) }}
+        {{- $bfdInterval = $bfd.interval }}
+      {{- else if $bfd.interval }}
+        {{ fail "A valid BFD interval value between 50 and 999 (inclusive) is required" }}
+      {{- end }}
+      {{- if and ( ge ( $bfd.minrx | int ) 50 ) ( le ( $bfd.minrx | int ) 999 ) }}
+        {{- $bfdMinRx = $bfd.minrx }}
+      {{- else if $bfd.minrx }}
+        {{ fail "A valid BFD minrx value between 50 and 999 (inclusive) is required" }}
+      {{- end }}
+      {{- if and ( ge ( $bfd.multiplier | int ) 3 ) ( le ( $bfd.multiplier | int ) 50 ) }}
+        {{- $bfdMultiplier = $bfd.multiplier }}
+      {{- else if $bfd.multiplier }}
+        {{ fail "A valid BFD multiplier value between 3 and 50 (inclusive) is required" }}
+      {{- end }}
+    {{- end }}
+    !
+    {{- if $bfd.interface }}
+    interface {{ $bfd.interface }}
+      bfd interval {{ $bfdInterval }} minrx {{ $bfdMinRx }} multiplier {{ $bfdMultiplier }}
+    {{- end }}
+    !
+    {{- if $bfd.multihop_peer }}
+      {{- range $neighbors }}
+    bfd multihop-peer {{ .ip }} interval {{ $bfdInterval }} minrx {{ $bfdMinRx }} multiplier {{ $bfdMultiplier }}
+      {{- end }}  
+    {{- end }}
+    !
+    {{- range $routeMaps }}
+    route-map {{ .name }} {{ if .deny -}} deny {{- else -}} permit {{- end }} {{ .seq }}
+      match {{ if has .match $v6prefixNames -}} ipv6 {{- else -}} ip {{- end }} address prefix {{ .match }}
+    {{- end }}
+    !
+    router bgp {{ $bgp.asn }}
+    {{- if ge ($bgp.maxPathsEbgp | int) 2 }}
+      {{- if le ($bgp.maxPathsEbgp | int) 64 }}
+      max-paths ebgp {{ $bgp.maxPathsEbgp }}
+      {{- end }}
+    {{- end }}
+    {{- if ge ($bgp.maxPathsIbgp | int) 2 }}
+      {{- if le ($bgp.maxPathsIbgp | int) 64 }}
+      max-paths ibgp {{ $bgp.maxPathsIbgp }}
+      {{- end }}
+    {{- end }}
+      !
+    {{- if $bgp.routerId }}
+      bgp router-id {{ $bgp.routerId }}
+    {{- else }}
+      bgp router-id %%POD_IP%%
+    {{- end }}
+      bgp log-neighbor-changes
+      bgp graceful-restart restart-time {{ $bgp.gracefulRestartTime | default 120 }}
+      no bgp default ipv4-unicast
+      redistribute kernel
+      !
+    {{ range $ipNeighbors }}
+      neighbor {{ .ip }} remote-as {{ .asn }}
+      {{- if .password }}
+      neighbor {{ .ip }} password {{ .password }}
+      {{- end }}
+      {{- if gt (.ebgpMultihop | int) 0 }}
+        {{- if gt (.ebgpMultihop | int) 1 }}
+      neighbor {{ .ip }} ebgp-multihop {{ .ebgpMultihop }}
+        {{- else }}
+      neighbor {{ .ip }} ebgp-multihop 255
+        {{- end }}
+      {{- end }}
+      {{- if .fallover}}
+        {{- if .multihop}}
+      neighbor {{ .ip }} fall-over bfd multihop
+        {{- else}}
+      neighbor {{ .ip }} fall-over bfd
+        {{- end}}
+      {{- end}}
+    {{- end }}
+      !
+    {{ range $groupNeighbors }}
+      neighbor {{ .nodeLookup }} peer-group
+      neighbor {{ .nodeLookup }} remote-as {{ .asn }}
+      {{- if .password }}
+      neighbor {{ .nodeLookup }} password {{ .password }}
+      {{- end }}
+      {{- if gt (.ebgpMultihop | int) 0 }}
+        {{- if gt (.ebgpMultihop | int) 1 }}
+      neighbor {{ .nodeLookup }} ebgp-multihop {{ .ebgpMultihop }}
+        {{- else }}
+      neighbor {{ .nodeLookup }} ebgp-multihop 255
+        {{- end }}
+      {{- end }}
+      {{- if .fallover}}
+        {{- if .multihop}}
+      neighbor {{ .nodeLookup }} fall-over bfd multihop
+        {{- else}}
+      neighbor {{ .nodeLookup }} fall-over bfd
+        {{- end}}
+      {{- end}}
+    {{- end }}
+      !
+    {{- if $ipv6neighbors }}
+      address-family ipv6
+        redistribute kernel
+      {{- if ge ($bgp.maxPathsEbgp | int) 2 }}
+        {{- if le ($bgp.maxPathsEbgp | int) 64 }}
+        max-paths ebgp {{ $bgp.maxPathsEbgp }}
+        {{- end }}
+      {{- end }}
+      {{- if ge ($bgp.maxPathsIbgp | int) 2 }}
+        {{- if le ($bgp.maxPathsIbgp | int) 64 }}
+        max-paths ibgp {{ $bgp.maxPathsIbgp }}
+        {{- end }}
+      {{- end }}
+      {{- range $ipv6neighbors }}
+        {{- if (hasKey . "ip") }}
+        neighbor {{ .ip }} activate
+          {{- if .softReconf }}
+        neighbor {{ .ip }} soft-reconfiguration inbound
+          {{- end }}
+          {{- if .routeMap }}
+        neighbor {{ .ip }} route-map {{ .routeMap }} out
+          {{- end }}
+          {{- if .fallover }}
+        no neighbor {{ .ip }} capability graceful-restart
+          {{- end }}
+        {{- end }}
+        {{- if (hasKey . "nodeLookup") }}
+        neighbor {{ .nodeLookup }} activate
+          {{- if .softReconf }}
+        neighbor {{ .nodeLookup }} soft-reconfiguration inbound
+          {{- end }}
+          {{- if .routeMap }}
+        neighbor {{ .nodeLookup }} route-map {{ .routeMap }} out
+          {{- end }}
+          {{- if .fallover }}
+        no neighbor {{ .nodeLookup }} capability graceful-restart
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      exit-address-family
+    {{- end }}
+      !
+      address-family ipv4
+    {{- range $ipv4neighbors }}
+      {{- if (hasKey . "ip") }}
+        neighbor {{ .ip }} activate
+        {{- if .softReconf }}
+        neighbor {{ .ip }} soft-reconfiguration inbound
+        {{- end }}
+        {{- if .routeMap }}
+        neighbor {{ .ip }} route-map {{ .routeMap }} out
+        {{- end }}
+        {{- if .fallover }}
+        no neighbor {{ .ip }} capability graceful-restart
+        {{- end }}
+      {{- end }}
+      {{- if (hasKey . "nodeLookup") }}
+        neighbor {{ .nodeLookup }} activate
+        {{- if .softReconf }}
+        neighbor {{ .nodeLookup }} soft-reconfiguration inbound
+        {{- end }}
+        {{- if .routeMap }}
+        neighbor {{ .nodeLookup }} route-map {{ .routeMap }} out
+        {{- end }}
+        {{- if .fallover }}
+        no neighbor {{ .nodeLookup }} capability graceful-restart
+        {{- end }}
+      {{- end }}
+    {{- end }}
+      exit-address-family
+    !
+    {{- range $v4prefixList }}
+    ip prefix-list {{ .name }} seq {{ .seq }} {{ if .deny -}} deny {{- else -}} permit {{- end }} {{ .prefix }}
+    {{- end }}
+    {{- range $v6prefixList }}
+    ipv6 prefix-list {{ .name }} seq {{ .seq }} {{ if .deny -}} deny {{- else -}} permit {{- end }} {{ .prefix }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,12 @@
+{{- if (include "enableObserver" . | lower | eq "true") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.observer.name }}-config
+data:
+  config.yaml: |-
+    plugins:
+      io.observer.tmscrape.tmctl: {}
+      io.observer.core.server:  
+        address: 0.0.0.0:8084
+{{- end }}        

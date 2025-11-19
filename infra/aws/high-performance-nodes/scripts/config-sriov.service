@@ -1,0 +1,11 @@
+[Unit]
+Description=Configure SR-IOV Resources
+After=sriov-init.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dpdk/config-sriov.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

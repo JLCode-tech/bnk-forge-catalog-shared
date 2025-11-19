@@ -1,0 +1,16 @@
+{
+  "apiVersion": "v1",
+  "kind": "Schema",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "platformType": {
+          "type": "string",
+          "enum": ["aon", "other", "ocp", "robin", "tanzu", "mbip-ve", "generic"]
+        }
+      }
+    }
+  }
+}

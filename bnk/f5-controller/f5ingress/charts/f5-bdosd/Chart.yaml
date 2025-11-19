@@ -1,0 +1,10 @@
+apiVersion: v2
+appVersion: v0.72.0-0.1.3
+dependencies:
+- name: spk-common
+  repository: ""
+  version: 1.3.5
+description: A Helm chart for f5-bdosd
+name: f5-bdosd
+type: application
+version: 0.46.1-0.0.9

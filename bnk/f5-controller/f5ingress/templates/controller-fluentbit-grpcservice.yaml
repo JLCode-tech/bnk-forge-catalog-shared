@@ -1,0 +1,18 @@
+---
+{{- if (.Values.controller.fluentbit_sidecar.f5_csm_qkview.enabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: qkviewfluentbitcontroller
+  labels:
+    app: {{ include "f5ingress.name" . }}
+spec:
+  clusterIP: "None"
+  ports:
+  - port: {{ .Values.controller.fluentbit_sidecar.f5_csm_qkview.grpc_port }}
+    name: qkview-collect
+    protocol: TCP
+    targetPort: {{ .Values.controller.fluentbit_sidecar.f5_csm_qkview.grpc_port }}
+  selector:
+    app: {{ include "f5ingress.name" . }}
+{{- end }}

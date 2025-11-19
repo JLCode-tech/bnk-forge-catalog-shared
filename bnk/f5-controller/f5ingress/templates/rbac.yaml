@@ -1,0 +1,456 @@
+{{- if not (index .Values "f5-tmm").tmm.Only }}
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clusterrole-{{ include "f5ingress.roleName" . }}
+  labels:
+    {{- include "f5ingress.labels" . | nindent 4 }}
+rules:
+# watchAllNamespaces will be empty for CNF
+# watchAllNamespaces will be "All" for Titan
+# watchAllNamespaces will be list of watch namespace for SPK
+
+# Skip clusterwide permissions for resourses 
+# namespace,nodes,adminpolicybasedexternalroutes for CNF
+{{- if not (eq (include "f5ingress.watchAllNamespaces" .) "") }}
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - namespaces
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "k8s.ovn.org"
+    resources:
+      - "adminpolicybasedexternalroutes"
+    verbs:
+      - get
+      - list
+      - watch
+{{- end }}
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - validatingwebhookconfigurations
+    resourceNames:
+      - f5validate-{{ .Release.Namespace }}    
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - "apiextensions.k8s.io" 
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+
+# Controller needs Access to these crd resources only when 
+# Crdudater is enabled, Crdupdater is enabled only when downloader is enabled. 
+{{- if and (index .Values "f5-downloader").enabled .Values.controller.crdupdater.enabled }}
+  - apiGroups:
+      - "apiextensions.k8s.io"
+    resources:
+      - customresourcedefinitions
+    resourceNames:
+      - f5-big-ips-policies.k8s.f5net.com
+      - f5-big-pe-policies.k8s.f5net.com
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+{{- end }}
+
+# Only for Titan- wholecluster mode
+# wholecluster mode - controller will have permissions 
+# for all namespaces
+{{- if eq (include "f5ingress.watchAllNamespaces" .) "true" }}
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - pods 
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - create
+      - delete
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
+  # Create/Update/Delete
+  - apiGroups:
+      - ingresstcp.k8s.f5net.com
+      - ingressudp.k8s.f5net.com
+      - k8s.f5net.com
+      - dos.k8s.f5net.com
+      - dns.k8s.f5net.com
+      - gateway.networking.k8s.io
+      - gateway.k8s.f5net.com
+      - fic.f5.com
+    resources:
+      - "*"
+    verbs:
+      - watch
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+{{- end }}
+    
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: role-{{ include "f5ingress.roleName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "f5ingress.labels" . | nindent 4 }}
+rules:
+  # Read / Watch resources/actions
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - deployments
+      - deployments/scale
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - pods 
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - create
+      - delete
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
+  # Create/Update/Delete
+  - apiGroups:
+      - ingresstcp.k8s.f5net.com
+      - ingressudp.k8s.f5net.com
+      - k8s.f5net.com
+      - dos.k8s.f5net.com
+      - dns.k8s.f5net.com
+      - gateway.networking.k8s.io
+      - gateway.k8s.f5net.com
+      - fic.f5.com
+    resources:
+      - "*"
+    verbs:
+      - watch
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - metrics.k8s.io
+    resources:
+      - pods
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  # Create/Update/Delete
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - events
+    verbs:
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+      - deletecollection
+  - apiGroups:
+      - apps
+      - extensions
+    resources:
+      - deployments
+      - deployments/scale
+      - daemonsets
+      - replicasets
+      - statefulsets
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - delete
+      - update
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clusterrolebinding-{{ include "f5ingress.roleName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "f5ingress.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: clusterrole-{{ include "f5ingress.roleName" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "f5ingress.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rolebinding-{{ include "f5ingress.roleName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "f5ingress.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role-{{ include "f5ingress.roleName" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "f5ingress.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+###########################################################################
+# watchNamespace RBAC
+---
+{{- if not (eq (include "f5ingress.watchAllNamespaces" .) "true") -}}
+{{- $roleName := include "f5ingress.roleName" . -}}
+{{- $labels := include "f5ingress.labels" . | nindent 4 }}
+{{- $sa := include "f5ingress.serviceAccountName" . -}}
+{{- $rl_ns := .Release.Namespace }}
+
+{{- $namespaces := list -}}
+{{- if eq (include "f5ingress.watchNamespaceType" .) "string" -}}
+{{- $namespaces = split "," .Values.controller.watchNamespace -}}
+{{- else -}}
+{{- $namespaces = .Values.controller.watchNamespace -}}
+{{- end }}
+
+{{- if $namespaces }}
+{{- range $watchNSRaw := $namespaces }}
+{{- $watchNS := trim $watchNSRaw -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: role-{{$roleName}}-{{$watchNS}}
+  namespace: {{ $watchNS }}
+  labels:
+    {{$labels}}
+rules:
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - pods
+      - endpoints
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - list
+      - watch
+      - get
+  # Create/Update/Delete
+  - apiGroups:
+      - ingresstcp.k8s.f5net.com
+      - ingressudp.k8s.f5net.com
+      - k8s.f5net.com
+      - dos.k8s.f5net.com
+      - dns.k8s.f5net.com
+      - gateway.networking.k8s.io
+      - gateway.k8s.f5net.com
+      - fic.f5.com
+    resources:
+      - "*"
+    verbs:
+      - watch
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - patch
+  
+  - apiGroups:
+      - ""
+    resources:
+      - events
+      - services
+      - services/status
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+    verbs:
+      - get
+  - apiGroups:
+      - "" # "" indicates the core API group
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rolebinding-{{$roleName}}-{{$watchNS}}
+  namespace: {{ $watchNS }}
+  labels:
+    {{$labels}}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role-{{$roleName}}-{{$watchNS}}
+subjects:
+- kind: ServiceAccount
+  name: {{$sa}}
+  namespace: {{$rl_ns}}
+---
+{{- end }}
+{{- end }}
+# Role to read secrets from CWC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: role-{{ include "f5ingress.roleName" . }}-cwc
+  namespace: {{ .Values.controller.cwcNamespace | default "default" }}
+  labels:
+    {{- include "f5ingress.labels" . | nindent 4 }}
+rules:
+  # Read / Watch resources/actions
+  - apiGroups:
+      - ""
+    resourceNames:
+      - licensestatus
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rolebinding-{{ include "f5ingress.roleName" . }}-cwc
+  namespace: {{ .Values.controller.cwcNamespace | default "default" }}
+  labels:
+    {{- include "f5ingress.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role-{{ include "f5ingress.roleName" . }}-cwc
+subjects:
+- kind: ServiceAccount
+  name: {{ include "f5ingress.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,1815 @@
+{{- define "tmm-example.deployment" }}
+{{- if and (not .Values.controller.Only) (.Values.enabled) (or (eq .Values.tmm.kind "deployment") (eq .Values.tmm.kind "daemonset")) }}
+
+{{- $tmmResources := dict -}}
+{{- $_ := set $tmmResources "limits_cpu" (.Values.tmm.resources.limits.cpu | default "2") -}}
+{{/* This must match the value in prov.yaml
+     1.5Gi per TMM thread (CPU Core) == 768 HugePages */}}
+{{- $limits_mapres_hpg := 0 -}}
+{{- $limits_hpg := index .Values.tmm.resources "limits" "hugepages-2Mi" -}}
+{{- if .Values.tmm.hugepages.enabled -}}
+{{- if not $limits_hpg -}}
+{{ print "tmm resources hugepages-2Mi limits can not be empty when tmm.hugepages.enabeld is set." }}
+{{- else -}}
+{{- if hasSuffix "Mi" $limits_hpg -}}
+{{- $limits_mapres_hpg = div (trimSuffix "Mi" $limits_hpg) 2 -}}
+{{- else if hasSuffix "Gi" $limits_hpg -}}
+{{ $limits_mapres_hpg = mul (trimSuffix "Gi" $limits_hpg) 512 -}}
+{{- else -}}
+{{ print "tmm hugepages-2Mi resource must be base 1024 with suffix Mi or Gi" }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $tmmResources "limits_hpg" $limits_hpg -}}
+{{- $_ := set $tmmResources "hpg_enabled" .Values.tmm.hugepages.enabled -}}
+{{- $_ := set $tmmResources "mem_mb_overhead" .Values.tmm.resources.limits.memory -}}
+{{- $_ := set $tmmResources "sriov_resources" .Values.tmm.resources.limits.sriovResources -}}
+
+{{- $tmm_repo := .Values.tmm.image.repository -}}
+{{- if regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+-[a-zA-Z0-9_-]+\\.[0-9]+$" .Values.tmm.image.tag }}
+  {{- $tmm_repo = printf "%s/test" .Values.tmm.image.repository -}}
+{{- end }}
+
+{{- $bgp := dict -}}
+{{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+  {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bgp }}
+    {{- $bgp = .Values.tmm.dynamicRouting.tmmRouting.config.bgp -}}
+  {{- end -}}
+{{- end -}}
+
+apiVersion: apps/v1
+{{- if .Values.wholeClusterMode }}
+{{- if .Values.wholeClusterMode.enabled }}
+kind: DaemonSet
+{{- else }}
+kind: Deployment
+{{- end }}
+{{- else }}
+kind: Deployment
+{{- end }}
+metadata:
+  name: {{ default (include "tmm.name" .) .Values.tmm.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tmm.labels" . | nindent 4 }}
+    app: {{ include "tmm.appName" . }}
+    metrics-prometheus: publish
+  annotations:
+    toda.f5.com/tmm-name: {{ .Values.tmm.name }}
+spec:
+{{- if .Values.wholeClusterMode }}
+  {{- if not .Values.wholeClusterMode.enabled }}
+  replicas: {{ .Values.tmm.replicaCount }}
+  {{- end }}
+{{- else }}
+  replicas: {{ .Values.tmm.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      app: {{ include "tmm.appName" . }}
+{{- if .Values.tmm.strategy }}
+  strategy: {{- toYaml .Values.tmm.strategy | nindent 4 }}
+{{- end }}
+  template:
+    metadata:
+      labels:
+{{- if (include "enableObserver" . | lower | eq "true") }}  
+        io.observer.scrape: "true" 
+{{- end }}
+        app: {{ include "tmm.appName" . }}
+        metrics-prometheus: publish
+{{- if or (.Values.prometheus.create) (.Values.tmm.pod.annotations) (.Values.tmm.cniNetworks) }}
+      annotations:
+{{- if (include "enableObserver" . | lower | eq "true") }}    
+        io.observer.targets: |
+          [
+            {
+              "name": {{ .Values.tmm.name | quote }},
+              "group": "tmm",
+              "servername": {{ printf "%s.%s" .Values.tmm.name .Release.Namespace | quote }},
+              "addr": ":8084"
+            }
+          ]
+{{- end }}      
+{{- if .Values.tmm.pod.annotations }}
+{{ toYaml .Values.tmm.pod.annotations | indent 8 }}
+{{- end }}
+{{- if .Values.tmm.cniNetworks }}
+{{- if eq .Values.tmm.robinNetworks "true"}}
+        robin.io/networks: {{ toYaml .Values.tmm.cniNetworks }}
+{{- else }}
+        k8s.v1.cni.cncf.io/networks: "{{ .Values.tmm.cniNetworks }}"
+{{- end }}
+{{- end }}
+{{- end }}
+    spec:
+      {{- if .Values.debug.enabled }}
+      shareProcessNamespace: true
+      {{- end }}
+      {{- if or .Values.debug.enabled .Values.tmm.persistence.enabled }}
+      terminationGracePeriodSeconds: 60
+      {{- end }}
+      {{- if and .Values.global.imageCredentials .Values.global.imageCredentials.name }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imageCredentials.name }}
+      {{- else }}
+      imagePullSecrets: []
+      {{- end }}
+      securityContext:
+        sysctls:
+        - name: net.ipv4.ping_group_range
+          value: "0 2147483647"
+{{- if and .Values.tmm.dynamicRouting.enabled (semverCompare ">=1.22" .Capabilities.KubeVersion.Version)}}
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "179"
+{{- end }}
+{{- if .Values.tmm.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.tmm.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.tmm.tolerations }}
+      tolerations:
+{{ toYaml .Values.tmm.tolerations | indent 6 }}
+{{- end }}
+{{- if .Values.tmm.affinity }}
+      affinity:
+{{ toYaml .Values.tmm.affinity | indent 8 }}
+{{- end }}
+      hostNetwork: {{ .Values.tmm.hostNetwork }}
+      hostAliases:
+{{ toYaml .Values.tmm.hostAliases | indent 8 }}
+{{- if .Values.tmm.runtimeClassName }}
+      runtimeClassName: {{ .Values.tmm.runtimeClassName }}
+{{- end }}
+      serviceAccountName: {{ include "tmm.serviceAccountName" . }}
+{{- if or .Values.tmm.dynamicRouting.enabled  .Values.tmm.platformSmartnic.enabled }}
+      initContainers:
+{{- if .Values.tmm.dynamicRouting.enabled }}
+      - name: init-f5-tmm-routing
+        image: "{{ .Values.tmm.dynamicRouting.tmmRouting.image.repository }}/{{ .Values.tmm.dynamicRouting.tmmRouting.image.initName }}:{{ .Values.tmm.dynamicRouting.tmmRouting.image.tag }}"
+        command: ['sh', '-c', '/code/init.sh']
+        resources: {{- toYaml .Values.tmmRouting.resources | nindent 10 }}
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: ASYMMETRIC_DDOS_MODE
+          value: {{ if .Values.global.asymmetricDosMode }}"{{ .Values.global.asymmetricDosMode }}"{{ else }}""{{ end }}
+        volumeMounts:
+        {{- if .Values.tmm.timezone.enable }}
+        - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+          mountPath: /etc/localtime
+          subPath: "{{ .Values.tmm.timezone.configMapKeyRef.key }}"
+        {{- end }}
+        - name: dynamic-routing-template-volume
+          mountPath: /config/template
+        - name: zebos-config-volume
+          mountPath: /config/zebos
+        {{- if not .Values.tmm.dynamicRouting.configMapName }}
+          {{- if $bgp.neighbors }}
+            {{- range  $bgp.neighbors }}
+              {{- if (hasKey . "nodeLookup") }}
+        - name: {{print .nodeLookup "-volume"}}
+          mountPath: /config/peers/{{.nodeLookup}}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- else }}
+          {{- range $pg := .Values.tmm.dynamicRouting.peerGroups }}
+        - name: {{print  $pg "-volume"}}
+          mountPath: /config/peers/{{$pg}}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+          {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bgp }}
+            {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bgp.bgpSecret }}
+        - name: bgp-secret-volume
+          mountPath: /config/bgp
+            {{- end }}
+          {{- end }}
+        {{- end }}
+{{- end }}
+{{- if .Values.tmm.platformSmartnic.enabled }}
+      - name: init-f5-tmm-smartnic
+        image:  "{{ .Values.tmm.platformSmartnic.initSmartnic.image.repository }}/{{ .Values.tmm.platformSmartnic.initSmartnic.image.initName }}:{{ .Values.tmm.platformSmartnic.initSmartnic.image.tag }}"
+        command: ['sh', '-c', '/usr/bin/smartnic.sh check-status']
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
+          readOnly: true
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SMARTNIC_BUS
+          valueFrom:
+            configMapKeyRef:
+              name: smartnic-mgr-config
+              key: smartnicBus
+      - name: init-f5-tmm-findvfs
+        image: "{{ .Values.tmm.platformSmartnic.initSmartnic.image.repository }}/{{ .Values.tmm.platformSmartnic.initSmartnic.image.initName }}:{{ .Values.tmm.platformSmartnic.initSmartnic.image.tag }}"
+        command: ['sh', '-c', '/usr/bin/smartnic.sh get-tmm-vfs']
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
+        - name: dev-dir
+          mountPath: /dev
+          readOnly: true
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SMARTNIC_BUS
+          valueFrom:
+            configMapKeyRef:
+              name: smartnic-mgr-config
+              key: smartnicBus
+        securityContext:
+          privileged: {{ .Values.tmm.securityContext.privileged }}
+          runAsUser: {{ .Values.tmm.securityContext.runAsUser }}
+          capabilities:
+            add:
+            - CAP_SYS_RAWIO
+{{- end }}
+{{- end }}
+{{- if .Values.tmm.readinessGates.enabled }}
+      readinessGates:
+      - conditionType: "ConfigurationDone"
+      - conditionType: "RoutingDone"
+{{- end }}
+      containers:
+      - image: "{{ $tmm_repo }}/{{ .Values.tmm.image.name }}:{{ .Values.tmm.image.tag}}"
+        name: {{ .Values.tmm.name }}
+        imagePullPolicy: "{{ .Values.tmm.image.pullPolicy }}"
+        {{- if or .Values.debug.enabled .Values.tmm.persistence.enabled }}
+        # call coretmm_reader only when debug container is enabled
+        {{- if .Values.tmm.platformSmartnic.enabled }}
+        {{- if .Values.debug.enabled }}
+        command: ["/usr/bin/tini", "-g", "--"]
+        args:
+          - /bin/bash
+          - -c
+          - |
+            trap 'echo "Shell received SIGTERM, waiting for children to exit..."; wait' TERM
+            . /smartnic/tmp/tmm_vfs_{{ .Release.Namespace }} && env;
+            /usr/bin/qkview-collect-daemon &
+            /opt/bin/coretmm_reader.sh &
+            /usr/bin/crashagent &
+            /opt/bin/init.tmm.sh; 
+            /opt/bin/core_helper.sh
+        {{- else }}
+        command: ["/usr/bin/tini", "-g", "--"]
+        args:
+          - /bin/bash
+          - -c
+          - |
+            trap 'echo "Shell received SIGTERM, waiting for children to exit..."; wait' TERM
+            . /smartnic/tmp/tmm_vfs_{{ .Release.Namespace }} && env;
+            /usr/bin/qkview-collect-daemon &
+            /usr/bin/crashagent &
+            /opt/bin/init.tmm.sh;
+            /opt/bin/core_helper.sh
+        {{- end }}
+        {{- else }}
+        {{- if .Values.debug.enabled }}
+        command: ["/usr/bin/tini", "-g", "--"]
+        args:
+          - /bin/bash
+          - -c
+          - |
+            trap 'echo "Shell received SIGTERM, waiting for children to exit..."; wait' TERM
+            /usr/bin/qkview-collect-daemon &
+            /opt/bin/coretmm_reader.sh &
+            /usr/bin/crashagent &
+            /opt/bin/init.tmm.sh;
+            /opt/bin/core_helper.sh
+        {{- else }}
+        command: ["/usr/bin/tini", "-g", "--"]
+        args:
+          - /bin/bash
+          - -c
+          - |
+            trap 'echo "Shell received SIGTERM, waiting for children to exit..."; wait' TERM
+            /usr/bin/qkview-collect-daemon &
+            /usr/bin/crashagent &
+            /opt/bin/init.tmm.sh;
+            /opt/bin/core_helper.sh
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.tmm.f5_csm_qkview.grpc_port }}
+          name: grpc-port
+          protocol: TCP
+{{ if .Values.tmm.customPorts }}
+{{ toYaml .Values.tmm.customPorts | indent 8 }}
+{{ end }}
+{{- if .Values.tmm.scaling.enable }}
+        - name: prometheus
+          containerPort: {{ .Values.tmm.scaling.prometheus.port }}
+{{- end }}
+{{- if .Values.tmm.grpc.enabled }}
+        - name: grpc-0
+          containerPort: {{ (.Values.tmm.grpc.port | int ) }}
+{{- end }}
+        - name: configview
+          containerPort: {{ (.Values.tmm.configview.grpc_port | int ) }}
+        resources: {{ include "tmm.resources" $tmmResources | nindent 10 }}
+
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.tmm.securityContext.readOnlyRootFilesystem }}
+          allowPrivilegeEscalation: {{ .Values.tmm.securityContext.allowPrivilegeEscalation }}
+          privileged: {{ .Values.tmm.securityContext.privileged }}
+          runAsUser: {{ .Values.tmm.securityContext.runAsUser }}
+          capabilities:
+#            drop:
+#            - ALL
+            add:
+            - NET_ADMIN
+        env:
+        {{- if .Values.tmm.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.tmm.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca-root-cert.pem"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/server-cert.pem"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/server-key.pem"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: CONTAINER_NAME
+          value: "tmm"
+        {{- include "env.spk" (dict "cVersion" .Values.tmm.image.tag ) | nindent 8 }}
+        {{- else }}
+        {{- include "env.spk" (dict "cName" .Values.tmm.name "cVersion" .Values.tmm.image.tag ) | nindent 8 }}
+        {{- end }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.uid
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: CPU_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: {{ .Values.tmm.name }}
+              divisor: "0"
+              resource: requests.cpu
+        - name: CPU_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: {{ .Values.tmm.name }}
+              divisor: "0"
+              resource: limits.cpu
+        - name: MEM_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: {{ .Values.tmm.name }}
+              divisor: "0"
+              resource: requests.memory
+        - name: MEM_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: {{ .Values.tmm.name }}
+              divisor: "0"
+              resource: limits.memory
+        - name: PROCESS_NAME
+          value: TMM
+        - name: TMM_LOG_LEVEL
+          value: {{ .Values.tmm.logLevel }}
+        - name: CONF_TRANSPORT
+          value: "grpc"
+        - name: GRPC_SRV_ADDR
+          value: $(POD_IP)
+        - name: GRPC_SSL_TUPLE
+          value: /ssl:grpc-svc:ca_root
+        - name: GRPC_DNS
+          value: {{ .Values.tmm.grpc.name}}
+        - name: GRPC_SSL_PATH
+          value: /ssl
+        - name: GRPC_CA_BASE
+          value: ca_root
+        - name: SESSIONDB_EXTERNAL_STORAGE
+          value: "{{ .Values.tmm.sessiondb.useExternalStorage }}"
+        - name: SPK_QKVIEW_ENABLED
+          value: "{{ .Values.tmm.qkview.enabled }}"
+        # Liveness service
+        - name: K8S_LIVENESS_PORT
+          value: "6666"
+{{- if .Values.tmm.scaling.enable }}
+        - name: K8S_METRICS_PORT
+          value: "{{ .Values.tmm.scaling.prometheus.port }}"
+{{- end }}
+        {{- if .Values.tmm.hugepages.enabled }}
+        - name: USE_PHYS_MEM
+          value: "TRUE"
+        {{- if not .Values.tmm.topologyManager }}
+        - name: TMM_MAPRES_HUGEPAGES
+          value: {{ $limits_mapres_hpg | quote }}
+        {{- end }}
+        {{- end }}
+        - name: TMM_MAPRES_DELAY_MS
+          value: "10000"
+        {{- if .Values.tmm.grpc.enabled }}
+        - name: GRPC_USE_VAULT
+          value: "FALSE"
+        {{- end }}
+        {{- if .Values.global.dnsx.enabled }}
+        - name: ZXFRD_ADDR
+        {{- if .Values.global.dnsx.hostname }}
+          value: "{{ .Values.global.dnsx.hostname }}"
+        {{- else }}
+          value: "{{ .Values.global.dnsx.name }}.{{ .Values.global.dnsx.grpc.name }}.{{ .Release.Namespace }}.svc.cluster.local"
+        {{- end }}
+        - name: ZXFRD_PORT
+          value: "{{ .Values.global.dnsx.grpc.port }}"
+        {{- end }}
+        - name: USING_CERT_ORCHESTRATOR
+          value: {{ if or (index .Values "cert-orchestrator" "enabled") .Values.tmm.f5_csm_qkview.enable }}"true"{{ else }}"false"{{ end }}
+        - name: TMM_VETH_MTU_EN
+          value: "TRUE"
+        - name: GRPC_STATS_PORT
+          value: "{{ .Values.tmm.configview.grpc_port | default 8850 }}"
+        - name: GRPC_STATS_ADDR
+          value: $(POD_IP)
+        - name: NAT_IP_RESERVATION_TIMEOUT
+          value: "{{ .Values.tmm.nat.ipReservationTimeout | default 900 }}"
+{{- if .Values.tmm.add_k8s_routes }}
+{{- if or (.Capabilities.APIVersions.Has "config.openshift.io/v1") (eq .Values.global.platformType "robin") (eq .Values.global.platformType "aon") (eq .Values.global.platformType "generic") }}
+        - name: TMM_K8S_ROUTES
+          valueFrom:
+            configMapKeyRef:
+              name: tmm-k8s-routes-configmap-{{ .Release.Namespace }}
+              key: TMM_K8S_ROUTES
+{{- end }}
+{{- end }}
+        - name: ASYMMETRIC_DDOS_MODE
+          value: {{ if .Values.global.asymmetricDosMode }}"{{ .Values.global.asymmetricDosMode }}"{{ else }}""{{ end }}
+        - name: BDOSD_ENABLED_ENV_VAR
+          value: {{ if eq .Values.global.bdosd.enabled true }}"true"{{ else }}"false"{{ end }}
+        - name: SESSIONDB_EXTERNAL_RETRY_WAIT_SEC
+          value: "{{ .Values.tmm.sessiondb.extRetryWaitSec }}"
+{{- if .Values.fluentbit.enabled }}          
+        - name: EXPORT_TELEMETRY
+          value: "true" 
+{{ end }}
+        - name: TMM_DEFAULT_MTU
+          value: "{{ .Values.global.tmmDefaultMTU }}"  # get value from golbal helm param
+{{- range .Values.tmm.customEnvVars }}
+{{- if ne .name "TMM_DEFAULT_MTU" }}  # exclude TMM_DEFAULT_MTU from customEnvVars here to avoid duplicate
+        - name: {{ .name }}
+          value: "{{ .value }}"
+{{- end }}
+{{- end }}
+        volumeMounts:
+        - name: tmp-empty-dir
+          mountPath: /tmp
+          readOnly: false
+          subPath: tmm-tmp
+        - name: run-dir
+          mountPath: /run
+          readOnly: false
+          subPath: tmm-run
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        {{- if .Values.tmm.timezone.enable }}
+        - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+          mountPath: /etc/localtime
+          subPath: "{{ .Values.tmm.timezone.configMapKeyRef.key }}"
+        {{- end }}
+        {{- if .Values.tmm.platformSmartnic.enabled }}
+        - name: tmp-dir
+          mountPath: /smartnic/tmp
+          readOnly: true
+        {{- end }}
+        - name: ipsec-certs
+          mountPath: /etc/ipsec/certs
+        {{- if .Values.tmm.f5_csm_qkview.enabled }}
+        {{- if (index .Values "cert-orchestrator" "enabled") }}
+        - name: tls-tmm-qkview-grpc-svr-volume
+          mountPath: /tls/tmm/grpc/svr
+          readOnly: true
+        {{- else }}
+        - name: qkview-server-ca-cert
+          mountPath: /etc/ssl/certs/ca-root-cert.pem
+          subPath: ca-root-cert.pem
+        - name: qkview-server-cert
+          mountPath: /etc/ssl/certs/server-cert.pem
+          subPath: server-cert.pem
+        - name: qkview-server-keys
+          mountPath: /etc/ssl/certs/server-key.pem
+          subPath: server-key.pem
+        {{- end }}
+        {{- end }}
+        - name: podinfo
+          mountPath: /etc/podinfo
+        {{- if .Values.tmm.grpc.enabled }}
+            {{- if not (index .Values "cert-orchestrator" "enabled") }}
+        - name: certs-volume
+          mountPath: /ssl/certs
+        - name: keys-volume
+          mountPath: /ssl/private
+            {{- else }}
+        - name: tls-tmm-grpc-svr-volume
+          mountPath: /ssl
+          readOnly: true
+            {{- end }}
+        {{- if .Values.tmm.tmmgrpcsecretstorefix.enabled }}
+        - name: grpc-key-cert-volume
+          mountPath: /ssl/grpc_key_cert_store
+        {{- end }}
+        {{- end }}
+        {{- if .Values.tmm.hugepages.enabled }}
+        - name: hugepage
+          mountPath: /dev/hugepages
+        {{- end }}
+        - name: config-volume
+          mountPath: /opt/lib/tmm
+        - name: config-shared
+          mountPath: /config
+        - name: dev-tun
+          mountPath: /dev/net/tun
+        - name: f5tmstat
+          mountPath: /var/tmstat
+          readOnly: false
+        {{- if .Values.tmm.tlsStore.enabled }}
+        - name: tls-keys-certs-volume
+          mountPath: /etc/ssl/tls-keys-certs/
+          readOnly: true
+        {{- end }}
+        {{- if eq .Values.tmm.sessiondb.useExternalStorage "true" }}
+          {{- if not (index .Values "cert-orchestrator" "enabled") }}
+        - name: dssm-certs-volume
+          mountPath: /etc/ssl/certs/
+          readOnly: true
+        - name: dssm-keys-volume
+          mountPath: /etc/ssl/private/
+          readOnly: true
+          {{- else }}
+        - name: tls-tmm-mds-clt-volume
+          mountPath: /tls/tmm/mds/clt
+          readOnly: true
+          {{- end }}
+        {{- end }}
+        {{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        - name: f5-core-store
+          mountPath: /var/crash
+          readOnly: false
+        {{- end }}
+        {{- if or .Values.tmm.persistence.enabled .Values.debug.enabled }}
+        - name: tmm-core
+          mountPath: /shared/core
+        {{- end }}
+        {{- if .Values.blobd.enabled}}
+        - name: ips-blobd
+          mountPath: /shared/.pi_installed_updates
+        - name: urlcat-sh-mem
+          mountPath: /dev/shm
+        - name: cec-sh-mem
+          mountPath: /var/download/dpi
+        - name: default-libs
+          mountPath: /var/download/defaultlibs
+          readOnly: false
+        - name: geoip-v3-volume
+          mountPath: /usr/share/GeoIP/v3
+        {{- if and .Values.global.afm.enabled .Values.global.afm.pccd.enabled}}
+        - name: afm-sh-vol
+          mountPath: /shared/pktclass
+        {{- end }}
+        {{- if .Values.global.dwbld.enabled }}
+        - name: ipi-sh-vol
+          mountPath: /shared/dwblclass
+        - name: iprep-sh-vol
+          mountPath: /var/IpRep
+        {{- end }}
+        {{- end }}
+        {{- if .Values.global.dnsx.enabled }}
+        - name: dnsx-storage
+          mountPath: /shared/zxfrd
+          readOnly: true
+        {{- end }}
+        {{- if .Values.fluentbit.enabled }}
+        - name: f5-toda-log
+          mountPath: /var/log/f5
+          subPath: f5-tmm
+        {{- end }}
+        - name: f5-toda-log
+          mountPath: /var/run
+          subPath: tmm-threads
+          readOnly: false
+        {{- if .Values.tmm.k8sprobes.enabled }}
+        readinessProbe: {{- toYaml .Values.tmm.k8sprobes.readinessProbe | nindent 10 }}
+        livenessProbe: {{- toYaml .Values.tmm.k8sprobes.livenessProbe | nindent 10 }}
+        startupProbe: {{- toYaml .Values.tmm.k8sprobes.startupProbe | nindent 10 }}
+        {{- end }}
+        lifecycle:
+        {{- if or .Values.debug.enabled .Values.tmm.persistence.enabled }}
+          postStart:
+            exec:
+              command:
+              - /opt/bin/core_helper_init.sh
+        {{- end }}
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - for iface in `ls -1 /sys/class/net/`; do if [[ $iface == x* ]]; then
+                ip link set $iface down; ip link set $iface name ${iface/x}; fi; done
+      {{- if .Values.tmm.dynamicRouting.enabled }}
+      - image: "{{ .Values.tmm.dynamicRouting.tmmRouting.image.repository }}/{{ .Values.tmm.dynamicRouting.tmmRouting.image.name }}:{{ .Values.tmm.dynamicRouting.tmmRouting.image.tag }}"
+        name: {{ .Values.tmm.dynamicRouting.tmmRouting.name }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+                - imish -e "en" -e "clear bgp *" || true
+        ports:
+        - name: grpc-port
+          containerPort: {{ .Values.tmm.dynamicRouting.tmmRouting.qkviewPort | int }}
+        env:
+        {{- include "env.spk" (dict "cVersion" .Values.tmm.dynamicRouting.tmmRouting.image.tag ) | nindent 8 }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        {{- if and .Values.tmm.dynamicRouting.exportZebosLogs .Values.fluentbit.enabled }}
+        - name: EXPORT_ZEBOS_LOGS
+          value: "true"
+        {{- end }}
+        {{- if .Values.tmm.dynamicRouting.configMapName }}
+        - name: USING_ZEBOS_CONFIGMAP
+          value: "true"
+        {{- else }}
+        - name: USING_ZEBOS_CONFIGMAP
+          value: "false"
+        {{- end }}
+        {{- if .Values.tmm.dynamicRouting.peerGroups }}
+        - name: USING_PEER_GROUPS
+          value: "true"
+        {{- else }}
+        - name: USING_PEER_GROUPS
+          value: "false"
+        {{- end }}
+        {{- if .Values.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.tmm.dynamicRouting.tmmRouting.qkviewPort }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca-root-cert.pem"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/server-cert.pem"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/server-key.pem"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: USING_CERT_ORCHESTRATOR
+          value: "true"
+        {{- end }}
+        - name: CONTAINER_NAME
+          value: dynamic-routing
+        - name: SPK_QKVIEW_ENABLED
+          value: "{{ .Values.tmm.qkview.enabled }}"
+        {{- if .Values.fluentbit.enabled }}          
+        - name: EXPORT_TELEMETRY
+          value: "true" 
+        {{ end }}  
+        imagePullPolicy: "{{ .Values.tmm.dynamicRouting.tmmRouting.image.pullPolicy }}"
+        resources: {{- toYaml .Values.tmmRouting.resources | nindent 10 }}
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.tmmRouting.securityContext.readOnlyRootFilesystem }}
+        {{- if (semverCompare ">=1.22" .Capabilities.KubeVersion.Version) }}
+          allowPrivilegeEscalation: false
+          runAsUser: 3000
+          privileged: false
+        {{- else }}
+          allowPrivilegeEscalation: true
+          runAsUser: 0
+          privileged: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+            - SYS_ADMIN
+            - NET_BIND_SERVICE
+        {{- end }}
+        volumeMounts:
+        - name: tmp-empty-dir
+          mountPath: /tmp
+          subPath: tmrouting-tmp
+          readOnly: false
+        - name: run-dir
+          mountPath: /run
+          subPath: tmrouting-run
+          readOnly: false
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        {{- if .Values.tmm.timezone.enable }}
+        - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+          mountPath: /etc/localtime
+          subPath: "{{ .Values.tmm.timezone.configMapKeyRef.key }}"
+        {{- end }}
+        {{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        - name: f5-core-store
+          mountPath: /var/crash
+          readOnly: false
+        {{- end }}
+        - name: dynamic-routing-volume
+          mountPath: /config/template
+        {{- if .Values.tmm.dynamicRouting.configMapName }}
+        - name: dynamic-routing-template-volume
+          mountPath: /zebosconfig/template
+          {{- range $pg := .Values.tmm.dynamicRouting.peerGroups }}
+        - name: {{print  $pg "-volume"}}
+          mountPath: /config/peers/{{$pg}}
+          {{- end }}
+        {{- end }}
+        - name: netlink-socket
+          mountPath: /tmos
+        - name: rd0
+          mountPath: /var/run/zebos/rd0/
+          readOnly: false
+        - name: zebos-config-volume
+          mountPath: /config/zebos
+          readOnly: false
+        - name: zebos-logs
+          mountPath: /var/log
+        {{- if (.Values.f5_csm_qkview.enabled) }}
+        {{- if (index .Values "cert-orchestrator" "enabled") }}
+        - name: tls-dynamic-routing-grpc-svr-volume
+          mountPath: /tls/dynamic-routing/grpc/svr
+          readOnly: true
+        {{- else }}
+        - name: qkview-server-ca-cert
+          mountPath: /etc/ssl/certs/ca-root-cert.pem
+          subPath: ca-root-cert.pem
+        - name: qkview-server-cert
+          mountPath: /etc/ssl/certs/server-cert.pem
+          subPath: server-cert.pem
+        - name: qkview-server-keys
+          mountPath: /etc/ssl/certs/server-key.pem
+          subPath: server-key.pem
+        {{- end }}
+        {{- end }}
+        {{- if .Values.fluentbit.enabled }}
+        - name: f5-toda-log
+          mountPath: /var/log/f5
+          subPath: f5-tmm-routing
+        {{- end }}
+        {{- if .Values.tmm.dynamicRouting.tmmRouting.k8sprobes.enabled }}
+        readinessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              # all 5 zebos daemons (nsm, ribd, imi, oamd, bgpd) are running
+              - zebos check | grep running | wc -l | grep 5 && pidof bfd_watcher && ls /tmos/tmos_netlink
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              # all 5 zebos daemons (nsm, ribd, imi, oamd, bgpd) are running
+              - zebos check | grep running | wc -l | grep 5 && pidof bfd_watcher && ls /tmos/tmos_netlink
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 16
+          failureThreshold: 3
+        {{- end }}
+      - image: "{{ .Values.tmm.dynamicRouting.tmrouted.image.repository }}/{{ .Values.tmm.dynamicRouting.tmrouted.image.name }}:{{ .Values.tmm.dynamicRouting.tmrouted.image.tag }}"
+        name: {{ .Values.tmm.dynamicRouting.tmrouted.name }}
+        imagePullPolicy: "{{ .Values.tmm.dynamicRouting.tmrouted.image.pullPolicy }}"
+        ports:
+        - name: grpc-port
+          containerPort: {{ .Values.tmrouted.f5_csm_qkview.grpc_port | int }}
+        env:
+        {{- if and .Values.tmm.dynamicRouting.exportTmroutedLogs .Values.fluentbit.enabled }}
+        - name: EXPORT_TMROUTED_LOGS
+          value: "true"
+        {{- end }}
+        {{- if .Values.tmrouted.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.tmrouted.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca-root-cert.pem"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/server-cert.pem"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/server-key.pem"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: CONTAINER_NAME
+          value: "tmrouted"
+        - name: USING_CERT_ORCHESTRATOR
+          value: "true"
+        - name: TMROUTED_LOG_LEVEL
+          value: "0"
+        {{- include "env.spk" (dict "cVersion" .Values.tmm.dynamicRouting.tmrouted.image.tag ) | nindent 8 }}
+        {{- else }}
+        {{- include "env.spk" (dict "cName" .Values.tmm.dynamicRouting.tmrouted.name "cVersion" .Values.tmm.dynamicRouting.tmrouted.image.tag ) | nindent 8 }}
+        {{- end }}
+        {{- if .Values.fluentbit.enabled }}          
+        - name: EXPORT_TELEMETRY
+          value: "true" 
+        {{ end }}
+        resources: {{- toYaml .Values.tmrouted.resources | nindent 10 }}
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.tmrouted.securityContext.readOnlyRootFilesystem }}
+          allowPrivilegeEscalation: false
+          runAsUser: 3000
+# only temporary
+          privileged: false
+        volumeMounts:
+        - name: run-dir
+          mountPath: /run
+          subPath: tmrouted-run
+          readOnly: false
+        - name: tmp-empty-dir
+          mountPath: /tmp
+          subPath: tmrouted-tmp
+          readOnly: false
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        {{- if .Values.tmm.timezone.enable }}
+        - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+          mountPath: /etc/localtime
+          subPath: "{{ .Values.tmm.timezone.configMapKeyRef.key }}"
+        {{- end }}
+        {{- if .Values.tmrouted.f5_csm_qkview.enabled }}
+        {{- if (index .Values "cert-orchestrator" "enabled") }}
+        - name: tls-f5-tmrouted-grpc-svr-volume
+          mountPath: /tls/tmrouted/grpc/svr
+          readOnly: true
+        {{- else }}
+        - name: qkview-server-ca-cert
+          mountPath: /etc/ssl/certs/ca-root-cert.pem
+          subPath: ca-root-cert.pem
+        - name: qkview-server-cert
+          mountPath: /etc/ssl/certs/server-cert.pem
+          subPath: server-cert.pem
+        - name: qkview-server-keys
+          mountPath: /etc/ssl/certs/server-key.pem
+          subPath: server-key.pem
+        {{- end }}
+        {{- end }}
+        {{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        - name: f5-core-store
+          mountPath: /var/crash
+          readOnly: false
+        {{- end }}
+        - name: netlink-socket
+          mountPath: /tmos
+        {{- if .Values.fluentbit.enabled }}
+        - name: f5-toda-log
+          mountPath: /var/log/f5
+          subPath: f5-tmm-tmrouted
+        {{- end }}  
+        {{- if .Values.tmm.dynamicRouting.tmrouted.k8sprobes.enabled }}
+        readinessProbe:
+          exec:
+            command:
+              - cat
+              - /tmos/tmrouted.alive
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              # tmrouted.alive was touched less than 6 seconds ago
+              - find /tmos/tmrouted.alive -mmin -0.1 | grep alive
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 16
+          failureThreshold: 3
+        startupProbe:
+          exec:
+            command:
+              - cat
+              - /tmos/tmrouted.pid
+          failureThreshold: 5
+          periodSeconds: 30
+        {{- end }}
+      {{- end }}
+      {{- if .Values.debug.enabled }}
+      - image: "{{ .Values.debug.image.repository }}/{{ .Values.debug.image.name }}:{{ .Values.debug.image.tag }}"
+        name: {{ .Values.debug.name }}
+        imagePullPolicy: {{ .Values.debug.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.debug.f5_csm_qkview.grpc_port }}
+          name: grpc-port
+          protocol: TCP
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.debug.securityContext.readOnlyRootFilesystem }}
+          privileged: false
+          runAsUser: 2000
+          runAsGroup: 3000
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - KILL
+            {{- if .Capabilities.APIVersions.Has "config.openshift.io/v1" }}
+            - NET_RAW
+            {{- end }}
+        stdin: true
+        tty: true
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: RABBITMQ_NAMESPACE
+          value: {{ .Values.debug.rabbitmqNamespace }}
+      {{- if .Values.debug.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.debug.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca-root-cert.pem"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/server-cert.pem"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/server-key.pem"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: CONTAINER_NAME
+          value: "f5-debug-sidecar"
+        {{- include "env.spk" (dict "cVersion" .Values.debug.image.tag ) | nindent 8 }}
+      {{- else }}
+        {{- include "env.spk" (dict "cName" .Values.debug.name "cVersion" .Values.debug.image.tag ) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.watchNamespace }}
+        - name: APP_NAMESPACE
+          value: {{ include "f5ingress.watchNamespaceString" . }}
+      {{- end }}
+        - name: USING_CERT_ORCHESTRATOR
+          value: {{ if or (index .Values "cert-orchestrator" "enabled") .Values.tmm.f5_csm_qkview.enable }}"true"{{ else }}"false"{{ end }}
+        - name: SPK_QKVIEW_ENABLED
+          value: "{{ .Values.tmm.qkview.enabled }}"
+        {{- if .Values.fluentbit.enabled }}          
+        - name: FLUENTBIT_ENABLED
+          value: "true" 
+        {{ end }}  
+        resources: {{- toYaml .Values.debug.resources | nindent 10 }}
+        volumeMounts:
+        - name: tmp-empty-dir
+          mountPath: /tmp
+          subPath: debug-tmp
+          readOnly: false
+        - name: run-dir
+          mountPath: /run
+          subPath: debug-run
+          readOnly: false
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        {{- if .Values.fluentbit.enabled }}
+        - name: f5-toda-log
+          mountPath: /var/log/f5
+          subPath: debug_api
+        {{- end }}  
+        {{- if .Values.tmm.timezone.enable }}
+        - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+          mountPath: /etc/localtime
+          subPath: "{{ .Values.tmm.timezone.configMapKeyRef.key }}"
+        {{- end }}
+        {{- if .Values.blobd.enabled }}
+        - name: geoip-v3-volume
+          mountPath: /usr/share/GeoIP/v3
+          readOnly: true
+        {{- end }}
+      {{- if .Values.debug.f5_csm_qkview.enabled }}
+      {{- if (index .Values "cert-orchestrator" "enabled") }}
+        - name: tls-f5-debug-sidecar-grpc-svr-volume
+          mountPath: /tls/f5-debug-sidecar/grpc/svr
+          readOnly: true
+      {{- else }}
+        - name: qkview-server-ca-cert
+          mountPath: /etc/ssl/certs/ca-root-cert.pem
+          subPath: ca-root-cert.pem
+        - name: qkview-server-cert
+          mountPath: /etc/ssl/certs/server-cert.pem
+          subPath: server-cert.pem
+        - name: qkview-server-keys
+          mountPath: /etc/ssl/certs/server-key.pem
+          subPath: server-key.pem
+      {{- end }}
+      {{- end }}
+        {{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        - name: f5-core-store
+          mountPath: /var/crash
+          readOnly: false
+        {{- end }}
+        {{- if not (index .Values "cert-orchestrator" "enabled") }}
+        - name: client-certs
+          mountPath: /etc/cm20/rabbit/private/crt/client-cert.pem
+          subPath: client-cert.pem
+        - name: client-keys
+          mountPath: /etc/cm20/rabbit/private/key/client-key.pem
+          subPath: client-key.pem
+        - name: client-ca-cert
+          mountPath: /etc/cm20/rabbit/private/crt/ca-root-cert.pem
+          subPath: ca-root-cert.pem
+        {{- else }}
+        - name: tls-debug-amqp-clt-volume
+          mountPath: /tls/debug/amqp/clt
+          readOnly: true
+        {{- end }}
+        - name: podinfo
+          mountPath: /etc/podinfo
+          readOnly: true
+        - name: f5tmstat
+          mountPath: /var/tmstat
+          readOnly: true
+        - name: config-shared
+          mountPath: /config
+          readOnly: true
+        {{- if .Values.tmm.tlsStore.enabled }}
+        - name: tls-keys-certs-volume
+          mountPath: /etc/ssl/tls-keys-certs/
+          readOnly: true
+        {{- end }}
+        {{- if .Values.tmm.grpc.enabled }}
+          {{- if not (index .Values "cert-orchestrator" "enabled") }}
+        - name: ca-pemstore
+          mountPath: /etc/ssl/certs/ca_root.crt
+          subPath: ca_root.crt
+          readOnly: true
+        - name: certs-volume
+          mountPath: /etc/ssl/certs/f5-ing-demo-f5ingress.crt
+          subPath: f5-ing-demo-f5ingress.crt
+          readOnly: true
+        - name: keys-volume
+          mountPath: /etc/ssl/private/f5-ing-demo-f5ingress.key
+          subPath: f5-ing-demo-f5ingress.key
+          readOnly: true
+          {{- else }}
+        - name: tls-debug-grpc-clt-volume
+          mountPath: /tls/debug/grpc/clt
+          readOnly: true
+          {{- end }}
+        {{- end }}
+        {{- if eq .Values.tmm.sessiondb.useExternalStorage "true" }}
+          {{- if not (index .Values "cert-orchestrator" "enabled") }}
+        - name: dssm-ca-pemstore
+          mountPath: /etc/ssl/certs/dssm-ca.crt
+          subPath: dssm-ca.crt
+          readOnly: true
+        - name: dssm-certs-volume
+          mountPath: /etc/ssl/certs/dssm-cert.crt
+          subPath: dssm-cert.crt
+          readOnly: true
+        - name: dssm-keys-volume
+          mountPath: /etc/ssl/private/dssm-key.key
+          subPath: dssm-key.key
+          readOnly: true
+          {{- else }}
+        - name: tls-debug-mds-clt-volume
+          mountPath: /tls/debug/mds/clt
+          readOnly: true
+          {{- end }}
+        {{- end }}
+        - name: tmm-core
+          mountPath: /tmm/core
+          readOnly: true
+        - name: s6-mount
+          mountPath: /var/run/s6
+          readOnly: false
+        {{- if .Values.debug.persistence.enabled }}
+        - name: debug-pvc
+          mountPath: /shared
+        {{- end }}
+        {{- if and .Values.global.dnsx.enabled .Values.global.dnsx.tmstat.enabled }}
+        - name: dnsx-tmstat
+          mountPath: /shared/tmstat/zxfrd
+          readOnly: true
+        {{- end }}
+        {{- if and .Values.global.gslb.enabled .Values.global.gslb.tmstat.enabled }}
+        - name: gslb-tmstat
+          mountPath: /shared/tmstat/gslb
+          readOnly: true
+        {{- end }}
+        {{- if .Values.global.dwbld.enabled }}
+        - name: ipi-sh-vol
+          mountPath: /shared/dwblclass
+        - name: iprep-sh-vol
+          mountPath: /var/IpRep
+        {{- end }}
+      {{- end }}
+      {{- if .Values.blobd.enabled }}
+      - image: "{{ .Values.blobd.image.repository }}/{{ .Values.blobd.image.name }}:{{ .Values.blobd.image.tag }}"
+        name: {{ .Values.blobd.name }}
+        imagePullPolicy: {{ .Values.blobd.image.pullPolicy }}
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.blobd.securityContext.readOnlyRootFilesystem }}
+          privileged: false
+          runAsUser: 3000
+          allowPrivilegeEscalation: false
+        stdin: true
+        tty: true
+        ports:
+        - name: grpc-blobd
+          containerPort: {{ .Values.blobd.grpc.port | int }}
+        - name: grpc-port
+          containerPort: {{ .Values.blobd.f5_csm_qkview.grpc_port | int }}
+          protocol: TCP
+        env:
+        {{- include "env.spk" (dict "cVersion" .Values.blobd.image.tag ) | nindent 8 }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        {{- if .Values.blobd.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.blobd.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca-root-cert.pem"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/server-cert.pem"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/server-key.pem"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: SPK_QKVIEW_ENABLED
+          value: "{{ .Values.blobd.f5_csm_qkview.enabled }}"
+        {{- end }}
+        - name: CONTAINER_NAME
+          value: "qkview-blobd"
+        - name: GRPC_SRV_TLS
+          value: "{{ .Values.blobd.grpc.tls.enabled| default "true" }}"
+        - name: GRPC_SRV_CERT
+          value: "{{ .Values.blobd.grpc.tls.cert | default "grpc-svc.crt" }}"
+        - name: GRPC_SRV_KEY
+          value: "{{ .Values.blobd.grpc.tls.key | default "grpc-svc.key" }}"
+        - name: GRPC_SRV_CA
+          value: "{{ .Values.blobd.grpc.tls.cacert | default "ca_root.crt" }}"
+        - name: GRPC_SRV_PORT
+          value: "{{ .Values.blobd.grpc.port | default 9222 }}"
+        - name: GRPC_CLIENT_TLS
+          value: "{{ .Values.blobd.grpc.client.tls.enabled | default "true" }}"
+        - name: GRPC_CLIENT_CERT
+          value: "{{ .Values.blobd.grpc.client.tls.cert | default "grpc-blobd-client.crt" }}"
+        - name: GRPC_CLIENT_KEY
+          value: "{{ .Values.blobd.grpc.client.tls.key | default "grpc-blobd-client.key" }}"
+        - name: GRPC_CLIENT_CA
+          value: "{{ .Values.blobd.grpc.client.tls.cacert | default "ca_root.crt" }}"
+        - name: TMM_GRPC_SRV_PORT
+          value: "{{ .Values.tmm.grpc.port | default 8750 }}"
+        - name: USING_CERT_ORCHESTRATOR
+          value: {{ if or (index .Values "cert-orchestrator" "enabled") .Values.tmm.f5_csm_qkview.enable }}"true"{{ else }}"false"{{ end }}
+        {{- if .Values.fluentbit.enabled }}
+        - name: EXPORT_BLOBD_LOGS
+          value: "true"    
+        - name: EXPORT_TELEMETRY
+          value: "true" 
+        {{ end }}        
+        resources: {{- toYaml .Values.blobd.resources | nindent 10 }}
+        volumeMounts:
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        {{- if .Values.tmm.timezone.enable }}
+        - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+          mountPath: /etc/localtime
+          subPath: "{{ .Values.tmm.timezone.configMapKeyRef.key }}"
+        {{- end }}
+        - name: podinfo
+          mountPath: /etc/podinfo
+          readOnly: true
+        # grpc certs for communication between downloader pod-blobd container and blobd-tmm containers
+        {{- if .Values.tmm.grpc.enabled }}
+        volumeMounts:
+{{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        - mountPath: /var/crash
+          name: f5-core-store
+          readOnly: false
+{{- end }}
+          {{- if not (index .Values "cert-orchestrator" "enabled") }}
+        - name: certs-volume
+          mountPath: /etc/ssl/certs/
+          readOnly: true
+        - name: keys-volume
+          mountPath: /etc/ssl/private/
+          readOnly: true
+          {{- else }}
+        - name: tls-blobd-grpc-clt-volume
+          mountPath: /tls/blobd/grpc/clt/
+          readOnly: true
+        - name: tls-blobd-grpc-svr-volume
+          mountPath: /tls/blobd/grpc/svr/
+          readOnly: true
+          {{- if .Values.blobd.f5_csm_qkview.enabled }}
+        - name: tls-qkview-blobd-grpc-svr-volume
+          mountPath: /tls/qkview-blobd/grpc/svr/
+          readOnly: true
+          {{- end }}
+          {{- end }}
+        {{- end }}
+        - name: ips-blobd
+          mountPath: /shared/.pi_installed_updates
+        - name: urlcat-sh-mem
+          mountPath: /dev/shm
+        - name: cec-sh-mem
+          mountPath: /var/download/dpi
+        - name: default-libs
+          mountPath: /var/download/defaultlibs
+          readOnly: false
+        - name: geoip-v3-volume
+          mountPath: /usr/share/GeoIP/v3
+        - name: var-blobd-bcdatabase-dir
+          mountPath: /var/blobd/bcdatabase
+          readOnly: false
+        - name: var-download-dir
+          mountPath: /var/download
+          readOnly: false
+        - name: tmp-empty-dir
+          mountPath: /tmp
+          subPath: blobd-tmp
+          readOnly: false
+        - name: run-dir
+          mountPath: /run
+          subPath: blobd-run
+          readOnly: false
+        {{- if and .Values.global.afm.enabled .Values.global.afm.pccd.enabled}}
+        - name: afm-sh-vol
+          mountPath: /shared/pktclass
+        {{- end }}
+        {{- if .Values.global.dwbld.enabled }}
+        - name: ipi-sh-vol
+          mountPath: /shared/dwblclass
+        - name: iprep-sh-vol
+          mountPath: /var/IpRep
+        {{- end }}
+        {{- if .Values.fluentbit.enabled }}
+        - name: f5-toda-log
+          mountPath: /var/log/f5
+          subPath: blobd     
+        {{- end }}
+      {{- end }}
+
+{{- if (include "enableObserver" . | lower | eq "true") }}
+      - image: "{{ .Values.observer.image.repository | required ".Values.observer.image.repository is required." }}/{{ .Values.observer.image.name }}:{{ .Values.observer.image.tag }}"
+        command: 
+          - supervisord
+          - -c
+          - /etc/supervisor/conf.d/supervisord-spk.conf
+          - -l
+          - /tmp/supervisord.log
+        name: {{ .Values.observer.name }}
+        imagePullPolicy: {{ .Values.observer.image.pullPolicy }}
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.observer.securityContext.readOnlyRootFilesystem }}
+          privileged: false
+          runAsUser: 3000
+          runAsGroup: 3000
+          allowPrivilegeEscalation: false
+        resources: {{- toYaml .Values.observer.resources | nindent 10 }}  
+        stdin: true
+        tty: true
+        ports:
+        - name: observer-grpc
+          containerPort: 8084
+        - name: observer-qkview          
+          containerPort: {{ .Values.observer.f5_csm_qkview.grpc_port }}
+        readinessProbe:
+          exec:
+            command:
+              - "/bin/grpc_health_probe"
+              - "-addr=:8084"
+              - "-tls"
+              - "-tls-ca-cert=$(TLS_OBSERVER_CA_FILE)"
+              - "-tls-client-cert=$(TLS_OBSERVER_CERT_FILE)"
+              - "-tls-client-key=$(TLS_OBSERVER_KEY_FILE)"
+              - "-tls-server-name=$(OBSEVER_DNS)"
+              - "-connect-timeout=4s"
+          initialDelaySeconds: 5
+          failureThreshold: 3
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+              - "/bin/grpc_health_probe"
+              - "-addr=:8084"
+              - "-tls"
+              - "-tls-ca-cert=$(TLS_OBSERVER_CA_FILE)"
+              - "-tls-client-cert=$(TLS_OBSERVER_CERT_FILE)"
+              - "-tls-client-key=$(TLS_OBSERVER_KEY_FILE)"
+              - "-tls-server-name=$(OBSEVER_DNS)"
+              - "-connect-timeout=4s"
+          initialDelaySeconds: 30
+          failureThreshold: 3
+          periodSeconds: 10
+          timeoutSeconds: 5          
+        env:
+        {{- include "env.spk" (dict "cVersion" .Values.observer.image.tag ) | nindent 8 }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: TLS_OBSERVER_CERT_FILE
+          value: "/etc/ssl/certs/tls.crt"
+        - name: TLS_OBSERVER_KEY_FILE
+          value: "/etc/ssl/certs/tls.key"
+        - name: TLS_OBSERVER_CA_FILE
+          value: "/etc/ssl/certs/ca.crt"              
+        - name: QK_GRPC_PORT
+          value: "19891"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca.crt"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/tls.crt"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/tls.key"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: CONTAINER_NAME
+          value: {{ .Values.observer.name }}
+        - name: OBSEVER_DNS
+          value: {{ .Values.observer.name }}
+        - name: OBSERVER_INSIGHTS_LEVEL
+          value: "detailed"
+        - name: OBSEVER_ADDR
+          value: "0.0.0.0:8084"
+        - name: OBSERVER_LOG_LEVEL
+          value: info
+        - name: OBSERVER_PIPE_PATH
+          value: /var/log/f5/observer.pipe
+{{- if .Values.fluentbit.enabled }}
+        - name: FLUENTBIT_ENABLED
+          value: "true"       
+{{- end }}
+        volumeMounts:
+        - mountPath: /run
+          name: run-dir
+          subPath: observer-run
+          readOnly: false
+        - mountPath: /tmp
+          name: tmp-empty-dir
+          subPath: observer-tmp
+          readOnly: false
+        - mountPath: /etc/observer/config.yaml
+          name: {{ .Values.observer.name }}-config
+          subPath: config.yaml
+        - name: f5tmstat
+          mountPath: /var/tmstat  
+{{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        - mountPath: /var/crash
+          name: f5-core-store
+{{- end }}
+        - name: {{ .Values.observer.name }}-cert-secret
+          mountPath: /etc/ssl/certs
+          readOnly: true
+{{- if .Values.fluentbit.enabled }}
+        - name: f5-toda-log
+          mountPath: /var/log/f5
+          subPath: observer
+{{- end }}
+{{- end }}
+{{- if .Values.fluentbit.enabled }}
+      - image: "{{ .Values.fluentbit.image.repository | required ".Values.fluentbit.image.repository is required." }}/{{ .Values.fluentbit.image.name }}:{{ .Values.fluentbit.image.tag }}"
+        name: {{ .Values.fluentbit.name }}
+        imagePullPolicy: {{ .Values.fluentbit.image.pullPolicy }}
+        resources: {{- toYaml .Values.fluentbit.resources | nindent 10 }}
+        securityContext:
+          privileged: false
+          runAsUser: 3000
+          runAsGroup: 3000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: {{ .Values.fluentbit.securityContext.capabilities.drop | default list }}
+          readOnlyRootFilesystem: {{ .Values.fluentbit.securityContext.readOnlyRootFilesystem }}
+        env:
+          - name: NODE
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: POD_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.uid
+          - name: POD
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        volumeMounts:
+{{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other")  }}
+          - name: f5-core-store
+            mountPath: /var/crash
+            readOnly: false
+{{- end }}
+          - name: fluentbit-persistence
+            mountPath: /fluent-bit/storage
+          - name: f5-toda-log
+            mountPath: /var/log/f5
+            readOnly: true
+          - name: f5-toda-fluentbit-config
+            mountPath: /fluent-bit/etc/
+{{- if .Values.fluentbit.tls.enabled }}
+          - name: tls-genericfluentbit-tcp-clt-volume
+            mountPath: /tls/genericfluentbit/tcp/clt
+            readOnly: true
+          - name: run-dir
+            mountPath: /run
+            subPath: fluentbit-run
+            readOnly: false
+          - name: tmp-empty-dir
+            mountPath: /tmp
+            subPath: fluentbit-tmp
+            readOnly: false
+          - name: logs-empty-dir
+            mountPath: /logs
+            subPath: fluentbit-logs
+            readOnly: false
+          - name: var-log-dir
+            mountPath: /var/log
+            subPath: fluentbit-var-log
+            readOnly: false
+{{- end }}
+{{- end }}
+      volumes:
+      - name: var-blobd-bcdatabase-dir
+        emptyDir: {}
+      - name: var-download-dir
+        emptyDir: {}
+      - name: tmp-empty-dir
+        emptyDir: {}
+      - name: run-dir
+        emptyDir: {}
+      - name: logs-empty-dir
+        emptyDir: {}
+      - name: var-log-dir
+        emptyDir: {}
+      {{- include "volumes.spk" . | nindent 6 }}
+      {{- if .Values.tmm.timezone.enable }}
+      - name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+        configMap:
+          name: "{{ .Values.tmm.timezone.configMapKeyRef.name }}"
+      {{- end }}
+      {{- if .Values.tmm.platformSmartnic.enabled }}
+      - name: tmp-dir
+        hostPath:
+          path: /tmp
+      - name: dev-dir
+        hostPath:
+          path: /dev
+      {{- end }}
+      - name: ipsec-certs
+        hostPath:
+          path: /etc/ipsec/certs
+          type: ""
+# secrets for grpc communication from debug-sidecar with csm-qkview for qkview
+{{- if (.Values.f5_csm_qkview.enabled) }}
+{{- if not (index .Values "cert-orchestrator" "enabled") }}
+      - name: qkview-server-ca-cert
+        secret:
+          secretName: qkview-server-certs
+      - name: qkview-server-cert
+        secret:
+          secretName: qkview-server-certs
+      - name: qkview-server-keys
+        secret:
+          secretName: qkview-server-certs
+{{- else }}
+{{- if .Values.debug.enabled }}
+      - name: tls-f5-debug-sidecar-grpc-svr-volume
+        secret:
+          secretName: tls-f5-debug-sidecar-grpc-svr-secret
+{{- end }}
+{{- if .Values.tmm.dynamicRouting.enabled }}
+      - name: tls-dynamic-routing-grpc-svr-volume
+        secret:
+          secretName: tls-dynamic-routing-grpc-svr-secret
+{{- end }}
+{{- if (.Values.tmm.f5_csm_qkview.enabled) }}
+      - name: tls-tmm-qkview-grpc-svr-volume
+        secret:
+          secretName: tls-tmm-qkview-grpc-svr-secret
+{{- end}}
+{{- if (.Values.tmrouted.f5_csm_qkview.enabled) }}
+      - name: tls-f5-tmrouted-grpc-svr-volume
+        secret:
+          secretName: tls-f5-tmrouted-grpc-svr-secret
+{{- end}}
+{{- end }}
+{{- end }}
+{{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+      - name: f5-core-store
+        hostPath:
+          path: /home/crash/f5
+{{- end }}
+      - name: tls-tmstatsd-grpc-clt-volume
+        secret:
+          secretName: tls-tmstatsd-grpc-clt-secret
+      - name: podinfo
+        downwardAPI:
+          items:
+            - path: "uid"
+              fieldRef:
+                fieldPath: metadata.uid
+            - path: "name"
+              fieldRef:
+                fieldPath: metadata.name
+            - path: "namespace"
+              fieldRef:
+                fieldPath: metadata.namespace
+            - path: "labels"
+              fieldRef:
+                fieldPath: metadata.labels
+            - path: "annotations"
+              fieldRef:
+                fieldPath: metadata.annotations
+      {{- if .Values.debug.persistence.enabled }}
+      - name: debug-pvc
+        persistentVolumeClaim:
+          claimName: f5-debug-sidecar
+      {{- end }}
+      {{- if .Values.tmm.hugepages.enabled }}
+      - emptyDir:
+          medium: HugePages
+        name: hugepage
+      {{- end }}
+      - name: config-volume
+        configMap:
+          defaultMode: 420
+          name: tmm-init
+      - name: config-shared
+        emptyDir: {}
+      - name: s6-mount
+        emptyDir: {}
+      {{- if or .Values.tmm.persistence.enabled .Values.debug.enabled }}
+      - name: tmm-core
+        # If robin or others, the core is stored in f5-core-store and not in tmm-core
+        {{- if or (eq .Values.global.platformType "robin") (eq .Values.global.platformType "other") }}
+        emptyDir: {}
+        {{- else }}
+        {{- if .Values.tmm.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: tmm-pvc
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.tmm.dynamicRouting.enabled }}
+      - name: dynamic-routing-volume
+        configMap:
+          defaultMode: 420
+          name: f5-tmm-dynamic-routing
+      - name: dynamic-routing-template-volume
+        configMap:
+          defaultMode: 420
+          {{- if .Values.tmm.dynamicRouting.configMapName }}
+          name: {{ .Values.tmm.dynamicRouting.configMapName }}
+          {{- else }}
+          name: f5-tmm-dynamic-routing-template
+          {{- end }}
+      - name: zebos-config-volume
+        emptyDir: {}
+      - name: zebos-logs
+        emptyDir: {}
+      {{- if .Values.tmm.dynamicRouting.tmmRouting.config }}
+        {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bgp }}
+          {{- if .Values.tmm.dynamicRouting.tmmRouting.config.bgp.bgpSecret }}
+      - name: bgp-secret-volume
+        secret:
+          secretName: {{ .Values.tmm.dynamicRouting.tmmRouting.config.bgp.bgpSecret }}
+          {{ end }}
+        {{ end }}
+      {{ end }}
+      {{- if not .Values.tmm.dynamicRouting.configMapName }}
+        {{- if $bgp.neighbors }}
+          {{- range  $bgp.neighbors }}
+            {{- if (hasKey . "nodeLookup")}}
+      - name: {{print .nodeLookup "-volume"}}
+        configMap:
+          defaultMode: 420
+          name: {{.nodeLookup}}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- else }}
+        {{- range $pg := .Values.tmm.dynamicRouting.peerGroups }}
+      - name: {{print  $pg "-volume"}}
+        configMap:
+          defaultMode: 420
+          name: {{$pg}}
+        {{- end }}
+      {{- end }}
+      - name: netlink-socket
+        emptyDir: {}
+      - name: rd0
+        emptyDir: {}
+      {{- end }}
+      - name: dev-tun
+        hostPath:
+          path: /dev/net/tun
+          type: CharDevice
+      {{- if .Values.global.dnsx.enabled }}
+      - name: dnsx-storage
+        persistentVolumeClaim:
+          claimName: dnsx-storage
+      {{- end }}
+      {{- if and .Values.global.dnsx.enabled .Values.global.dnsx.tmstat.enabled .Values.debug.enabled }}
+      - name: dnsx-tmstat
+        persistentVolumeClaim:
+          claimName: dnsx-tmstat
+      {{- end }}
+      {{- if and .Values.global.gslb.enabled .Values.global.gslb.tmstat.enabled .Values.debug.enabled }}
+      - name: gslb-tmstat
+        persistentVolumeClaim:
+          claimName: gslb-tmstat
+      {{- end }}
+      {{- if .Values.tmm.tlsStore.enabled }}
+      - name: tls-keys-certs-volume
+        secret:
+          secretName: tls-keys-certs-secret
+      {{- end }}
+      {{- if .Values.tmm.grpc.enabled }}
+        {{- if not (index .Values "cert-orchestrator" "enabled") }}
+      - name: keys-volume
+        secret:
+          secretName: keys-secret
+      - name: certs-volume
+        secret:
+          secretName: certs-secret
+      - name: ca-pemstore
+        secret:
+          secretName: certs-secret
+        {{- else }}
+      - name: tls-debug-grpc-clt-volume
+        secret:
+          secretName: tls-debug-grpc-clt-secret
+      - name: tls-blobd-grpc-clt-volume
+        secret:
+          secretName: tls-blobd-grpc-clt-secret
+      - name: tls-blobd-grpc-svr-volume
+        secret:
+          secretName: tls-blobd-grpc-svr-secret
+      - name: tls-tmm-grpc-svr-volume
+        secret:
+          secretName: tls-tmm-grpc-svr-secret
+      {{- if .Values.blobd.f5_csm_qkview.enabled }}
+      - name: tls-qkview-blobd-grpc-svr-volume
+        secret:
+          secretName: tls-qkview-blobd-grpc-svr-secret
+      {{- end }}
+        {{- end }}
+      {{- if .Values.tmm.tmmgrpcsecretstorefix.enabled }}
+      - name: grpc-key-cert-volume
+        secret:
+          secretName: grpc-key-cert-secret
+      {{- end }}
+      {{- end }}
+      {{- if eq .Values.tmm.sessiondb.useExternalStorage "true" }}
+        {{- if not (index .Values "cert-orchestrator" "enabled") }}
+      - name: dssm-ca-pemstore
+        secret:
+          secretName: dssm-certs-secret
+      - name: dssm-certs-volume
+        secret:
+          secretName: dssm-certs-secret
+      - name: dssm-keys-volume
+        secret:
+          secretName: dssm-keys-secret
+        {{- else }}
+      - name: tls-tmm-mds-clt-volume
+        secret:
+          secretName: tls-tmm-mds-clt-secret
+      - name: tls-debug-mds-clt-volume
+        secret:
+          secretName: tls-debug-mds-clt-secret
+        {{- end }}
+      {{- end }}
+      {{- if not (index .Values "cert-orchestrator" "enabled") }}
+      - name: client-certs
+        secret:
+          secretName: client-certs
+      - name: client-keys
+        secret:
+          secretName: client-certs
+      - name: client-ca-cert
+        secret:
+          secretName: client-certs
+      {{- else }}
+      - name: tls-debug-amqp-clt-volume
+        secret:
+          secretName: tls-debug-amqp-clt-secret
+      {{- end }}
+      {{- if .Values.blobd.enabled }}
+      - name: geoip-v3-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      {{- end }}
+      {{- if or .Values.debug.enabled .Values.global.bdosd.enabled (index .Values "f5-toda-logging" "enabled") }}
+      - name: f5tmstat
+      {{- if and .Values.global.bdosd.enabled .Values.global.bdosd.applianceMode.enabled }}
+        hostPath:
+          path: /root/tmstat/{{ .Release.Namespace }}
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.blobd.enabled }}
+      - name: ips-blobd
+        emptyDir: {}
+      - name: urlcat-sh-mem
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1200Mi
+      - name: cec-sh-mem
+        emptyDir: {}
+      - name: default-libs
+        emptyDir: {}
+      {{- if and .Values.global.afm.enabled .Values.global.afm.pccd.enabled}}
+      - name: afm-sh-vol
+        emptyDir:
+          medium: Memory
+          sizeLimit: "{{ .Values.global.afm.shared_volume_size | default "2Gi" }}"
+      {{- end }}
+      {{- if .Values.global.dwbld.enabled }}
+      - name: ipi-sh-vol
+        emptyDir:
+          medium: Memory
+          sizeLimit: "{{ .Values.global.dwbld.shared_volume_size | default "2Gi" }}"
+      - name: iprep-sh-vol
+        emptyDir:
+          medium: Memory
+          sizeLimit: "{{ .Values.global.dwbld.shared_volume_size | default "128Mi" }}"
+      {{- end }}
+      {{- end }}
+{{- if (include "enableObserver" . | lower | eq "true") }}
+      - name: {{ .Values.observer.name }}-cert-secret
+        secret:
+          secretName: {{ .Values.observer.name }}-cert-secret          
+      - configMap:
+          defaultMode: 420
+          name: {{ .Values.observer.name }}-config
+        name: {{ .Values.observer.name }}-config
+{{- end }}
+      - name: f5-toda-log
+        emptyDir: {}
+{{- if .Values.fluentbit.enabled }}
+      - name: f5-toda-fluentbit-config
+        configMap:
+          name: f5-toda-fluentbit-config
+      - name: fluentbit-persistence
+        emptyDir: {}
+{{- if .Values.fluentbit.tls.enabled }}
+      - name: tls-genericfluentbit-tcp-clt-volume
+        secret:
+          secretName: tls-genericfluentbit-tcp-clt-secret
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if index .Values "f5-toda-logging" "enabled" }}
+{{- template "f5-toda-logging.deployment" (list . "tmm-example.deployment") }}
+{{- else }}
+{{- include "tmm-example.deployment" . }}
+{{- end }}

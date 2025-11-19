@@ -1,0 +1,75 @@
+{{- if and .Values.enabled .Values.tmm.grpc.enabled }}
+{{ $base_port := (.Values.tmm.grpc.port | int )}}
+{{ $grpc_port_configview := (.Values.tmm.configview.grpc_port | int )}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.tmm.grpc.name }}
+  labels:
+    app: {{ include "tmm.appName" . }}
+    type: grpc
+  annotations:
+{{- if .Values.tmm.grpc.annotations }}
+{{ toYaml .Values.tmm.grpc.annotations | indent 4 }}
+{{- end }}
+spec:
+  selector:
+    app: {{ .Values.tmm.name }}
+  ports:
+    - protocol: TCP
+      name: grpc-0
+      port: {{ $base_port }}
+      targetPort: {{ $base_port }}
+    - protocol: TCP
+      name: configview
+      port: {{ $grpc_port_configview }}
+      targetPort: {{ $grpc_port_configview }}
+    
+{{- end }}
+---
+{{- if and .Values.enabled .Values.f5_csm_qkview.enabled }}
+{{ $grpc_port := (.Values.tmm.f5_csm_qkview.grpc_port | int )}}
+{{ $grpc_port_debug := (.Values.debug.f5_csm_qkview.grpc_port | int )}}
+{{ $grpc_port_routing := (.Values.tmm.dynamicRouting.tmmRouting.qkviewPort | int)}}
+{{ $grpc_port_tmrouted := (.Values.tmrouted.f5_csm_qkview.grpc_port | int )}}
+{{ $grpc_port_blobd := (.Values.blobd.f5_csm_qkview.grpc_port | int)}}
+{{ $grpc_port_observer := (.Values.observer.f5_csm_qkview.grpc_port | int)}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tmm.appName" . }}
+  labels:
+    app: {{ include "tmm.appName" . }}
+    type: grpc
+spec:
+  clusterIP: "None"
+  selector:
+    app: {{ .Values.tmm.name }}
+  ports:
+    - protocol: TCP
+      name: grpc-port-tmm
+      port: {{ $grpc_port }}
+      targetPort: {{ $grpc_port }}
+    - protocol: TCP
+      name: grpc-port-debug
+      port: {{ $grpc_port_debug }}
+      targetPort: {{ $grpc_port_debug }}
+    - protocol: TCP
+      name: grpc-port-dynamicrouting
+      port: {{ $grpc_port_routing }}
+      targetPort: {{ $grpc_port_routing }}
+    - protocol: TCP
+      name: grpc-port-tmrouted
+      port: {{ $grpc_port_tmrouted }}
+      targetPort: {{ $grpc_port_tmrouted }} 
+    - protocol: TCP
+      name: grpc-port-blobd
+      port: {{ $grpc_port_blobd }}
+      targetPort: {{ $grpc_port_blobd }}
+{{- if (include "enableObserver" . | lower | eq "true") }}  
+    - protocol: TCP
+      name: grpc-port-observer
+      port: {{ $grpc_port_observer }}
+      targetPort: {{ $grpc_port_observer }}      
+{{- end }}
+{{- end }}

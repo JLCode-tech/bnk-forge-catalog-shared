@@ -1,0 +1,13 @@
+{{- if and (.Values.enabled) (.Values.downloader.storage.enabled) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: downloader-storage
+spec:
+  accessModes:
+    -  {{ .Values.downloader.storage.access | quote }}
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: {{ .Values.downloader.storage.storageClassName | quote }}
+{{- end }}

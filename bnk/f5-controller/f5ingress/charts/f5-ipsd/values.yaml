@@ -1,0 +1,233 @@
+
+enabled: false
+
+ipsd:
+  name: f5-ipsd
+  enabled: false
+  debug: false
+
+  f5_csm_qkview:
+    enabled: true
+    grpc_port: 19891
+
+  ## IPSD pod assignment/selector values.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  ## Enables the IPSD pods to use the host's network namespace.
+  hostNetwork: false
+
+  ## IPSD annotations
+  annotations: {}
+
+  ## IPSD image values
+  image:
+    name: f5-nsec-ips-daemon
+    tag: v3.5.1-0.0.4
+    pullPolicy: IfNotPresent
+
+  k8sprobes:
+    enabled: true
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 1
+
+
+  ## IPSD security values
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    runAsUser: 10000
+
+  ## IPSD resources
+  resources:
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+    requests:
+      cpu: "0.5"
+      memory: "256Mi"
+
+  ## IPSD ConfigMap values
+  config:
+    name: f5-ipsd-config
+    entries: {}
+
+ ## below params can be used as ipsd.serviceAccount.name
+  serviceAccount:
+    create: true
+    ## The name of the service account to use.
+    ## If not set and create is true, a name is generated using .Values.ipsd.name.
+    # name: ""  
+
+  ## IPSD GRPC values
+  grpc:
+    name: grpc-ipsd-svc
+    port: 8750
+    ca: "ca_root.crt"
+    cert: "grpc-svc.crt"
+    key: "grpc-svc.key"
+    client_ca: "ca_root.crt"
+    client_cert: "grpc-ipsd-client.crt"
+    client_key: "grpc-ipsd-client.key"
+  grpc-stream:
+    name: grpc-stream-ipsd-svc
+    port: 8770
+    ca: "ca_root.crt"
+    cert: "grpc-svc.crt"
+    key: "grpc-svc.key"
+    client_ca: "ca_root.crt"
+    client_cert: "grpc-ipsd-client.crt"
+    client_key: "grpc-ipsd-client.key"
+
+  ## Fluentbit sidecar values
+  fluentbit_sidecar:
+    # Enable/Disable sidecar
+    enabled: true
+    name: fluentbit
+    # Image container definition
+    image:
+        name: f5-fluentbit
+        tag: v1.2.8-0.0.5
+        pullPolicy: IfNotPresent
+    resources:
+      limits:
+        cpu: "0.5"
+        memory: "512Mi"
+      requests:
+        cpu: "0.25"
+        memory: "256Mi"
+    # Environment variables used in config file for fluentbit
+    env:
+      - name: NODE
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      - name: POD_ID
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.uid
+      - name: POD
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+    volumeMounts:
+      - name: f5-log-pipes
+        mountPath: /var/run/f5
+        readOnly: true
+      - name: f5-ipsd-fluentbit-config
+        mountPath: /fluent-bit/etc/
+      - name: tmp
+        mountPath: /tmp
+        subPath: fluentbit-tmp
+        readOnly: false
+      - name: run-dir
+        mountPath: /run
+        subPath: fluentbit-run
+        readOnly: false
+      - name: logs-dir
+        mountPath: /logs
+        subPath: fluentbit-logs
+        readOnly: false    
+    volumeMountsTls:
+      - name: f5-ipsd-fluentbit-secrets
+        mountPath: /fluent-bit/ssl/
+    fluentbit:
+      # Interval to flush output (seconds)
+      flush_interval: 1
+      # Error/warning/info/debug/trace
+      logLevel: info
+      # Pipe reading parameters
+      input:
+        pipes:
+          bufSize: 8096
+          intervalSec: 1
+          intervalNsec: 0
+      tls:
+        enabled: false
+        # TLS debug verbosity level, values: 0 (No debug), 1 (Error), 2 (State change), 3 (Informational) and 4 (Verbose)
+        debug: 1
+        # Force certificate validation
+        verify: Off
+        # key string known by the remote Fluentd used for authorization.
+        shared_key: f5-toda-shared-key
+
+    fluentd:
+      host: '127.0.0.1'
+      port: 54321
+
+##
+## Global params which are being used by more than one pod.
+##
+# below params can be used as gobal.serviceAccount.name
+global:
+## enum for identifying platform type. By default it is set to other. User needs to define the platform type (ocp,robin,tanzu,mbip-ve) during deployment.
+  platformType: other
+  serviceAccount:
+    name:
+    create: false
+  certmgr:
+    external: false
+    ## If using an external cert-manager installation, the issuerRef must be populated with the required fields.
+    # issuerRef:
+    #   name: cert-issuer
+    #   kind: Issuer
+    #   namespace: cert-manager
+
+
+# The below global variables are being used by ipsd, afm and downloader subcharts only.
+
+  controller:
+    Only: false
+    crdupdater:
+      enabled: false
+      grpc:
+        port: 8750
+  imageCredentials:
+    name: f5ingress-regsecret
+  tmm:
+    grpc:
+      enabled: true
+      name: grpc-svc
+  blobd:
+    enabled: false
+    grpc:
+      port: 9222
+  afm:
+    enabled: false
+    pccd:
+      enabled: false
+      grpc:
+        name: grpc-pccd-svc
+### IPSD GRPC values
+  ipsd:
+    grpc:
+      name: grpc-ipsd-svc
+      port: 8750
+      ca: "ca_root.crt"
+      cert: "grpc-svc.crt"
+      key: "grpc-svc.key"
+      client_ca: "ca_root.crt"
+      client_cert: "grpc-ipsd-client.crt"
+      client_key: "grpc-ipsd-client.key"
+    grpc_stream:
+      name: grpc-stream-ipsd-svc
+      port: 8770
+      ca: "ca_root.crt"
+      cert: "grpc-svc.crt"
+      key: "grpc-svc.key"
+      client_ca: "ca_root.crt"
+      client_cert: "grpc-ipsd-client.crt"
+      client_key: "grpc-ipsd-client.key"
+
+spk-common:
+  skipF5logCreation: true      

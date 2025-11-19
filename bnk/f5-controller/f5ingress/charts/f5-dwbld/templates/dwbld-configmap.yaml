@@ -1,0 +1,11 @@
+{{- if not .Values.global.controller.Only }}
+{{- if and .Values.enabled .Values.dwbld.config.entries}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.dwbld.config.name }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{ toYaml .Values.dwbld.config.entries | indent 2 }}
+{{- end }}
+{{- end }}

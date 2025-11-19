@@ -1,0 +1,13 @@
+{{- if and .Values.enabled .Values.tmm.add_k8s_routes }}
+{{- if or (.Capabilities.APIVersions.Has "config.openshift.io/v1") (eq .Values.global.platformType "robin") (eq .Values.global.platformType "aon") (eq .Values.global.platformType "generic")}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tmm-k8s-routes-configmap-{{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "3"
+data:
+  TMM_K8S_ROUTES : ""
+{{- end }}
+{{- end }}
