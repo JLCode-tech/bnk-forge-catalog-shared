@@ -11,6 +11,21 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Secrets - NEVER commit these
+**/*jwt*
+**/*JWT*
+**/*token*
+**/*secret*
+**/*password*
+**/*credential*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*private*
+**/*kubeconfig*
+**/aws-auth*
+
 # IDE
 .idea/
 .vscode/
