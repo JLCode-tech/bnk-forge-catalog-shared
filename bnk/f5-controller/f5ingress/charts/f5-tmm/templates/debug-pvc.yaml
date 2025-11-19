@@ -1,0 +1,13 @@
+{{- if and .Values.enabled .Values.debug.persistence.enabled -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: f5-debug-sidecar
+spec:
+  accessModes:
+    - {{ .Values.debug.persistence.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.debug.persistence.size | quote }}
+  storageClassName: {{ .Values.debug.persistence.storageClass | quote }}
+{{- end -}}

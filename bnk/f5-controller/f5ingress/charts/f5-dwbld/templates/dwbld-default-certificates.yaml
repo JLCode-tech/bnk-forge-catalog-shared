@@ -1,0 +1,184 @@
+# Check if the Certificate CRD is present in the cluster.
+{{ $certmgr := lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "certificates.cm.f5co.k8s.f5net.com" }}
+{{ $f5cert := lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "certificates.cert-manager.io" }}
+{{- if and (or $certmgr $f5cert) (not .Values.global.controller.Only) }}
+{{- if .Values.global.certmgr.external }}
+apiVersion: cert-manager.io/v1
+{{- else }}
+apiVersion: cm.f5co.k8s.f5net.com/v1
+{{- end }}
+
+kind: Certificate
+metadata:
+  name: tls-dwbld-grpc-clt
+  namespace: {{ .Release.Namespace }}
+spec:
+  subject:
+    countries:
+      - US
+    provinces:
+      - Washington
+    localities:
+      - Seattle
+    organizations:
+      - F5 Networks
+    organizationalUnits:
+      - PD
+  emailAddresses:
+    - clientcert@f5net.com
+  commonName: f5net.com
+  # SecretName is the name of the secret resource that will be automatically created and managed by this Certificate resource.
+  # It will be populated with a private key and certificate, signed by the denoted issuer.
+  secretName: tls-dwbld-grpc-clt-secret
+  # IssuerRef is a reference to the issuer for this certificate.
+  {{- if .Values.global.certmgr.external }}
+  issuerRef: {{ toYaml .Values.global.certmgr.issuerRef | nindent 4 }}
+  {{- else }}
+  issuerRef:
+    name: default-cert-issuer
+    kind: ClusterIssuer
+  {{- end }}
+  # Lifetime of the Certificate is 1 hour, not configurable
+  duration: 1h
+  privateKey:
+    rotationPolicy: Always
+    encoding: PKCS1
+    algorithm: RSA
+    size: 4096
+  revisionHistoryLimit: 10
+---
+{{- if .Values.global.certmgr.external }}
+apiVersion: cert-manager.io/v1
+{{- else }}
+apiVersion: cm.f5co.k8s.f5net.com/v1
+{{- end }}
+kind: Certificate
+metadata:
+  name: tls-dwbld-grpc-svr
+  namespace: {{ .Release.Namespace }}
+spec:
+  subject:
+    countries:
+      - US
+    provinces:
+      - Washington
+    localities:
+      - Seattle
+    organizations:
+      - F5 Networks
+    organizationalUnits:
+      - PD
+  emailAddresses:
+    - clientcert@f5net.com
+  dnsNames:
+    - grpc-dwbld-svc
+  commonName: f5net.com
+  # SecretName is the name of the secret resource that will be automatically created and managed by this Certificate resource.
+  # It will be populated with a private key and certificate, signed by the denoted issuer.
+  secretName: tls-dwbld-grpc-svr-secret
+  # IssuerRef is a reference to the issuer for this certificate.
+  {{- if .Values.global.certmgr.external }}
+  issuerRef: {{ toYaml .Values.global.certmgr.issuerRef | nindent 4 }}
+  {{- else }}
+  issuerRef:
+    name: default-cert-issuer
+    kind: ClusterIssuer
+  {{- end }}
+  # Lifetime of the Certificate is 1 hour, not configurable
+  duration: 1h
+  privateKey:
+    rotationPolicy: Always
+    encoding: PKCS1
+    algorithm: RSA
+    size: 4096
+  revisionHistoryLimit: 10
+---
+{{- if and (.Values.dwbld.fluentbit_sidecar.enabled) (.Values.dwbld.fluentbit_sidecar.fluentbit.tls.enabled) }}
+{{- if .Values.global.certmgr.external }}
+apiVersion: cert-manager.io/v1
+{{- else }}
+apiVersion: cm.f5co.k8s.f5net.com/v1
+{{- end }}
+kind: Certificate
+metadata:
+  name: tls-dwbldfluentbit-grpc-clt
+  namespace: {{ .Release.Namespace }}
+spec:
+  subject:
+    countries:
+      - US
+    provinces:
+      - Washington
+    localities:
+      - Seattle
+    organizations:
+      - F5 Networks
+    organizationalUnits:
+      - PD
+  emailAddresses:
+    - clientcert@f5net.com
+  commonName: f5net.com
+  # SecretName is the name of the secret resource that will be automatically created and managed by this Certificate resource.
+  # It will be populated with a private key and certificate, signed by the denoted issuer.
+  secretName: tls-dwbldfluentbit-grpc-clt-secret
+  # IssuerRef is a reference to the issuer for this certificate.
+  {{- if .Values.global.certmgr.external }}
+  issuerRef: {{ toYaml .Values.global.certmgr.issuerRef | nindent 4 }}
+  {{- else }}
+  issuerRef:
+    name: default-cert-issuer
+    kind: ClusterIssuer
+  {{- end }}
+  # Lifetime of the Certificate is 1 hour, not configurable
+  duration: 1h
+  privateKey:
+    rotationPolicy: Always
+    encoding: PKCS1
+    algorithm: RSA
+    size: 4096
+  revisionHistoryLimit: 10
+{{- end }}
+---
+#certificate for communication from CWC Orchestrator to Qkview process
+{{- if .Values.dwbld.f5_csm_qkview.enabled }}
+{{- if .Values.global.certmgr.external }}
+apiVersion: cert-manager.io/v1
+{{- else }}
+apiVersion: cm.f5co.k8s.f5net.com/v1
+{{- end }}
+kind: Certificate
+metadata:
+  name: tls-dwbldqkview-grpc-svr
+  namespace: {{ .Release.Namespace }}
+spec:
+  subject:
+    countries:
+      - US
+    provinces:
+      - Washington
+    localities:
+      - Seattle
+    organizations:
+      - F5 Networks
+    organizationalUnits:
+      - PD
+  emailAddresses:
+    - clientcert@f5net.com
+  dnsNames:
+     - f5-dwbld.{{ .Release.Namespace }}
+  commonName: f5net.com
+  # SecretName is the name of the secret resource that will be automatically created and managed by this Certificate resource.
+  # It will be populated with a private key and certificate, signed by the denoted issuer.
+  secretName: tls-dwbldqkview-grpc-svr-secret
+  # IssuerRef is a reference to the issuer for this certificate.
+  {{- if .Values.global.certmgr.external }}
+  issuerRef: {{ toYaml .Values.global.certmgr.issuerRef | nindent 4 }}
+  {{- else }}
+  issuerRef:
+    name: default-cert-issuer
+    kind: ClusterIssuer
+  {{- end }}
+  privateKey:
+    rotationPolicy: Always
+{{- end }}
+{{- end }}

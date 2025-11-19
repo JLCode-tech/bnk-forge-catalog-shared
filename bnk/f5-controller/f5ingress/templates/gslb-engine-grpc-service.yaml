@@ -1,0 +1,37 @@
+{{- if and .Values.gslbEngine.enabled (index .Values "f5-tmm").enabled (index .Values "f5-tmm").tmm.grpc.enabled }}
+{{ $port := (.Values.gslbEngine.grpc.port | int )}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.gslbEngine.grpc.name }}
+  labels:
+    app: {{ .Values.gslbEngine.name }}
+    type: grpc
+spec:
+  ipFamilyPolicy: PreferDualStack
+  selector:
+    app: {{ .Values.gslbEngine.name }}
+  ports:
+    - protocol: TCP
+      name: grpc-gslb
+      port: {{ $port }}
+      targetPort: {{ $port }}
+{{- end }}
+---
+{{- if .Values.gslbEngine.f5_csm_qkview.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.gslbEngine.name }}
+  labels:
+    app: {{ .Values.gslbEngine.name }}
+spec:
+  selector:
+    app: {{ .Values.gslbEngine.name }}
+  ports:
+    {{ $grpcport_gslb := (.Values.gslbEngine.f5_csm_qkview.grpc_port | int)}}
+    - protocol: TCP
+      name: qkview-grpc-gslb
+      port: {{ $grpcport_gslb }}
+      targetPort: {{ $grpcport_gslb }}
+{{- end }}

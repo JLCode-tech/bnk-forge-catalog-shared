@@ -1,0 +1,17 @@
+{{- if .Values.analyzer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}-grpc-svc
+  labels:
+    run: {{ .Chart.Name }}-grpc-svc
+spec:
+  selector:
+    run: {{ .Values.analyzer.name }}
+  ports:
+    - name: f5-analyzer-grpc
+      protocol: TCP
+      port: {{ .Values.analyzer.grpc.port }}            # External Service port
+      targetPort: {{ .Values.analyzer.grpc.port }}      # Pod port
+  type: ClusterIP                                         # Internal communication within the cluster
+{{- end }}

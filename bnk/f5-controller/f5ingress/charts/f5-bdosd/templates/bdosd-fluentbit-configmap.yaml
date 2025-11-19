@@ -1,0 +1,3 @@
+{{- if .Values.bdosd.fluentbit_sidecar.enabled -}}
+{{- template "spk-common.fluentbit-cm" . -}}
+{{- end -}}

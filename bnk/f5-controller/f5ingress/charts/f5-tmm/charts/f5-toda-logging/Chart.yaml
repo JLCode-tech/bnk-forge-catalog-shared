@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 1.31.30-0.0.7
+description: A Helm chart for Kubernetes
+name: f5-toda-logging
+type: application
+version: 1.31.30-0.0.7

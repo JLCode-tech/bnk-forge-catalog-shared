@@ -1,0 +1,113 @@
+{{- $key_conf := "" }}
+{{- $configmap := lookup "v1" "ConfigMap" .Release.Namespace "tmm-init" }}
+{{- if $configmap }}
+  {{- range $key, $value := $configmap.data }}
+    {{- if eq $key "user_conf.tcl" }}
+      {{ $key_conf = $value | quote }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- if .Values.enabled }}
+{{- if not .Values.controller.Only }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tmm-init
+  namespace: {{ .Release.Namespace }}
+data:
+  tmm_init.tcl: |
+    set_from_env  POD_IP  POD_IP  [info hostname]
+
+    profile tcp nagledisable {
+      default_name tcp
+      nagle disable
+    }
+
+    profile tcp dia-tcp {
+      default_name tcp
+    }
+
+    profile sctp dia-sctp {
+      default_name sctp
+    }
+
+    profile http http_socket {
+      default_name http
+    }
+    
+    pool pool1 {
+
+    }
+    
+    snatpool overlay_pool {
+
+    }
+
+    file_reload {
+      {{- if .Values.tmm.vxlan.enabled }}
+      file_name /opt/lib/tmm/static_conf.tcl
+      {{- else }}
+      file_name /opt/lib/tmm/user_conf.tcl
+      {{- end }}
+      interval 1
+    }
+
+    profile genericmsg gm_proto_for_gtp {
+      app-service none
+      disable-parser yes
+      message-terminator none
+      no-response yes
+      description none
+      max-egress-buffer 32768
+      max-message-size 32768
+    }
+
+    profile messagerouter gm_router_for_gtp {
+      name "gm_router_for_gtp"
+      app-service none
+      irule-scope-message no
+    }
+
+    {{- if .Values.blobd.enabled }}
+    {{ $blobd_port := .Values.blobd.grpc.port | default 8751 }}
+    pool blobd_pool {
+      member 169.254.0.253 {{ $blobd_port }}
+    }
+
+    profile tcp blobd_tcp {
+      default_name tcp
+    }
+
+    # Virtual for blobd
+    virtual $POD_IP {{ $blobd_port }} {
+      name blobd_virtual
+      profile blobd_tcp
+      vlan enable all
+      snat_automap
+      pool blobd_pool
+      auto_lasthop off
+    }
+    {{- end }}
+
+    {{ $tso := .Values.tmm.bigdb.tcpsegmentationoffload.enabled | ternary "enable" "disable" }}
+    bigdb tm.tcpsegmentationoffload {{ $tso }}
+
+    {{ $twfr := .Values.tmm.bigdb.tcpwoodsidefasterrecovery.enabled | ternary "enable" "disable" }}
+    bigdb tm.tcpwoodsidefasterrecovery {{ $twfr }}
+
+    {{ $tlro := .Values.tmm.bigdb.tcplargereceiveoffload.enabled | ternary "enable" "disable" }}
+    bigdb tm.tcplargereceiveoffload {{ $tlro }}
+
+  static_conf.tcl: |
+
+{{- if $key_conf }}
+  user_conf.tcl: {{ $key_conf }}
+{{- else }}
+  user_conf.tcl: |
+    pool pool1 {
+
+    }
+{{- end }}
+{{- end }}
+{{- end }}

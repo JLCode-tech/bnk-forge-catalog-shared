@@ -1,0 +1,222 @@
+{{- if not .Values.global.controller.Only }}
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.bdosd.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.bdosd.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.bdosd.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.bdosd.name }}
+      {{- if .Values.bdosd.annotations }}
+      annotations:
+        {{ toYaml .Values.bdosd.annotations | indent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.bdosd.nodeSelector }}
+      nodeSelector:
+        {{ toYaml .Values.bdosd.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.bdosd.tolerations }}
+      tolerations:
+        {{ toYaml .Values.bdosd.tolerations | indent 8 }}
+      {{- end }}
+      {{- if .Values.bdosd.affinity }}
+      affinity:
+        {{ toYaml .Values.bdosd.affinity | indent 8 }}
+      {{- end }}
+      hostNetwork: {{ .Values.bdosd.hostNetwork }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imageCredentials.name }}
+      containers:
+      - image: "{{ .Values.bdosd.image.repository }}{{if ne .Values.bdosd.image.repository ""}}/{{end}}{{ .Values.bdosd.image.name }}:{{ .Values.bdosd.image.tag }}"
+        name: {{ .Values.bdosd.name }}
+        ports:
+        - containerPort: {{ .Values.bdosd.f5_csm_qkview.grpc_port }}
+          name: grpc-port
+          protocol: TCP
+        imagePullPolicy: "{{ .Values.bdosd.image.pullPolicy }}"
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.bdosd.securityContext.readOnlyRootFilesystem }}
+        {{- if .Values.bdosd.resources }}
+        resources:
+          {{- if .Values.bdosd.resources.limits }}
+          limits:
+            memory: {{ .Values.bdosd.resources.limits.memory | default "512Mi" }}
+            cpu: {{ .Values.bdosd.resources.limits.cpu | default "1" }}
+          {{- end }}
+          {{- if .Values.bdosd.resources.requests }}
+          requests:
+            memory: {{ .Values.bdosd.resources.requests.memory | default "256Mi" }}
+            cpu: {{ .Values.bdosd.resources.requests.cpu | default "0.5" }}
+          {{- end }}
+        {{- end }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          readOnly: false
+        - name: run-dir
+          mountPath: /run
+          readOnly: false
+        - name: logs-dir
+          mountPath: /logs
+          readOnly: false
+        - name: var-log-dir
+          mountPath: /var/log
+          readOnly: false
+        {{- include "volumeMounts.spk" . | nindent 8 }}
+        - name: f5tmstat
+          mountPath: /var/tmstat
+          readOnly: false
+        {{- if .Values.bdosd.f5_csm_qkview.enabled }}
+        - name: tls-bdosdqkview-grpc-svr-volume
+          mountPath: /tls/bdosdqkview/grpc/svr
+          readOnly: true
+        {{- end }}
+        {{- if (eq .Values.global.platformType "robin") }}
+        - mountPath: /var/crash
+          name: f5-core-store
+          readOnly: false
+        {{- end }}
+        - name: tls-bdosd-grpc-clt-volume
+          mountPath: /tls/bdosd/grpc/clt/
+          readOnly: true
+        - name: tls-bdosd-grpc-svr-volume
+          mountPath: /tls/bdosd/grpc/svr/
+          readOnly: true
+        {{- if .Values.bdosd.fluentbit_sidecar.enabled }}
+        - name: f5-log-pipes
+          mountPath: /var/run/f5
+        {{- end }}
+        env:
+        - name: FLUENTBIT_ENABLED
+          value: {{ if .Values.bdosd.fluentbit_sidecar.enabled }}"true"{{ else }}"false"{{ end }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: GRPC_SRV_PORT
+          value: "{{ .Values.global.bdosd.grpc.port | default "8750" }}"
+        - name: GRPC_SRV_ENABLED
+          value: "true"
+        - name: GRPC_SRV_TLS
+          value: "true"
+        - name: GRPC_SRV_CA
+          value: {{ .Values.global.bdosd.grpc.ca | default "ca_root.crt" }}
+        - name: GRPC_SRV_CERT
+          value: {{ .Values.global.bdosd.grpc.cert | default "grpc-svc.crt" }}
+        - name: GRPC_SRV_KEY
+          value: {{ .Values.global.bdosd.grpc.key | default "grpc-svc.key" }}
+        - name: GRPC_CLIENT_CA
+          value: {{ .Values.global.bdosd.grpc.client_ca | default "ca_root.crt" }}
+        - name: GRPC_CLIENT_CERT
+          value: {{ .Values.global.bdosd.grpc.client_cert | default "grpc-bdosd-client.crt" }}
+        - name: GRPC_CLIENT_KEY
+          value: {{ .Values.global.bdosd.grpc.client_key | default "grpc-bdosd-client.key" }}
+        - name: GRPC_REMOTE_DNS
+          value: {{ .Values.global.tmm.grpc.name }}
+        - name: PATH_CERTS
+          value: "/etc/ssl/certs"
+        - name: PATH_KEYS
+          value: "/etc/ssl/private"
+        - name: CFG_DBG_ENABLED
+          value: {{ if .Values.bdosd.debug }}"true"{{ else }}"false"{{ end }}
+        {{- if .Values.bdosd.f5_csm_qkview.enabled }}
+        - name: QK_GRPC_PORT
+          value: "{{ .Values.bdosd.f5_csm_qkview.grpc_port }}"
+        - name: QK_TLS_CA_BUNDLE
+          value: "/etc/ssl/certs/ca-root-cert.pem"
+        - name: QK_TLS_CERT_FILE
+          value: "/etc/ssl/certs/server-cert.pem"
+        - name: QK_TLS_KEY_FILE
+          value: "/etc/ssl/certs/server-key.pem"
+        - name: QK_TLS_CERT_RETRY_WAIT
+          value: "5s"
+        - name: CONTAINER_NAME
+          value: "bdosdqkview"
+        - name: USING_CERT_ORCHESTRATOR
+          value: "true"
+        - name: BDOSD_LOG_LEVEL
+          value: {{ .Values.global.logLevel }}
+        - name: ASYMMETRIC_DDOS_MODE
+          value: {{ if .Values.global.asymmetricDosMode }}"{{ .Values.global.asymmetricDosMode }}"{{ else }}""{{ end }}
+        {{- include "env.spk" (dict "cVersion" .Values.bdosd.image.tag ) | nindent 8}}
+        {{- else }}
+        {{- include "env.spk" (dict "cName" .Values.bdosd.name "cVersion" .Values.bdosd.image.tag ) | nindent 8}}
+        {{- end }}
+      {{- if .Values.bdosd.fluentbit_sidecar.enabled }}
+      - image: "{{ .Values.bdosd.fluentbit_sidecar.image.repository }}/{{ .Values.bdosd.fluentbit_sidecar.image.name }}:{{ .Values.bdosd.fluentbit_sidecar.image.tag }}"
+        name: {{ .Values.bdosd.fluentbit_sidecar.name }}
+        imagePullPolicy: {{ .Values.bdosd.fluentbit_sidecar.image.pullPolicy }}
+        securityContext:
+          readOnlyRootFilesystem: {{ .Values.bdosd.securityContext.readOnlyRootFilesystem }}
+        stdin: true
+        tty: true
+        env: {{- toYaml .Values.bdosd.fluentbit_sidecar.env | nindent 10 }}
+        volumeMounts: {{- toYaml .Values.bdosd.fluentbit_sidecar.volumeMounts | nindent 10 }}
+        {{- if .Values.bdosd.fluentbit_sidecar.fluentbit.tls.enabled }}
+          - name: tls-bdosdfluentbit-grpc-clt-volume
+            mountPath: /tls/bdosdfluentbit/grpc/clt/
+        {{- end }}
+      {{- end }}
+      volumes:
+      - name: logs-dir
+        emptyDir: {}
+      - name: run-dir
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: var-log-dir
+        emptyDir: {}
+      {{- include "volumes.spk" . | nindent 6 }} 
+      {{- if (eq .Values.global.platformType "robin") }}
+      - name: f5-core-store
+        hostPath:
+          path: /home/crash/f5
+      {{- end }}
+      - name: tls-bdosd-grpc-clt-volume
+        secret:
+          secretName: tls-bdosd-grpc-clt-secret
+      - name: tls-bdosd-grpc-svr-volume
+        secret:
+          secretName: tls-bdosd-grpc-svr-secret
+      {{- if .Values.global.bdosd.applianceMode.enabled }}
+      - name: f5tmstat
+        hostPath:
+          path: /root/tmstat/{{ .Release.Namespace }}
+      {{- else }}
+      - name: f5tmstat
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.bdosd.fluentbit_sidecar.enabled }}
+      - name: f5-log-pipes
+        emptyDir: {}
+      - name: f5-bdosd-fluentbit-config
+        configMap:
+          name: f5-bdosd-fluentbit-config
+      {{- if .Values.bdosd.fluentbit_sidecar.fluentbit.tls.enabled }}
+      - name: tls-bdosdfluentbit-grpc-clt-volume
+        secret:
+          secretName: tls-bdosdfluentbit-grpc-clt-secret
+      {{- end }}
+      {{- end }}
+      {{- if .Values.bdosd.f5_csm_qkview.enabled }}
+      - name: tls-bdosdqkview-grpc-svr-volume
+        secret:
+          secretName: tls-bdosdqkview-grpc-svr-secret
+      {{- end }}
+{{- end }}
+{{- end }}

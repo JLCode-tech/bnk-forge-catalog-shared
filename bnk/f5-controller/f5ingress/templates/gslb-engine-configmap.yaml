@@ -1,0 +1,12 @@
+{{- if not .Values.controller.Only }}
+{{- if and .Values.gslbEngine.enabled .Values.gslbEngine.config.entries}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.gslbEngine.config.name }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{ toYaml .Values.gslbEngine.config.entries | indent 2 }}
+{{- end }}
+{{- end }}
+
