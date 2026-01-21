@@ -14,6 +14,10 @@
       {
         "module": "bnk/bnk-gatewayclass",
         "reason": "Gateway must reference a valid GatewayClass"
+      },
+      {
+        "module": "bnk/flo",
+        "reason": "Provides FLO controller for Gateway API implementation"
       }
     ],
     "optional": []

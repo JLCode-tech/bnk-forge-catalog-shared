@@ -14,6 +14,10 @@
       {
         "module": "bnk/far-setup",
         "reason": "Provides F5 registry authentication and component versions"
+      },
+      {
+        "module": "infra/aws/eks",
+        "reason": "Provides Kubernetes cluster for FLO deployment"
       }
     ],
     "optional": [
@@ -48,7 +52,9 @@
         "name": "flo_version",
         "type": "string",
         "description": "FLO Helm chart version",
-        "source": "auto",
+        "source": "module",
+        "from_module": "bnk/far-setup",
+        "from_output": "flo_version",
         "example": "2.1.0"
       },
       {
