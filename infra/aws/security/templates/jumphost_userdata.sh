@@ -75,7 +75,7 @@ chmod +x /usr/local/bin/helm
 # Install k9s (reliable method with version pinning)
 echo "Installing k9s..."
 K9S_VERSION="v0.32.4"
-download_with_retry "https://github.com/derailed/k9s/releases/download/$K9S_VERSION/k9s_Linux_amd64.tar.gz" "k9s.tar.gz"
+download_with_retry "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/k9s_Linux_amd64.tar.gz" "k9s.tar.gz"
 tar -xzf k9s.tar.gz
 chmod +x k9s
 mv k9s /usr/local/bin/
@@ -84,7 +84,7 @@ rm -f k9s.tar.gz
 # Install yq
 echo "Installing yq..."
 YQ_VERSION="v4.50.1"
-download_with_retry "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" "/usr/local/bin/yq"
+download_with_retry "https://github.com/mikefarah/yq/releases/download/$${YQ_VERSION}/yq_linux_amd64" "/usr/local/bin/yq"
 chmod +x /usr/local/bin/yq
 
 # Setup Docker
