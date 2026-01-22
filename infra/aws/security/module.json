@@ -44,7 +44,7 @@
         "description": "Public subnet ID for jumphost deployment",
         "source": "module",
         "from_module": "infra/aws/vpc",
-        "from_output": "public_subnet_ids",
+        "from_output": "public_subnet_id",
         "example": "subnet-12345678"
       },
       {
@@ -75,6 +75,90 @@
         "type": "string",
         "description": "EC2 instance type for jumphost",
         "default": "t3.micro",
+        "source": "user"
+      },
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the EKS cluster (for automated OIDC provider setup)",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "create_oidc_provider",
+        "type": "boolean",
+        "description": "Create OIDC provider for service account roles (requires EKS cluster)",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "eks_oidc_issuer_url",
+        "type": "string",
+        "description": "EKS cluster OIDC issuer URL (required if create_oidc_provider is true)",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "enable_detailed_monitoring",
+        "type": "boolean",
+        "description": "Enable detailed CloudWatch monitoring for jumphost",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "enable_enhanced_node_permissions",
+        "type": "boolean",
+        "description": "Enable enhanced permissions for node groups (ENI management, SSM)",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "enable_f5_bnk_roles",
+        "type": "boolean",
+        "description": "Enable F5 BIG-IP Next service account roles (for future F5 module)",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "enable_jumphost_backup",
+        "type": "boolean",
+        "description": "Enable backup jumphost instance (for production environments)",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "jumphost_volume_size",
+        "type": "number",
+        "description": "Root volume size for jumphost (GB)",
+        "default": 20,
+        "source": "user"
+      },
+      {
+        "name": "kubectl_release_date",
+        "type": "string",
+        "description": "Release date for kubectl version (AWS EKS format: YYYY-MM-DD)",
+        "default": "2024-05-12",
+        "source": "user"
+      },
+      {
+        "name": "kubectl_version",
+        "type": "string",
+        "description": "Version of kubectl to install (should match EKS version)",
+        "default": "1.30.0",
+        "source": "user"
+      },
+      {
+        "name": "ssh_key_algorithm",
+        "type": "string",
+        "description": "Algorithm for SSH key generation",
+        "default": "RSA",
+        "source": "user"
+      },
+      {
+        "name": "ssh_key_rsa_bits",
+        "type": "number",
+        "description": "Number of bits for RSA SSH key (ignored for other algorithms)",
+        "default": 4096,
         "source": "user"
       }
     ]
