@@ -81,6 +81,22 @@
         "from_module": "infra/aws/security",
         "from_output": "infrastructure_key_name",
         "example": "my-project-key"
+      },
+      {
+        "name": "nodegroup_role_name",
+        "type": "string",
+        "description": "Name of the nodegroup IAM role from security module",
+        "source": "module",
+        "from_module": "infra/aws/security",
+        "from_output": "nodegroup_role_name",
+        "example": "my-project-eks-nodegroup-role"
+      },
+      {
+        "name": "ecr_registry",
+        "type": "string",
+        "description": "ECR registry URL for container images (e.g., 123456789012.dkr.ecr.us-west-2.amazonaws.com)",
+        "source": "user",
+        "example": "123456789012.dkr.ecr.us-west-2.amazonaws.com"
       }
     ],
     "optional": [

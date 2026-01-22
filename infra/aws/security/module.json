@@ -194,6 +194,13 @@
         "sensitive": false
       },
       {
+        "name": "nodegroup_role_name",
+        "type": "string",
+        "description": "Name of the EKS node group IAM role",
+        "used_by": ["infra/aws/high-performance-nodes"],
+        "sensitive": false
+      },
+      {
         "name": "jumphost_public_ip",
         "type": "string",
         "description": "Public IP address of the jumphost (if deployed)",
