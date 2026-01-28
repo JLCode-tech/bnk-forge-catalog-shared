@@ -1,0 +1,107 @@
+{
+  "module": {
+    "name": "F5 SPK Global Options",
+    "path": "bnk/f5spkglobaloptions",
+    "version": "1.0.0",
+    "layer": "bnk-system",
+    "category": "system",
+    "description": "Creates F5SPKGlobalOptions custom resource for cluster-wide SPK configuration including crypto acceleration and hardware offload settings.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO provides F5SPKGlobalOptions CRD and controller"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster (used for resource identification)",
+        "source": "user",
+        "example": "my-cluster"
+      },
+      {
+        "name": "options_name",
+        "type": "string",
+        "description": "Name for the global options resource",
+        "source": "user",
+        "example": "spk-global-config"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready",
+        "example": true
+      }
+    ],
+    "optional": [
+      {
+        "name": "crypto_acceleration",
+        "type": "boolean",
+        "description": "Enable crypto hardware acceleration",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "hardware_offload_enabled",
+        "type": "boolean",
+        "description": "Enable hardware offload for network operations",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "hardware_offload_settings",
+        "type": "object",
+        "description": "Hardware offload configuration options",
+        "default": {},
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "options_ready",
+        "type": "boolean",
+        "description": "Flag indicating global options are configured",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "options_name",
+        "type": "string",
+        "description": "Name of the created global options",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3",
+      "azure": "azurerm",
+      "gcp": "gcs",
+      "on-prem": "local"
+    }
+  },
+  "deployment": {
+    "order": 50,
+    "estimated_time": "1 minute",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
+}

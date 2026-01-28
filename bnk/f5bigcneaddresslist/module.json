@@ -1,0 +1,114 @@
+{
+  "module": {
+    "name": "F5 CNE Address List",
+    "path": "bnk/f5bigcneaddresslist",
+    "version": "1.0.0",
+    "layer": "bnk-security",
+    "category": "security",
+    "description": "Creates F5BigCneAddresslist custom resource for managing IP address lists used in firewall policies and access control rules.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO provides F5BigCneAddresslist CRD and controller"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster (used for resource identification)",
+        "source": "user",
+        "example": "my-cluster"
+      },
+      {
+        "name": "list_name",
+        "type": "string",
+        "description": "Name for the address list resource",
+        "source": "user",
+        "example": "trusted-networks"
+      },
+      {
+        "name": "list_namespace",
+        "type": "string",
+        "description": "Namespace for address list deployment",
+        "source": "user",
+        "example": "default"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready",
+        "example": true
+      },
+      {
+        "name": "addresses",
+        "type": "list",
+        "description": "List of IP addresses or CIDR ranges",
+        "source": "user",
+        "example": ["10.0.0.0/8", "192.168.1.0/24"]
+      }
+    ],
+    "optional": [
+      {
+        "name": "description",
+        "type": "string",
+        "description": "Description of the address list",
+        "default": "",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "list_ready",
+        "type": "boolean",
+        "description": "Flag indicating address list is ready",
+        "used_by": ["bnk/f5bigfwpolicy", "bnk/bnk-secpolicy"],
+        "sensitive": false
+      },
+      {
+        "name": "list_name",
+        "type": "string",
+        "description": "Name of the created address list",
+        "used_by": ["bnk/f5bigfwpolicy", "bnk/bnk-secpolicy"],
+        "sensitive": false
+      },
+      {
+        "name": "list_namespace",
+        "type": "string",
+        "description": "Namespace where address list is deployed",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3",
+      "azure": "azurerm",
+      "gcp": "gcs",
+      "on-prem": "local"
+    }
+  },
+  "deployment": {
+    "order": 80,
+    "estimated_time": "1 minute",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}
