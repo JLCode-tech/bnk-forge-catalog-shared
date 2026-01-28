@@ -1,0 +1,149 @@
+{
+  "module": {
+    "name": "F5 SPK VLAN",
+    "path": "bnk/f5spkvlan",
+    "version": "1.0.0",
+    "layer": "bnk-network",
+    "category": "networking",
+    "description": "Creates F5SPKVlan custom resource for VLAN configuration with interfaces, self-IPs, MTU, and internal/external designation.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO provides F5SPKVlan CRD and controller"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster (used for resource identification)",
+        "source": "user",
+        "example": "my-cluster"
+      },
+      {
+        "name": "vlan_name",
+        "type": "string",
+        "description": "Name for the F5SPKVlan resource",
+        "source": "user",
+        "example": "external-vlan"
+      },
+      {
+        "name": "vlan_namespace",
+        "type": "string",
+        "description": "Namespace for VLAN deployment",
+        "source": "user",
+        "example": "f5-spk"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready",
+        "example": true
+      },
+      {
+        "name": "vlan_tag_name",
+        "type": "string",
+        "description": "VLAN tag name (used in F5 configuration)",
+        "source": "user",
+        "example": "external-az-a"
+      },
+      {
+        "name": "interfaces",
+        "type": "list",
+        "description": "List of network interfaces (e.g., ['1.1', '1.2'])",
+        "source": "user",
+        "example": ["1.1"]
+      },
+      {
+        "name": "selfip_v4s",
+        "type": "list",
+        "description": "List of IPv4 self-IP addresses",
+        "source": "user",
+        "example": ["172.16.100.200"]
+      },
+      {
+        "name": "prefixlen_v4",
+        "type": "number",
+        "description": "IPv4 prefix length (CIDR notation)",
+        "source": "user",
+        "example": 24
+      },
+      {
+        "name": "internal",
+        "type": "boolean",
+        "description": "Whether VLAN is internal (true) or external (false)",
+        "source": "user",
+        "example": false
+      }
+    ],
+    "optional": [
+      {
+        "name": "vlan_id",
+        "type": "number",
+        "description": "VLAN ID (802.1Q tag)",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "mtu",
+        "type": "number",
+        "description": "Maximum Transmission Unit",
+        "default": 1500,
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "vlan_ready",
+        "type": "boolean",
+        "description": "Flag indicating VLAN is configured",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "vlan_name",
+        "type": "string",
+        "description": "Name of the created VLAN",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "vlan_namespace",
+        "type": "string",
+        "description": "Namespace where VLAN is deployed",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3",
+      "azure": "azurerm",
+      "gcp": "gcs",
+      "on-prem": "local"
+    }
+  },
+  "deployment": {
+    "order": 60,
+    "estimated_time": "2 minutes",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}

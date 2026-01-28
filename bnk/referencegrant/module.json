@@ -1,0 +1,127 @@
+{
+  "module": {
+    "name": "Gateway API Reference Grant",
+    "path": "bnk/referencegrant",
+    "version": "1.0.0",
+    "layer": "bnk-security",
+    "category": "security",
+    "description": "Creates Gateway API ReferenceGrant custom resource to allow cross-namespace references between Gateway API resources (Gateways, Routes, Services).",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO provides ReferenceGrant CRD and Gateway API support"
+      }
+    ],
+    "optional": [
+      {
+        "module": "bnk/gateway",
+        "reason": "Grants typically allow cross-namespace references to Gateways",
+        "provides": "Gateway resources that can be referenced"
+      }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster (used for resource identification)",
+        "source": "user",
+        "example": "my-cluster"
+      },
+      {
+        "name": "grant_name",
+        "type": "string",
+        "description": "Name for the ReferenceGrant resource",
+        "source": "user",
+        "example": "allow-routes-to-gateway"
+      },
+      {
+        "name": "grant_namespace",
+        "type": "string",
+        "description": "Namespace where grant will be deployed (typically the 'to' namespace)",
+        "source": "user",
+        "example": "gateway-system"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready",
+        "example": true
+      },
+      {
+        "name": "from_namespaces",
+        "type": "list",
+        "description": "Namespaces that are allowed to reference resources",
+        "source": "user",
+        "example": ["app-namespace"]
+      },
+      {
+        "name": "to_resources",
+        "type": "list",
+        "description": "Resource types that can be referenced (e.g., Gateway, Service)",
+        "source": "user",
+        "example": ["Gateway"]
+      }
+    ],
+    "optional": [
+      {
+        "name": "to_resource_names",
+        "type": "list",
+        "description": "Specific resource names that can be referenced (empty = all)",
+        "default": [],
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "grant_ready",
+        "type": "boolean",
+        "description": "Flag indicating grant is accepted and active",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "grant_name",
+        "type": "string",
+        "description": "Name of the created grant",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "grant_namespace",
+        "type": "string",
+        "description": "Namespace where grant is deployed",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3",
+      "azure": "azurerm",
+      "gcp": "gcs",
+      "on-prem": "local"
+    }
+  },
+  "deployment": {
+    "order": 75,
+    "estimated_time": "1 minute",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}

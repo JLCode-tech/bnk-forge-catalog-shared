@@ -1,0 +1,146 @@
+{
+  "module": {
+    "name": "F5 BIG-IP Firewall Policy",
+    "path": "bnk/f5bigfwpolicy",
+    "version": "1.0.0",
+    "layer": "bnk-security",
+    "category": "security",
+    "description": "Creates F5BigFwPolicy custom resource for advanced firewall policies with ingress/egress rules, address lists, port lists, and configurable default actions.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO provides F5BigFwPolicy CRD and controller"
+      }
+    ],
+    "optional": [
+      {
+        "module": "bnk/f5bigcneaddresslist",
+        "reason": "Address lists can be referenced in firewall rules",
+        "provides": "Address list resources for IP-based filtering"
+      },
+      {
+        "module": "bnk/f5bigcneportlist",
+        "reason": "Port lists can be referenced in firewall rules",
+        "provides": "Port list resources for port-based filtering"
+      }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster (used for resource identification)",
+        "source": "user",
+        "example": "my-cluster"
+      },
+      {
+        "name": "policy_name",
+        "type": "string",
+        "description": "Name for the F5BigFwPolicy resource",
+        "source": "user",
+        "example": "app-firewall-policy"
+      },
+      {
+        "name": "policy_namespace",
+        "type": "string",
+        "description": "Namespace for firewall policy deployment",
+        "source": "user",
+        "example": "default"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready",
+        "example": true
+      },
+      {
+        "name": "default_action",
+        "type": "string",
+        "description": "Default action for unmatched traffic (accept, drop, reject)",
+        "source": "user",
+        "example": "drop"
+      }
+    ],
+    "optional": [
+      {
+        "name": "ingress_rules",
+        "type": "list",
+        "description": "List of ingress firewall rules",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "egress_rules",
+        "type": "list",
+        "description": "List of egress firewall rules",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "enable_logging",
+        "type": "boolean",
+        "description": "Enable firewall event logging",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "description": "Description of the firewall policy",
+        "default": "",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "policy_ready",
+        "type": "boolean",
+        "description": "Flag indicating firewall policy is accepted and active",
+        "used_by": ["bnk/bnk-secpolicy"],
+        "sensitive": false
+      },
+      {
+        "name": "policy_name",
+        "type": "string",
+        "description": "Name of the created firewall policy",
+        "used_by": ["bnk/bnk-secpolicy"],
+        "sensitive": false
+      },
+      {
+        "name": "policy_namespace",
+        "type": "string",
+        "description": "Namespace where firewall policy is deployed",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3",
+      "azure": "azurerm",
+      "gcp": "gcs",
+      "on-prem": "local"
+    }
+  },
+  "deployment": {
+    "order": 85,
+    "estimated_time": "2 minutes",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}
