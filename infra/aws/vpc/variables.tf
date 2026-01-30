@@ -47,3 +47,15 @@ variable "private_internal_subnet_b_cidr" {
   description = "CIDR block for private internal subnet in AZ-B"
   type        = string
 }
+
+# AWS Configuration for cleanup provisioners
+variable "aws_region" {
+  description = "AWS region for resource cleanup during destroy"
+  type        = string
+}
+
+variable "aws_profile" {
+  description = "AWS CLI profile for resource cleanup during destroy"
+  type        = string
+  default     = "default"
+}
