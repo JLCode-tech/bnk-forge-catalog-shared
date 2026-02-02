@@ -58,3 +58,17 @@ Updated: 2026-02-02
 | `crds/deprecated/` | FLO manages CRD installation | 2025-12-02 |
 | `crds/service-proxy/` | FLO manages CRD installation | 2025-12-02 |
 | `cneinstance/` | FLO handles CNE instance creation automatically via GatewayClass CR | 2026-02-02 |
+| `bnk/crds/f5biganalyzer` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5bigcneaddresslist` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5bigcneportlist` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5bigfwpolicy` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5bigloghslpub` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5ipamprovider` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5spkegress` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5spkglobaloptions` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5spksnatpool` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5spkstaticroute` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/f5spkvlan` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/bnk-netpolicy` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/bnk-secpolicy` | FLO installs F5 CRDs automatically | 2026-02-03 |
+| `bnk/crds/referencegrant` | FLO installs F5 CRDs automatically | 2026-02-03 |
