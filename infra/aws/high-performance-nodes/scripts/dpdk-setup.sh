@@ -115,18 +115,9 @@ for pid in $pids; do
     wait $pid || { log "Failed to download DPDK scripts"; exit 1; }
 done
 
-# Download new SR-IOV CNI installer script
-aws s3 cp "s3://$S3_BUCKET/install-sriov-cni.sh" /opt/dpdk/install-sriov-cni.sh --region "$REGION" 2>/dev/null || {
-    log "Sentinel: Skipped insecure fallback download of SR-IOV CNI binary. Using DaemonSet instead."
-    # Create a dummy script to satisfy the call later
-    cat << 'SRIOV_CNI_INSTALLER' > /opt/dpdk/install-sriov-cni.sh
-#!/bin/bash
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/sriov-cni-install.log
-}
-log "Sentinel: Host-level SR-IOV CNI installation skipped. Relying on DaemonSet for CNI installation."
-SRIOV_CNI_INSTALLER
-}
+# Sentinel: SR-IOV CNI installation is now handled securely by the sriov-cni-installer DaemonSet
+# The insecure host-level download script has been removed
+log "SR-IOV CNI will be installed by the sriov-cni-installer-x86 DaemonSet (using pinned container images)"
 
 chmod +x /opt/dpdk/*.sh /opt/dpdk/*.py
 
@@ -140,10 +131,6 @@ pids="$pids $!"
 for pid in $pids; do
     wait $pid || { log "Failed to download service files"; exit 1; }
 done
-
-# Install SR-IOV CNI binary
-log "Installing SR-IOV CNI binary"
-/opt/dpdk/install-sriov-cni.sh
 
 # =======================
 # HUGEPAGES CONFIGURATION
