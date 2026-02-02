@@ -43,16 +43,18 @@ Instead of deploying these components manually, use:
 
 ## Archived Date
 
-2025-12-02
+Initial archive: 2025-12-02
+Updated: 2026-02-02
 
 ## Archived Modules
 
-| Module | Reason |
-|--------|--------|
-| `cwc/` | FLO deploys CWC automatically |
-| `dssm/` | FLO deploys DSSM automatically |
-| `fluentd/` | FLO deploys Fluentd automatically |
-| `f5-controller/` | FLO deploys F5 Ingress automatically |
-| `crds/common/` | FLO manages CRD installation |
-| `crds/deprecated/` | FLO manages CRD installation |
-| `crds/service-proxy/` | FLO manages CRD installation |
+| Module | Reason | Archived Date |
+|--------|--------|---------------|
+| `cwc/` | FLO deploys CWC automatically | 2025-12-02 |
+| `dssm/` | FLO deploys DSSM automatically | 2025-12-02 |
+| `fluentd/` | FLO deploys Fluentd automatically | 2025-12-02 |
+| `f5-controller/` | FLO deploys F5 Ingress automatically | 2025-12-02 |
+| `crds/common/` | FLO manages CRD installation | 2025-12-02 |
+| `crds/deprecated/` | FLO manages CRD installation | 2025-12-02 |
+| `crds/service-proxy/` | FLO manages CRD installation | 2025-12-02 |
+| `cneinstance/` | FLO handles CNE instance creation automatically via GatewayClass CR | 2026-02-02 |
