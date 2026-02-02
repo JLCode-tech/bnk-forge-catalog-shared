@@ -1,6 +1,6 @@
 # Current Work - BNK-Forge Modules
 
-Last Updated: 2026-02-02
+Last Updated: 2026-02-03
 
 ## Active Tasks
 
@@ -12,6 +12,65 @@ Last Updated: 2026-02-02
 ---
 
 ## Recently Completed
+
+### Archive F5 CRD Modules - FLO Installs CRDs Automatically (2026-02-03)
+
+**Completed**: 2026-02-03
+**Duration**: 1 session
+**Agent**: Claude (Opus 4.5)
+
+**Description**:
+Archived 14 F5 CRD modules as FLO (F5 Lifecycle Operator) automatically installs and manages all F5 CRDs. This was discovered during remote server deployment testing of bnk-forge-v2.
+
+**Modules Archived (14)**:
+- `bnk/f5biganalyzer` → `archived/bnk/crds/`
+- `bnk/f5bigcneaddresslist` → `archived/bnk/crds/`
+- `bnk/f5bigcneportlist` → `archived/bnk/crds/`
+- `bnk/f5bigfwpolicy` → `archived/bnk/crds/`
+- `bnk/f5bigloghslpub` → `archived/bnk/crds/`
+- `bnk/f5ipamprovider` → `archived/bnk/crds/`
+- `bnk/f5spkegress` → `archived/bnk/crds/`
+- `bnk/f5spkglobaloptions` → `archived/bnk/crds/`
+- `bnk/f5spksnatpool` → `archived/bnk/crds/`
+- `bnk/f5spkstaticroute` → `archived/bnk/crds/`
+- `bnk/f5spkvlan` → `archived/bnk/crds/`
+- `bnk/bnk-netpolicy` → `archived/bnk/crds/`
+- `bnk/bnk-secpolicy` → `archived/bnk/crds/`
+- `bnk/referencegrant` → `archived/bnk/crds/`
+
+**Reason**:
+Per F5 documentation (https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-f5-lifecycle-operator.html):
+> "FLO manages the lifecycle of Gateway API standard CRDs and F5 CRDs in a cluster, including installation, upgrade, and uninstallation."
+
+These CRD modules were for creating *instances* of F5 CRDs for advanced post-deployment customization. Since:
+1. FLO installs the CRDs automatically
+2. These are advanced configs (not part of basic deployment)
+3. Users can apply CRs manually via kubectl if needed
+
+**12 Core Modules Remaining**:
+
+| Category | Module | Purpose |
+|----------|--------|---------|
+| infra | vpc | AWS VPC with subnets |
+| infra | eks | Amazon EKS cluster |
+| infra | security | Security groups, IAM |
+| infra | storage | S3, EFS storage |
+| infra | high-performance-nodes | DPU/GPU node pools |
+| k8s | cert-manager | TLS certificate management |
+| k8s | network-setup | Multus CNI network attachments |
+| bnk | far-setup | FAR image pull secrets |
+| bnk | flo | F5 Lifecycle Operator |
+| bnk | bnk-gatewayclass | BnkGatewayClass CR (triggers FLO) |
+| bnk | gateway | Gateway API Gateway resources |
+| bnk | routes | HTTPRoute, GRPCRoute, L4Route |
+
+**Files Changed**:
+- `archived/README.md` - Updated with archived modules
+- 14 modules moved to `archived/bnk/crds/`
+
+**Git Commit**: 3e8b83a
+
+---
 
 ### PR Triage & Module Cleanup (2026-02-02)
 
