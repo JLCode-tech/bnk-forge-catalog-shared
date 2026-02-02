@@ -1,6 +1,6 @@
 # Current Work - BNK-Forge Modules
 
-Last Updated: 2026-01-20
+Last Updated: 2026-02-02
 
 ## Active Tasks
 
@@ -12,6 +12,51 @@ Last Updated: 2026-01-20
 ---
 
 ## Recently Completed
+
+### PR Triage & Module Cleanup (2026-02-02)
+
+**Completed**: 2026-02-02
+**Duration**: 1 session
+**Agent**: Claude (Opus 4.5)
+
+**Description**:
+Comprehensive PR triage and module cleanup to support deployment stacks in bnk-forge-v2. Closed 26 duplicate PRs, merged 8 unique PRs (security fixes + performance optimizations), and archived unused modules.
+
+**PRs Closed as Duplicates (26)**:
+- dpdk-devbind.py injection fixes: #44, #41, #37, #36, #33, #32, #30
+- dpdk-devbind.py optimizations: #43, #40, #35, #34, #31, #29, #28, #24, #17, #13
+- SR-IOV CNI security: #25, #23, #19, #18, #15, #14
+- Other duplicates: #26, #20, #16
+
+**PRs Merged (8)**:
+| PR | Title | Type |
+|----|-------|------|
+| #21 | Fix command injection in dpdk-setup.sh | Sentinel CRITICAL |
+| #27 | Remove insecure SR-IOV CNI installer script | Sentinel HIGH |
+| #39 | Pin AWS CLI version in jumphost userdata | Sentinel HIGH |
+| #45 | Pin amzn-drivers git clone in dpdk_userdata.sh | Sentinel CRITICAL |
+| #46 | Optimize dpdk-devbind.py with native OS calls | Bolt + Security |
+| #22 | Optimize SRIOV init script interface iteration | Bolt |
+| #42 | Optimize network interface counting | Bolt |
+| #38 | Optimize ENI attachment with polling | Bolt |
+
+**Module Cleanup**:
+- Archived `bnk/cneinstance` - FLO handles CNE instance creation automatically
+- Removed empty `bnk/f5-controller` directory
+
+**Key Outcomes**:
+- Reduced open PRs from 34 to 0
+- Security hardening: command injection fixes, dependency pinning, insecure downloads removed
+- Performance improvements: ~138x speedup in dpdk-devbind.py, reduced node startup time
+- Cleaner module library supporting deployment stacks
+
+**Files Changed**:
+- `infra/aws/high-performance-nodes/scripts/*` (security + performance)
+- `infra/aws/security/templates/jumphost_userdata.sh` (AWS CLI pinning)
+- `archived/README.md` (updated with cneinstance)
+- `bnk/cneinstance/*` → `archived/bnk/cneinstance/*`
+
+---
 
 > Tasks completed in the last 30 days. Helps agents understand recent changes and context.
 
