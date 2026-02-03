@@ -13,41 +13,41 @@ resource "helm_release" "cert_manager" {
       image = {
         repository = "repo.f5.com/images"
       }
-      
+
       # Webhook component
       webhook = {
         image = {
           repository = "repo.f5.com/images"
         }
       }
-      
+
       # CA Injector component
       cainjector = {
         image = {
           repository = "repo.f5.com/images"
         }
       }
-      
-      # Startup API check component
+
+      # Startup API check component - disabled to avoid timeout issues
+      # The startupapicheck job has a built-in 5min timeout that often fails
+      # on slower clusters. cert-manager works fine without it.
       startupapicheck = {
-        image = {
-          repository = "repo.f5.com/images"
-        }
+        enabled = false
       }
-      
+
       # Init container
       init_container = {
         image = {
           repository = "repo.f5.com/images"
         }
       }
-      
+
       # ServiceAccount configuration - use default, don't create new
       serviceAccount = {
         create = false
         name   = "default"
       }
-      
+
       # Image pull secrets for FAR registry
       global = {
         imagePullSecrets = [
