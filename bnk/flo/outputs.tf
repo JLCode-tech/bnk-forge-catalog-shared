@@ -2,12 +2,12 @@
 
 output "flo_namespace" {
   description = "Namespace where FLO is deployed"
-  value       = kubernetes_namespace.flo.metadata[0].name
+  value       = data.kubernetes_namespace.flo.metadata[0].name
 }
 
 output "ipam_namespace" {
   description = "Namespace where IPAM operator is deployed"
-  value       = var.enable_ipam_operator ? kubernetes_namespace.ipam[0].metadata[0].name : null
+  value       = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? kubernetes_namespace.ipam[0].metadata[0].name : var.ipam_namespace
 }
 
 output "flo_ready" {
