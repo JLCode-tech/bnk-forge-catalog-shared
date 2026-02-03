@@ -2,6 +2,15 @@
 # Gateway Module Variables - Creates Gateway API Gateway instances
 
 # =============================================================================
+# AWS CONFIGURATION
+# =============================================================================
+
+variable "aws_region" {
+  description = "AWS region where the EKS cluster is located"
+  type        = string
+}
+
+# =============================================================================
 # REQUIRED VARIABLES
 # =============================================================================
 
@@ -42,7 +51,7 @@ variable "listeners" {
     port     = number
     hostname = optional(string)
     tls = optional(object({
-      mode            = string # Terminate, Passthrough
+      mode = string # Terminate, Passthrough
       certificate_ref = optional(object({
         name      = string
         namespace = optional(string)
