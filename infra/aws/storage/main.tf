@@ -2,27 +2,27 @@
 # Storage module - Storage classes and F5 BNK/SPK specific storage requirements
 
 # =============================================================================
-# PROVIDER CONFIGURATION (matching established pattern)
-# =============================================================================
-
-provider "kubernetes" {
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-  
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", var.cluster_name, "--region", var.aws_region, "--profile", var.aws_profile]
-  }
-}
-
-# =============================================================================
 # DATA SOURCES
 # =============================================================================
 
 # EKS cluster information
 data "aws_eks_cluster" "cluster" {
   name = var.cluster_name
+}
+
+# EKS cluster auth - uses AWS credentials from environment variables
+data "aws_eks_cluster_auth" "cluster" {
+  name = var.cluster_name
+}
+
+# =============================================================================
+# PROVIDER CONFIGURATION
+# =============================================================================
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
 }
 
 # =============================================================================
@@ -42,7 +42,7 @@ locals {
 # Wait for EBS CSI driver to be ready before creating storage classes
 resource "time_sleep" "wait_for_csi_drivers" {
   create_duration = "60s"
-  
+
   # This ensures CSI drivers from EKS module are ready
   triggers = {
     cluster_name = var.cluster_name
@@ -118,8 +118,8 @@ resource "kubernetes_storage_class" "gp3_high_iops" {
 
   parameters = {
     type       = "gp3"
-    iops       = "16000"  # Max IOPS for gp3
-    throughput = "1000"   # Max throughput for gp3
+    iops       = "16000" # Max IOPS for gp3
+    throughput = "1000"  # Max throughput for gp3
     encrypted  = "true"
   }
 
@@ -142,7 +142,7 @@ resource "kubernetes_storage_class" "io2_high_performance" {
 
   parameters = {
     type      = "io2"
-    iops      = "64000"  # High IOPS for performance workloads
+    iops      = "64000" # High IOPS for performance workloads
     encrypted = "true"
   }
 
@@ -157,7 +157,7 @@ resource "kubernetes_storage_class" "io2_high_performance" {
 # F5 BNK/SPK requires ReadWriteMany access for TMM and Observer pods running on separate nodes
 resource "kubernetes_storage_class" "f5_efs_rwx" {
   count = var.enable_f5_efs_storage ? 1 : 0
-  
+
   metadata {
     name = "f5-efs-rwx"
     annotations = {
@@ -194,7 +194,7 @@ resource "kubernetes_storage_class" "f5_persistence" {
   storage_provisioner    = "ebs.csi.aws.com"
   volume_binding_mode    = "WaitForFirstConsumer"
   allow_volume_expansion = true
-  reclaim_policy         = "Retain"  # Retain for F5 persistence data
+  reclaim_policy         = "Retain" # Retain for F5 persistence data
 
   parameters = {
     type       = "gp3"
@@ -214,7 +214,7 @@ resource "kubernetes_storage_class" "f5_persistence" {
 # EBS Volume Snapshot Class for backup operations
 resource "kubernetes_manifest" "ebs_volume_snapshot_class" {
   count = var.enable_volume_snapshots ? 1 : 0
-  
+
   manifest = {
     apiVersion = "snapshot.storage.k8s.io/v1"
     kind       = "VolumeSnapshotClass"
