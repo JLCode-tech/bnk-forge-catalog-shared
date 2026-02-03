@@ -66,6 +66,7 @@ done < <(awk '
 # Extract Helm chart versions using the map
 # Use ${versions[key]-} to avoid "unbound variable" error if key is missing (returns empty string)
 cert_manager=${versions["charts/f5-cert-manager"]-}
+flo=${versions["charts/f5-lifecycle-operator"]-}
 rabbitmq=${versions["charts/rabbitmq"]-}
 cwc=${versions["charts/cwc"]-}
 spk_crds_common=${versions["charts/f5-spk-crds-common"]-}
@@ -89,21 +90,19 @@ log "Validating critical component versions..."
 critical_missing=""
 
 [ -z "$cert_manager" ] && critical_missing="$critical_missing cert_manager"
-[ -z "$cwc" ] && critical_missing="$critical_missing cwc"
-[ -z "$spk_crds_common" ] && critical_missing="$critical_missing spk_crds_common"
-[ -z "$spk_crds_service_proxy" ] && critical_missing="$critical_missing spk_crds_service_proxy"
-[ -z "$f5ingress" ] && critical_missing="$critical_missing f5ingress"
+[ -z "$flo" ] && critical_missing="$critical_missing flo"
 
 if [ -n "$critical_missing" ]; then
     error_exit "Critical component versions not found: $critical_missing"
 fi
 
 log "Version extraction completed successfully"
-log "Found versions: cert_manager=$cert_manager, cwc=$cwc, f5ingress=$f5ingress"
+log "Found versions: cert_manager=$cert_manager, flo=$flo, cwc=$cwc"
 
 # Output JSON for Terraform
 jq -nc \
     --arg cert_manager "$cert_manager" \
+    --arg flo "$flo" \
     --arg rabbitmq "$rabbitmq" \
     --arg cwc "$cwc" \
     --arg spk_crds_common "$spk_crds_common" \
@@ -121,6 +120,7 @@ jq -nc \
     --arg spk_cwc_img "$spk_cwc_img" \
     '{
         "cert_manager": $cert_manager,
+        "flo": $flo,
         "rabbitmq": $rabbitmq,
         "cwc": $cwc,
         "spk_crds_common": $spk_crds_common,

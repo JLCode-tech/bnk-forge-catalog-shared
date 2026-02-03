@@ -10,7 +10,7 @@ output "spk_namespace" {
 }
 
 output "utils_namespace" {
-  description = "F5 utils namespace name" 
+  description = "F5 utils namespace name"
   value       = kubernetes_namespace.utils.metadata[0].name
 }
 
@@ -57,9 +57,9 @@ output "component_versions" {
 output "crds_versions" {
   description = "CRD component versions"
   value = {
-    common       = lookup(data.external.component_versions.result, "spk_crds_common", "")
+    common        = lookup(data.external.component_versions.result, "spk_crds_common", "")
     service_proxy = lookup(data.external.component_versions.result, "spk_crds_service_proxy", "")
-    deprecated   = lookup(data.external.component_versions.result, "spk_crds_deprecated", "")
+    deprecated    = lookup(data.external.component_versions.result, "spk_crds_deprecated", "")
   }
 }
 
@@ -68,13 +68,18 @@ output "cert_manager_version" {
   value       = lookup(data.external.component_versions.result, "cert_manager", "")
 }
 
+output "flo_version" {
+  description = "F5 Lifecycle Operator version"
+  value       = lookup(data.external.component_versions.result, "flo", "")
+}
+
 output "cwc_version" {
   description = "Cluster Wide Controller version"
   value       = lookup(data.external.component_versions.result, "cwc", "")
 }
 
 output "controller_version" {
-  description = "F5 Ingress Controller version" 
+  description = "F5 Ingress Controller version"
   value       = lookup(data.external.component_versions.result, "f5ingress", "")
 }
 
@@ -119,10 +124,10 @@ output "manifest_file_path" {
 output "dependencies_ready" {
   description = "Indicates all FAR setup dependencies are ready"
   value = {
-    far_secrets_created    = length(kubernetes_secret.far_auth) == length(local.far_namespaces)
-    manifest_downloaded    = data.external.manifest_download.result.success == "true"
-    versions_parsed        = length(keys(data.external.component_versions.result)) > 0
-    namespaces_created    = kubernetes_namespace.spk.metadata[0].name != "" && kubernetes_namespace.utils.metadata[0].name != ""
+    far_secrets_created = length(kubernetes_secret.far_auth) == length(local.far_namespaces)
+    manifest_downloaded = data.external.manifest_download.result.success == "true"
+    versions_parsed     = length(keys(data.external.component_versions.result)) > 0
+    namespaces_created  = kubernetes_namespace.spk.metadata[0].name != "" && kubernetes_namespace.utils.metadata[0].name != ""
   }
 }
 
