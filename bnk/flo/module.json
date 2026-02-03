@@ -83,7 +83,7 @@
         "source": "user"
       },
       {
-        "name": "license_jwt_token",
+        "name": "jwt_token",
         "type": "string",
         "description": "F5 license JWT token (required for connected mode)",
         "default": "",
@@ -162,6 +162,6 @@
     "order": 50,
     "estimated_time": "3 minutes",
     "requires_user_input": true,
-    "sensitive_inputs": ["license_jwt_token"]
+    "sensitive_inputs": ["jwt_token"]
   }
 }

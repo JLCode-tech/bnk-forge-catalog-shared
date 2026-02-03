@@ -29,29 +29,27 @@ locals {
     teemEntitlementUrl   = local.selected_teem.entitlement_url
     teemInitialConfigUrl = local.selected_teem.initial_config_url
     jwt                  = var.jwt_token != "" ? var.jwt_token : null
-  } : {
-    operationMode      = "f5licenseproxy"
-    f5LicenseProxyUrl  = var.f5_license_proxy_url
+    } : {
+    operationMode     = "f5licenseproxy"
+    f5LicenseProxyUrl = var.f5_license_proxy_url
   }
 }
 
 # =============================================================================
-# NAMESPACE CREATION
+# NAMESPACE REFERENCES
 # =============================================================================
+# Note: The FLO namespace (f5-spk) is created by far-setup module.
+# We use data sources to reference existing namespaces instead of creating them.
 
-resource "kubernetes_namespace" "flo" {
+data "kubernetes_namespace" "flo" {
   metadata {
     name = var.flo_namespace
-
-    labels = merge(var.common_labels, {
-      name    = var.flo_namespace
-      purpose = "f5-lifecycle-operator"
-    })
   }
 }
 
+# IPAM namespace - only created if enabled AND not using the main flo namespace
 resource "kubernetes_namespace" "ipam" {
-  count = var.enable_ipam_operator ? 1 : 0
+  count = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? 1 : 0
 
   metadata {
     name = var.ipam_namespace
@@ -69,7 +67,7 @@ resource "kubernetes_namespace" "ipam" {
 
 resource "helm_release" "flo" {
   depends_on = [
-    kubernetes_namespace.flo,
+    data.kubernetes_namespace.flo,
     var.cert_manager_ready,
     var.far_setup_complete
   ]
