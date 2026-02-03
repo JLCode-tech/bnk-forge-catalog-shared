@@ -25,17 +25,26 @@
       {
         "name": "spk_manifest_version",
         "type": "string",
-        "description": "BNK SPK manifest version (format: SPK-FLO-CRD)",
+        "description": "BNK SPK manifest version - must be exact version from F5 Artifact Registry",
         "source": "user",
-        "example": "2.1.0-3.1736.1-0.1.27"
+        "example": "2.1.0-3.1736.1-0.1.27",
+        "validation": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "error_message": "Must follow format: SPK.FLO.CRD (e.g., 2.1.0-3.1736.1-0.1.27). Find versions at F5 Downloads portal."
+        }
       },
       {
         "name": "service_account_key_file",
         "type": "string",
-        "description": "Path to F5 service account JSON key file for registry authentication",
+        "description": "Path to F5 FAR service account JSON key file inside container. Place file in ./secrets/ directory on host.",
         "source": "user",
-        "example": "~/far-credentials.json",
-        "sensitive": true
+        "example": "/app/secrets/far-credentials.json",
+        "default": "/app/secrets/far-credentials.json",
+        "sensitive": true,
+        "validation": {
+          "type": "file_path",
+          "error_message": "File must exist at specified path. Place far-credentials.json in ./secrets/ directory on host."
+        }
       }
     ],
     "optional": [
