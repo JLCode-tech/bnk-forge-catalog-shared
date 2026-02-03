@@ -36,20 +36,6 @@ variable "aws_profile" {
 }
 
 # =============================================================================
-# SECURITY CONFIGURATION (exactly matching security/EKS modules)
-# =============================================================================
-
-variable "user_ip" {
-  description = "Your public IP address in CIDR format (e.g., 203.123.45.67/32) for security restrictions"
-  type        = string
-  
-  validation {
-    condition     = can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}/32$", var.user_ip))
-    error_message = "The user_ip must be in CIDR format with /32 suffix (e.g., 203.123.45.67/32)."
-  }
-}
-
-# =============================================================================
 # EKS DEPENDENCY VARIABLES (from EKS module outputs)
 # =============================================================================
 
@@ -88,7 +74,7 @@ variable "snapshot_retention_policy" {
   description = "Retention policy for volume snapshots"
   type        = string
   default     = "Delete"
-  
+
   validation {
     condition     = contains(["Delete", "Retain"], var.snapshot_retention_policy)
     error_message = "Snapshot retention policy must be either Delete or Retain."
