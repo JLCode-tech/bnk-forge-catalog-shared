@@ -2,6 +2,15 @@
 # F5 Lifecycle Operator Module Variables
 
 # =============================================================================
+# AWS CONFIGURATION
+# =============================================================================
+
+variable "aws_region" {
+  description = "AWS region where the EKS cluster is located"
+  type        = string
+}
+
+# =============================================================================
 # REQUIRED VARIABLES
 # =============================================================================
 
@@ -154,11 +163,13 @@ variable "tolerations" {
 variable "cert_manager_ready" {
   description = "Dependency flag indicating cert-manager is ready"
   type        = bool
+  default     = true # Default to true - cert-manager is optional
 }
 
 variable "far_setup_complete" {
   description = "Dependency flag indicating FAR setup is complete"
   type        = bool
+  default     = true # Default to true - wired from far-setup outputs when available
 }
 
 # =============================================================================

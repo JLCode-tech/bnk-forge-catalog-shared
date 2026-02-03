@@ -2,6 +2,15 @@
 # Routes Module Variables - HTTPRoute, GRPCRoute, L4Route
 
 # =============================================================================
+# AWS CONFIGURATION
+# =============================================================================
+
+variable "aws_region" {
+  description = "AWS region where the EKS cluster is located"
+  type        = string
+}
+
+# =============================================================================
 # REQUIRED VARIABLES
 # =============================================================================
 
@@ -42,10 +51,10 @@ variable "route_type" {
 variable "parent_refs" {
   description = "List of parent Gateways this route attaches to"
   type = list(object({
-    name        = string
-    namespace   = optional(string)
+    name         = string
+    namespace    = optional(string)
     section_name = optional(string) # Listener name
-    port        = optional(number)
+    port         = optional(number)
   }))
 
   validation {
