@@ -19,8 +19,8 @@
         "name": "aws_region",
         "type": "string",
         "description": "AWS region where the EKS cluster is located",
-        "source": "user",
-        "example": "us-west-2"
+        "source": "project",
+        "project_field": "aws_region"
       },
       {
         "name": "cluster_name",
