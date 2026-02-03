@@ -1,6 +1,6 @@
 # Architecture Decision Records - BNK-Forge Modules
 
-Last Updated: 2026-01-20
+Last Updated: 2026-02-04
 
 ## Overview
 
@@ -237,6 +237,84 @@ Note: Terraform `variables.tf` files still declare these variables. They inherit
 - ADR-006 (Module Dependency Wiring) - supports cleaner input definitions
 - `MODULE_METADATA_SCHEMA.md` - should document this convention
 - All module.json files
+
+---
+
+### ADR-008: Version-Based Branching Strategy
+
+**Date**: 2026-02-04
+**Status**: Accepted
+**Deciders**: Repository Owner, Claude Code Agent
+
+**Context**:
+Need to align modules with F5 BIG-IP Next for Kubernetes releases (2.2, 2.3, etc.). Different F5 versions may have different CRD schemas, API versions, or component requirements. We need a way to maintain version-specific module sets.
+
+**Decision**:
+Adopt version-based branching to track F5 product releases:
+
+```
+main (stable, production-ready)
+├── release/2.2    ← Current (BNK 2.2 GA)
+├── release/2.3    ← Future
+└── release/2.4    ← Future
+```
+
+**Workflow**:
+1. **New Release**: Create `release/X.Y` from `main`
+2. **Development**: All work for X.Y happens on release branch
+3. **Feature Branches**: `feature/release-X.Y/description` for larger changes
+4. **Completion**: Merge `release/X.Y` → `main`, tag as `vX.Y.0`
+5. **Maintenance**: Patches on release branch, merge to main
+
+**Consequences**:
+- Positive: Clear alignment with F5 product versions
+- Positive: Users can see which module version matches their BNK deployment
+- Positive: Supports parallel development of future versions
+- Positive: Clean main branch represents latest stable
+- Negative: More branches to manage
+- Negative: Need to document which release branch to use
+- Negative: Release notes should map to F5 versions
+
+**Related**: `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
+
+---
+
+### ADR-009: Policy Modules as CR Configuration (Not CRD Installation)
+
+**Date**: 2026-02-04
+**Status**: Accepted
+**Deciders**: Repository Owner, Claude Code Agent
+
+**Context**:
+Confusion arose about whether policy modules (`bnk-secpolicy`, `bnk-netpolicy`, etc.) install CRDs or configure CRs. On 2026-02-03, these modules were archived with the assumption they were "CRD installation" modules that FLO handles.
+
+However:
+- FLO installs CRD **definitions** (the schema)
+- Policy modules create CR **instances** (the actual resources)
+- Stack templates still reference these modules
+- Users need them for complete deployments
+
+**Decision**:
+Policy modules create **Custom Resource instances**, not install CRDs. They should be restored and maintained:
+
+- `bnk/bnk-secpolicy` - Creates BNKSecPolicy CR instances
+- `bnk/bnk-netpolicy` - Creates BNKNetPolicy CR instances
+- `bnk/bnk-gateway-ext` - Creates F5BnkGateway CR instances (for IPAM)
+
+FLO handles:
+- CRD installation and lifecycle
+- Component deployment (TMM, CWC, DSSM, etc.)
+
+**Consequences**:
+- Positive: Correct separation of concerns (FLO = CRDs, modules = CRs)
+- Positive: Stack templates work correctly
+- Positive: Users can configure policies via Terraform
+- Negative: Previously archived modules need restoration
+- Negative: Module descriptions must clearly state "configures CR" not "installs CRD"
+
+**Related**: 
+- `archived/README.md` (needs update)
+- `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
 
 ---
 

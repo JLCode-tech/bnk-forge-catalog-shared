@@ -1,6 +1,6 @@
 # Backlog - BNK-Forge Modules
 
-Last Updated: 2026-01-18
+Last Updated: 2026-02-04
 
 ## Overview
 
@@ -17,18 +17,56 @@ This backlog tracks prioritized work for the bnk-forge-modules repository. Items
 
 ## P0 - Critical
 
-### Security & Stability
+### BNK 2.2 GA Alignment
 
-**None currently**
+#### Restore Policy Modules & Create IPAM Module
+**Status**: Ready for Implementation
+**Category**: BNK Modules
+**Location**: `bnk/bnk-secpolicy`, `bnk/bnk-netpolicy`, `bnk/bnk-gateway-ext`, `bnk/gateway`
 
-### Integration with bnk-forge
+Stack templates in bnk-forge-v2 reference modules that were archived or don't exist. This breaks deployments.
+
+**Problem**:
+- `bnk/bnk-secpolicy` was archived but is referenced in stack templates
+- `bnk/bnk-netpolicy` was archived but is referenced in stack templates
+- `bnk/bnk-gateway-ext` doesn't exist (needed for F5BnkGateway IPAM)
+- `bnk/gateway` needs IPAM support
+
+**Key Insight**:
+These modules create CR **instances** (not install CRDs). FLO installs CRDs automatically.
+The archived modules were incorrectly categorized as "CRD installation" modules.
+
+**Implementation Plan**: `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
+**Related ADRs**: ADR-007 (branching), ADR-008 (CR vs CRD) in `.agent/DECISIONS.md`
+
+**Tasks**:
+1. Create `release/2.2` branch
+2. Restore `bnk/bnk-secpolicy` from archive, update to F5 2.2 schema
+3. Restore `bnk/bnk-netpolicy` from archive, update to F5 2.2 schema
+4. Create new `bnk/bnk-gateway-ext` for IPAM integration
+5. Update `bnk/gateway` with IPAM support
+6. Update documentation (DEPENDENCY_GRAPH.md, archived/README.md)
+7. Add CI validation workflow
+8. Update bnk-forge-v2 stack templates
+
+**Acceptance Criteria**:
+- All modules pass `tofu validate`
+- Stack templates reference existing modules
+- "F5 BNK Complete" stack deploys end-to-end
+- CI workflow validates on PR
+
+**Estimated Time**: 3.5 hours
+
+---
+
+### Integration with bnk-forge-v2
 
 #### Module Dependency Wiring (Cross-Repo)
-**Status**: Planning Complete
+**Status**: Largely Complete in bnk-forge-v2
 **Category**: Integration
-**Location**: Primarily bnk-forge, data source is bnk-forge-modules
+**Location**: Primarily bnk-forge-v2, data source is bnk-forge-modules
 
-The module.json files contain rich dependency and I/O mapping data that bnk-forge needs to properly utilize. This is a cross-repo effort.
+The module.json files contain rich dependency and I/O mapping data that bnk-forge-v2 uses.
 
 **What bnk-forge-modules provides** (already exists):
 - `dependencies.required[]` in module.json
@@ -36,21 +74,15 @@ The module.json files contain rich dependency and I/O mapping data that bnk-forg
 - `outputs[].used_by` mappings
 - `deployment.order` for correct sequencing
 
-**What bnk-forge needs to implement**:
-1. Parse module.json during catalog sync
-2. Use real dependencies instead of hardcoded rules
-3. Implement input wiring service
-4. Update root.hcl with outputs after apply
-5. Show real deps in UI
+**What bnk-forge-v2 implements**:
+1. ✅ Parse module.json during catalog sync
+2. ✅ Use real dependencies from metadata
+3. ✅ Wire outputs from dependencies to inputs
+4. ✅ Show dependency status in UI
+5. ⏳ Enhanced variable form (show user vs auto-wired)
 
 **Implementation Plan**: `.agent/IMPLEMENTATION_PLAN_DEPENDENCY_WIRING.md`
 **Related ADR**: ADR-006 in `.agent/DECISIONS.md`
-
-**Acceptance Criteria**:
-- bnk-forge reads module.json dependencies
-- Adding EKS module shows VPC/Security as dependencies
-- After VPC apply, EKS sees vpc_id input as "ready"
-- root.hcl updated with real output values
 
 ---
 
