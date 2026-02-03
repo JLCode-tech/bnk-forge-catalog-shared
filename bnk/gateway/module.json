@@ -111,6 +111,20 @@
         "description": "TLS certificate secret references for HTTPS listeners",
         "default": [],
         "source": "user"
+      },
+      {
+        "name": "infrastructure_parameters_ref",
+        "type": "object",
+        "description": "Reference to F5BnkGateway for IPAM integration",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "gateway_addresses",
+        "type": "list(object)",
+        "description": "Static IP addresses for Gateway (optional, used with IPAM)",
+        "default": [],
+        "source": "user"
       }
     ]
   },

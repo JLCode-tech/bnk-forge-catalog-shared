@@ -210,9 +210,23 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
 - **Trigger**: Applying BnkGatewayClass CR triggers FLO to deploy all BNK components
 - **Required For**: gateway
 
+#### bnk/bnk-gateway-ext
+- **Layer**: BNK Gateway
+- **Dependencies**: flo
+- **Required Inputs**:
+  - gateway_ext_name (user)
+  - flo_ready (from flo)
+- **Optional Inputs**:
+  - namespace
+  - ipv4_cidr_range
+  - ipv6_cidr_range
+  - default_network
+- **Key Outputs**: gateway_ext_name, gateway_ext_ready
+- **Required For**: Optional IPAM integration with bnk/gateway
+
 #### bnk/gateway
 - **Layer**: BNK Gateway
-- **Dependencies**: bnk-gatewayclass
+- **Dependencies**: bnk-gatewayclass, flo
 - **Required Inputs**:
   - cluster_name
   - gateway_name
@@ -220,6 +234,9 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
   - gatewayclass_name (from bnk-gatewayclass)
   - gatewayclass_ready (from bnk-gatewayclass)
   - listeners (user-provided)
+- **Optional Inputs**:
+  - infrastructure_parameters_ref (from bnk-gateway-ext for IPAM)
+  - gateway_addresses (static IPs)
 - **Key Outputs**:
   - gateway_name
   - gateway_ready

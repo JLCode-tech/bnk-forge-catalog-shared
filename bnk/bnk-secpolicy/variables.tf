@@ -1,5 +1,5 @@
-# infrastructure-modules/spk-2.1/bnk-secpolicy/variables.tf
-# BNKSecPolicy Module Variables - Security Policies for Gateways
+# bnk-forge-modules/bnk/bnk-secpolicy/variables.tf
+# BNKSecPolicy Module Variables - Security Policies for Gateways (F5 BNK 2.2 GA)
 
 # =============================================================================
 # REQUIRED VARIABLES

@@ -69,6 +69,18 @@ Updated: 2026-02-02
 | `bnk/crds/f5spksnatpool` | FLO installs F5 CRDs automatically | 2026-02-03 |
 | `bnk/crds/f5spkstaticroute` | FLO installs F5 CRDs automatically | 2026-02-03 |
 | `bnk/crds/f5spkvlan` | FLO installs F5 CRDs automatically | 2026-02-03 |
-| `bnk/crds/bnk-netpolicy` | FLO installs F5 CRDs automatically | 2026-02-03 |
-| `bnk/crds/bnk-secpolicy` | FLO installs F5 CRDs automatically | 2026-02-03 |
 | `bnk/crds/referencegrant` | FLO installs F5 CRDs automatically | 2026-02-03 |
+
+## Restored Modules (2026-02-04)
+
+The following modules were previously archived but have been **restored** to `bnk/`:
+
+| Module | Reason | Restored Date |
+|--------|--------|---------------|
+| `bnk/bnk-secpolicy` | Creates BNKSecPolicy CR instances (not CRD installation) | 2026-02-04 |
+| `bnk/bnk-netpolicy` | Creates BNKNetPolicy CR instances (not CRD installation) | 2026-02-04 |
+
+**Important Distinction:**
+- FLO installs the **CRDs** (Custom Resource Definitions) automatically
+- These modules create **CR instances** (Custom Resources) that use those CRDs
+- This is the correct separation of concerns

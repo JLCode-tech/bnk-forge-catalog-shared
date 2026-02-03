@@ -1,5 +1,5 @@
-# infrastructure-modules/spk-2.1/gateway/main.tf
-# Gateway API Gateway resource deployment
+# bnk-forge-modules/bnk/gateway/main.tf
+# Gateway API Gateway resource deployment (F5 BNK 2.2 GA)
 
 # =============================================================================
 # GATEWAY RESOURCE
@@ -87,32 +87,45 @@ resource "kubernetes_manifest" "gateway" {
       # Addresses (optional - IPAM manages if not specified)
       length(var.addresses) > 0 ? {
         addresses = var.addresses
+        } : length(var.gateway_addresses) > 0 ? {
+        addresses = var.gateway_addresses
       } : {},
 
-      # Infrastructure annotations (F5-specific overrides)
-      var.tmm_replicas != null || var.tmm_resources != null || var.network_attachments != null || var.service_type != null ? {
-        infrastructure = {
-          annotations = merge(
-            var.tmm_replicas != null ? {
-              "f5.com/tmm-replicas" = tostring(var.tmm_replicas)
-            } : {},
-            var.tmm_resources != null ? {
-              "f5.com/tmm-resources" = jsonencode({
-                requests = {
-                  cpu             = var.tmm_resources.cpu
-                  memory          = var.tmm_resources.memory
-                  "hugepages-2Mi" = var.tmm_resources.hugepages_2mi
-                }
-              })
-            } : {},
-            var.network_attachments != null ? {
-              "f5.com/network-attachments" = jsonencode(var.network_attachments)
-            } : {},
-            var.service_type != null ? {
-              "f5.com/service-type" = var.service_type
-            } : {}
-          )
-        }
+      # Infrastructure configuration (F5-specific overrides and IPAM reference)
+      var.tmm_replicas != null || var.tmm_resources != null || var.network_attachments != null || var.service_type != null || var.infrastructure_parameters_ref != null ? {
+        infrastructure = merge(
+          # Annotations for TMM configuration
+          var.tmm_replicas != null || var.tmm_resources != null || var.network_attachments != null || var.service_type != null ? {
+            annotations = merge(
+              var.tmm_replicas != null ? {
+                "f5.com/tmm-replicas" = tostring(var.tmm_replicas)
+              } : {},
+              var.tmm_resources != null ? {
+                "f5.com/tmm-resources" = jsonencode({
+                  requests = {
+                    cpu             = var.tmm_resources.cpu
+                    memory          = var.tmm_resources.memory
+                    "hugepages-2Mi" = var.tmm_resources.hugepages_2mi
+                  }
+                })
+              } : {},
+              var.network_attachments != null ? {
+                "f5.com/network-attachments" = jsonencode(var.network_attachments)
+              } : {},
+              var.service_type != null ? {
+                "f5.com/service-type" = var.service_type
+              } : {}
+            )
+          } : {},
+          # F5BnkGateway parametersRef for IPAM integration
+          var.infrastructure_parameters_ref != null ? {
+            parametersRef = {
+              group = var.infrastructure_parameters_ref.group
+              kind  = var.infrastructure_parameters_ref.kind
+              name  = var.infrastructure_parameters_ref.name
+            }
+          } : {}
+        )
       } : {}
     )
   }

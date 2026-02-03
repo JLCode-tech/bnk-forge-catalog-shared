@@ -1,4 +1,4 @@
-# infrastructure-modules/spk-2.1/bnk-secpolicy/versions.tf
+# bnk-forge-modules/bnk/bnk-secpolicy/versions.tf
 
 terraform {
   required_version = ">= 1.3.0"
