@@ -60,7 +60,7 @@ mv kubectl /usr/local/bin/
 echo "Installing AWS CLI v2..."
 AWS_CLI_VERSION="2.33.5"
 AWS_CLI_ZIP="awscliv2.zip"
-download_with_retry "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-${AWS_CLI_VERSION}.zip" "$AWS_CLI_ZIP"
+download_with_retry "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-$${AWS_CLI_VERSION}.zip" "$AWS_CLI_ZIP"
 echo "a1f6a25f1cadeb16a155519a09abd1784ddfbc58e9ffe4904e83d77fc2c6daa4  $AWS_CLI_ZIP" | sha256sum -c -
 unzip "$AWS_CLI_ZIP"
 ./aws/install
