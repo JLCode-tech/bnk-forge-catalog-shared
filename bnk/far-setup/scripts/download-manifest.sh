@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Read inputs from Terraform
-eval "$(jq -r '@sh "MANIFEST_VERSION=\(.manifest_version) WORK_DIR=\(.work_dir) CHART_NAME=\(.chart_name)"')"
+eval "$(jq -r '@sh "MANIFEST_VERSION=\(.manifest_version) WORK_DIR=\(.work_dir) CHART_NAME=\(.chart_name) SERVICE_ACCOUNT_KEY_FILE=\(.service_account_key_file // empty)"')"
 
 # Create work directory
 mkdir -p "$WORK_DIR"
@@ -33,6 +33,19 @@ log "Starting manifest download for version: $MANIFEST_VERSION"
 # Check if FAR credentials are available (via docker config or helm registry login)
 if ! command -v helm >/dev/null 2>&1; then
     error_exit "Helm is required but not installed"
+fi
+
+# Authenticate to FAR using service account key if provided
+# Per F5 docs: cat <service_account_key_base64 file> | helm registry login -u _json_key_base64 --password-stdin https://repo.f5.com
+# The service account key file is already base64 encoded from F5
+if [ -n "${SERVICE_ACCOUNT_KEY_FILE:-}" ] && [ -f "$SERVICE_ACCOUNT_KEY_FILE" ]; then
+    log "Authenticating to FAR using service account key: $SERVICE_ACCOUNT_KEY_FILE"
+    if ! cat "$SERVICE_ACCOUNT_KEY_FILE" | helm registry login repo.f5.com -u _json_key_base64 --password-stdin >/dev/null 2>&1; then
+        error_exit "Failed to authenticate to FAR. Check service account key file: $SERVICE_ACCOUNT_KEY_FILE"
+    fi
+    log "FAR authentication successful"
+else
+    log "No service account key file provided, assuming helm is pre-authenticated"
 fi
 
 # Download manifest from FAR

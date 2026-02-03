@@ -10,10 +10,10 @@ locals {
     var.spk_namespace,
     var.utils_namespace
   ]
-  
+
   # Service account key content
   service_account_key = file(var.service_account_key_file)
-  
+
   # Base64 encoded authentication for docker config
   docker_auth = base64encode("_json_key_base64:${local.service_account_key}")
 }
@@ -43,7 +43,7 @@ resource "kubernetes_namespace" "spk" {
       "app.kubernetes.io/name"       = "spk"
       "app.kubernetes.io/component"  = "controller"
       "app.kubernetes.io/managed-by" = "terraform"
-      "f5.com/spk-version"          = var.spk_manifest_version
+      "f5.com/spk-version"           = var.spk_manifest_version
     }
   }
 }
@@ -55,8 +55,8 @@ resource "kubernetes_namespace" "utils" {
     labels = {
       "app.kubernetes.io/name"       = "spk"
       "app.kubernetes.io/component"  = "utils"
-      "app.kubernetes.io/managed-by" = "terraform" 
-      "f5.com/spk-version"          = var.spk_manifest_version
+      "app.kubernetes.io/managed-by" = "terraform"
+      "f5.com/spk-version"           = var.spk_manifest_version
     }
   }
 }
@@ -106,9 +106,10 @@ data "external" "manifest_download" {
   program = ["bash", "${path.module}/scripts/download-manifest.sh"]
 
   query = {
-    manifest_version = var.spk_manifest_version
-    chart_name = var.manifest_chart_name
-    work_dir         = "${path.module}/work"
+    manifest_version         = var.spk_manifest_version
+    chart_name               = var.manifest_chart_name
+    work_dir                 = "${path.module}/work"
+    service_account_key_file = var.service_account_key_file
   }
 }
 
