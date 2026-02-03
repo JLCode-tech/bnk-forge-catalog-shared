@@ -25,12 +25,17 @@
       {
         "name": "spk_manifest_version",
         "type": "string",
-        "description": "BNK SPK manifest version - must be exact version from F5 Artifact Registry",
+        "description": "BNK SPK manifest version - select from available F5 releases",
         "source": "user",
-        "example": "2.1.0-3.1736.1-0.1.27",
+        "example": "2.2.0-3.2226.0-0.0.385",
+        "default": "2.2.0-3.2226.0-0.0.385",
+        "enum_values": [
+          {"label": "BNK 2.2 GA (Latest)", "value": "2.2.0-3.2226.0-0.0.385"},
+          {"label": "BNK 2.1 GA", "value": "2.1.0-3.1736.1-0.1.27"}
+        ],
         "validation": {
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+$",
-          "error_message": "Must follow format: SPK.FLO.CRD (e.g., 2.1.0-3.1736.1-0.1.27). Find versions at F5 Downloads portal."
+          "error_message": "Must follow format: X.Y.Z-A.B.C-D.E.F (e.g., 2.2.0-3.2226.0-0.0.385)"
         }
       },
       {
