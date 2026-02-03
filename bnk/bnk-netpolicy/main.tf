@@ -1,5 +1,5 @@
-# infrastructure-modules/spk-2.1/bnk-netpolicy/main.tf
-# BNKNetPolicy - Network Policy and Extensions for Gateways
+# bnk-forge-modules/bnk/bnk-netpolicy/main.tf
+# BNKNetPolicy - Network Policy and Extensions for Gateways (F5 BNK 2.2 GA)
 
 # =============================================================================
 # BNK NETWORK POLICY
@@ -9,7 +9,7 @@ resource "kubernetes_manifest" "bnk_netpolicy" {
   depends_on = [var.flo_ready]
 
   manifest = {
-    apiVersion = "gateway.f5.com/v1alpha1"
+    apiVersion = "k8s.f5.com/v1"
     kind       = "BNKNetPolicy"
 
     metadata = {
@@ -77,7 +77,7 @@ resource "kubernetes_manifest" "bnk_netpolicy" {
             proxyBufferHigh = var.tcp_profile.proxy_buffer_high
           } : {}
         )
-      } : var.tcp_settings_ref != null ? {
+        } : var.tcp_settings_ref != null ? {
         tcp = {
           ref = merge(
             { name = var.tcp_settings_ref.name },

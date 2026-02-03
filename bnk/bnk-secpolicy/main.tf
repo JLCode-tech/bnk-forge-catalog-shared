@@ -1,5 +1,5 @@
-# infrastructure-modules/spk-2.1/bnk-secpolicy/main.tf
-# BNKSecPolicy - Security Policy for Gateways
+# bnk-forge-modules/bnk/bnk-secpolicy/main.tf
+# BNKSecPolicy - Security Policy for Gateways (F5 BNK 2.2 GA)
 
 # =============================================================================
 # BNK SECURITY POLICY
@@ -9,7 +9,7 @@ resource "kubernetes_manifest" "bnk_secpolicy" {
   depends_on = [var.flo_ready]
 
   manifest = {
-    apiVersion = "gateway.f5.com/v1alpha1"
+    apiVersion = "k8s.f5.com/v1"
     kind       = "BNKSecPolicy"
 
     metadata = {

@@ -1,5 +1,5 @@
-# infrastructure-modules/spk-2.1/bnk-netpolicy/variables.tf
-# BNKNetPolicy Module Variables - Network Policies and Extensions
+# bnk-forge-modules/bnk/bnk-netpolicy/variables.tf
+# BNKNetPolicy Module Variables - Network Policies and Extensions (F5 BNK 2.2 GA)
 
 # =============================================================================
 # REQUIRED VARIABLES
@@ -46,16 +46,16 @@ variable "irules" {
 variable "tcp_profile" {
   description = "TCP profile configuration"
   type = object({
-    idle_timeout           = optional(string) # Duration like "300s"
-    close_wait_timeout     = optional(string)
-    fin_wait_timeout       = optional(string)
-    keep_alive_interval    = optional(string)
-    tcp_window_size        = optional(number)
-    nagle_algorithm        = optional(bool)
-    delayed_acks           = optional(bool)
-    reset_on_timeout       = optional(bool)
-    proxy_buffer_low       = optional(number)
-    proxy_buffer_high      = optional(number)
+    idle_timeout        = optional(string) # Duration like "300s"
+    close_wait_timeout  = optional(string)
+    fin_wait_timeout    = optional(string)
+    keep_alive_interval = optional(string)
+    tcp_window_size     = optional(number)
+    nagle_algorithm     = optional(bool)
+    delayed_acks        = optional(bool)
+    reset_on_timeout    = optional(bool)
+    proxy_buffer_low    = optional(number)
+    proxy_buffer_high   = optional(number)
   })
   default = null
 }
@@ -76,13 +76,13 @@ variable "tcp_settings_ref" {
 variable "http_profile" {
   description = "HTTP profile configuration"
   type = object({
-    xff_enabled        = optional(bool)   # X-Forwarded-For
+    xff_enabled         = optional(bool) # X-Forwarded-For
     xff_trusted_proxies = optional(list(string))
-    max_header_size    = optional(number)
-    max_headers_count  = optional(number)
-    request_chunking   = optional(string) # preserve, selective, rechunk
-    response_chunking  = optional(string)
-    pipeline_mode      = optional(string) # reject, pasthrough, controlled
+    max_header_size     = optional(number)
+    max_headers_count   = optional(number)
+    request_chunking    = optional(string) # preserve, selective, rechunk
+    response_chunking   = optional(string)
+    pipeline_mode       = optional(string) # reject, pasthrough, controlled
   })
   default = null
 }
@@ -94,7 +94,7 @@ variable "http_profile" {
 variable "hsl_logging" {
   description = "High-speed logging configuration"
   type = object({
-    enabled     = bool
+    enabled = bool
     publisher_ref = optional(object({
       name      = string
       namespace = optional(string)
@@ -117,11 +117,11 @@ variable "hsl_logging" {
 variable "connection_pool" {
   description = "Backend connection pooling configuration"
   type = object({
-    max_connections         = optional(number)
-    max_idle_connections    = optional(number)
-    idle_timeout            = optional(string)
-    connection_timeout      = optional(string)
-    max_requests_per_conn   = optional(number)
+    max_connections       = optional(number)
+    max_idle_connections  = optional(number)
+    idle_timeout          = optional(string)
+    connection_timeout    = optional(string)
+    max_requests_per_conn = optional(number)
   })
   default = null
 }
@@ -133,14 +133,14 @@ variable "connection_pool" {
 variable "persistence" {
   description = "Session persistence configuration"
   type = object({
-    type     = string # cookie, source-ip, hash
-    timeout  = optional(string)
+    type    = string # cookie, source-ip, hash
+    timeout = optional(string)
     # Cookie persistence
-    cookie_name     = optional(string)
-    cookie_method   = optional(string) # insert, rewrite, passive
-    cookie_encrypt  = optional(bool)
+    cookie_name    = optional(string)
+    cookie_method  = optional(string) # insert, rewrite, passive
+    cookie_encrypt = optional(bool)
     # Hash persistence
-    hash_algorithm  = optional(string)
+    hash_algorithm = optional(string)
   })
   default = null
 }
@@ -157,7 +157,7 @@ variable "ssl_profile" {
     min_protocol       = optional(string) # TLSv1.2, TLSv1.3
     max_protocol       = optional(string)
     verify_server_cert = optional(bool)
-    ca_bundle_ref      = optional(object({
+    ca_bundle_ref = optional(object({
       name      = string
       namespace = optional(string)
     }))
@@ -172,10 +172,10 @@ variable "ssl_profile" {
 variable "compression" {
   description = "HTTP compression configuration"
   type = object({
-    enabled           = bool
-    algorithms        = optional(list(string)) # gzip, deflate, br
-    min_size          = optional(number)       # Minimum bytes to compress
-    content_types     = optional(list(string)) # MIME types to compress
+    enabled       = bool
+    algorithms    = optional(list(string)) # gzip, deflate, br
+    min_size      = optional(number)       # Minimum bytes to compress
+    content_types = optional(list(string)) # MIME types to compress
   })
   default = null
 }

@@ -158,6 +158,25 @@ variable "ipam_selector" {
   default     = {}
 }
 
+variable "infrastructure_parameters_ref" {
+  description = "Reference to F5BnkGateway for IPAM integration"
+  type = object({
+    group = optional(string, "k8s.f5net.com")
+    kind  = optional(string, "F5BnkGateway")
+    name  = string
+  })
+  default = null
+}
+
+variable "gateway_addresses" {
+  description = "Static IP addresses for Gateway (optional, used with IPAM)"
+  type = list(object({
+    type  = optional(string, "IPAddress")
+    value = string
+  }))
+  default = []
+}
+
 # =============================================================================
 # POLICY ATTACHMENTS
 # =============================================================================
