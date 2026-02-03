@@ -1,17 +1,9 @@
 # infrastructure-modules/spk-2.1/routes/variables.tf
 # Routes Module Variables - HTTPRoute, GRPCRoute, L4Route
+# This module is cloud-agnostic - works with any Kubernetes cluster
 
 # =============================================================================
-# AWS CONFIGURATION
-# =============================================================================
-
-variable "aws_region" {
-  description = "AWS region where the EKS cluster is located"
-  type        = string
-}
-
-# =============================================================================
-# REQUIRED VARIABLES
+# CLUSTER CONFIGURATION
 # =============================================================================
 
 variable "cluster_name" {
