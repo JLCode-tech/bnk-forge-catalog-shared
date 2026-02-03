@@ -75,16 +75,7 @@ variable "common_labels" {
 }
 
 # =============================================================================
-# AWS CONFIGURATION
-# =============================================================================
-
-variable "aws_region" {
-  description = "AWS region where the EKS cluster is located"
-  type        = string
-}
-
-# =============================================================================
-# DEPENDENCY INPUTS
+# CLUSTER CONFIGURATION
 # =============================================================================
 
 variable "cluster_name" {

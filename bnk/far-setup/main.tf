@@ -19,21 +19,10 @@ locals {
 }
 
 # =============================================================================
-# EKS CLUSTER DATA SOURCES
-# =============================================================================
-
-# Data source to get cluster info
-data "aws_eks_cluster" "cluster" {
-  name = var.cluster_name
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = var.cluster_name
-}
-
-# =============================================================================
 # KUBERNETES NAMESPACES
 # =============================================================================
+# Note: Kubernetes provider is configured by BNK-Forge platform
+# This module is cloud-agnostic - works with EKS, AKS, GKE, or any K8s cluster
 
 # Create SPK namespace for controller/TMM
 resource "kubernetes_namespace" "spk" {
