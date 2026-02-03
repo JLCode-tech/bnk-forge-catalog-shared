@@ -1,13 +1,74 @@
 # Current Work - BNK-Forge Modules
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-04
 
 ## Active Tasks
 
 > Tasks currently being worked on across agent sessions.
 > **IMPORTANT**: When starting work on a task, move it here and add your session notes below.
 
-**None currently**
+### P0: BNK 2.2 GA Alignment (2026-02-04)
+
+**Status**: Ready for Implementation
+**Started**: 2026-02-04
+**Agent**: Planning complete, awaiting implementation
+**Implementation Plan**: `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
+
+**Description**:
+Align bnk-forge-modules and bnk-forge-v2 with F5 BIG-IP Next for Kubernetes 2.2 GA documentation. This is P0 because stack templates reference modules that were archived or don't exist.
+
+**Key Finding**:
+The modules `bnk/bnk-secpolicy` and `bnk/bnk-netpolicy` were archived on 2026-02-03 but are still needed:
+- Stack templates in bnk-forge-v2 reference these modules
+- They create CR **instances** (not install CRDs - FLO does that)
+- They're required for complete 2.2 GA deployment per F5 docs
+
+**Branching Strategy**:
+- Create `release/2.2` branch for this work
+- Future F5 versions get their own branches: `release/2.3`, `release/2.4`, etc.
+
+**Implementation Stages**:
+
+| Stage | Task | Status |
+|-------|------|--------|
+| 1.1 | Restore `bnk/bnk-secpolicy` from archive, update to F5 2.2 schema | Not Started |
+| 1.2 | Restore `bnk/bnk-netpolicy` from archive, update to F5 2.2 schema | Not Started |
+| 1.3 | Create new `bnk/bnk-gateway-ext` for IPAM integration | Not Started |
+| 2.1 | Update `bnk/gateway` with IPAM support | Not Started |
+| 3.1 | Update DEPENDENCY_GRAPH.md | Not Started |
+| 3.2 | Update archived/README.md | Not Started |
+| 4 | Add CI validation workflow | Not Started |
+| 5.1 | Update bnk-forge-v2 stack_templates.json | Not Started |
+| 5.2 | Resync catalog and test | Not Started |
+
+**Next Steps for Implementing Agent**:
+1. Create `release/2.2` branch: `git checkout -b release/2.2 main`
+2. Follow `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md` stage by stage
+3. Verify each stage with `tofu validate` before proceeding
+4. Update this file with progress
+
+**Estimated Time**: ~3.5 hours total
+
+**Files to Modify**:
+- `bnk/bnk-secpolicy/*` (restore from `archived/bnk/crds/bnk-secpolicy/`)
+- `bnk/bnk-netpolicy/*` (restore from `archived/bnk/crds/bnk-netpolicy/`)
+- `bnk/bnk-gateway-ext/*` (new module)
+- `bnk/gateway/*` (add IPAM support)
+- `DEPENDENCY_GRAPH.md`
+- `archived/README.md`
+- `.github/workflows/validate-modules.yml` (new)
+
+**Related**:
+- Implementation Plan: `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
+- F5 Docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/
+- ADR-007: Version-based branching (in DECISIONS.md)
+- ADR-008: Policy modules as CR configuration (in DECISIONS.md)
+
+**Cross-Repo Work (bnk-forge-v2)**:
+After modules are ready, update in bnk-forge-v2:
+- `backend/data/stack_templates.json` - Add cert-manager before FLO, add new modules
+- Trigger catalog sync
+- Test "F5 BNK Complete" stack end-to-end
 
 ---
 
