@@ -43,10 +43,10 @@ output "s3_bucket_arn" {
 output "networking_components" {
   description = "Status of networking components deployed"
   value = {
-    multus_deployed       = "kube-multus-ds"
-    sriov_cni_deployed   = "sriov-cni-installer-x86"
-    sriov_dp_deployed    = "kube-sriov-device-plugin-amd64"
-    dpdk_deployed        = "dpdk-configurator"
+    multus_deployed    = "kube-multus-ds"
+    sriov_cni_deployed = "sriov-cni-installer-x86"
+    sriov_dp_deployed  = "kube-sriov-device-plugin-amd64"
+    dpdk_deployed      = "dpdk-configurator"
   }
 }
 
