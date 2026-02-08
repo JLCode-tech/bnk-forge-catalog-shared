@@ -25,12 +25,36 @@ resource "aws_kms_key" "eks_secrets" {
   })
 }
 
+# Pre-create cleanup: delete orphaned KMS alias if it exists from a previous deployment
+# This handles the case where a project was destroyed but KMS key is still in 7-day deletion window
+resource "null_resource" "pre_cleanup_kms_alias" {
+  triggers = {
+    alias_name = "alias/${var.project_name}-eks-secrets-key"
+    region     = var.aws_region
+    profile    = var.aws_profile
+    # Re-run if KMS key changes (new deployment)
+    kms_key_id = aws_kms_key.eks_secrets.key_id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Checking for orphaned KMS alias: ${self.triggers.alias_name}"
+      # Try to delete any existing alias - this is idempotent
+      aws kms delete-alias \
+        --alias-name "${self.triggers.alias_name}" \
+        --region ${self.triggers.region} \
+        --profile ${self.triggers.profile} 2>/dev/null && echo "Deleted orphaned KMS alias" || echo "No orphaned alias found (OK)"
+    EOT
+  }
+}
+
 resource "aws_kms_alias" "eks_secrets" {
+  depends_on    = [null_resource.pre_cleanup_kms_alias]
   name          = "alias/${var.project_name}-eks-secrets-key"
   target_key_id = aws_kms_key.eks_secrets.key_id
 }
 
-# Cleanup KMS alias on destroy - alias can get orphaned since KMS keys have 7-day deletion window
+# Post-destroy cleanup: ensure KMS alias is deleted even if terraform state is lost
 # This prevents "AlreadyExistsException" on re-deploy with same project name
 resource "null_resource" "cleanup_kms_alias" {
   triggers = {
