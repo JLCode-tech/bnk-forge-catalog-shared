@@ -1,74 +1,80 @@
 # Current Work - BNK-Forge Modules
 
-Last Updated: 2026-02-04
+Last Updated: 2026-02-09
 
 ## Active Tasks
 
 > Tasks currently being worked on across agent sessions.
 > **IMPORTANT**: When starting work on a task, move it here and add your session notes below.
 
-### P0: BNK 2.2 GA Alignment (2026-02-04)
+**None currently - system is in tested stable state.**
 
-**Status**: Ready for Implementation
-**Started**: 2026-02-04
-**Agent**: Planning complete, awaiting implementation
+---
+
+## Recently Completed
+
+### Full System Testing - Deploy/Destroy Validation (2026-02-09)
+
+**Completed**: 2026-02-09
+**Duration**: Multiple sessions
+**Agent**: Claude (Opus 4.5)
+
+**Description**:
+Completed 2 full deploy/destroy cycles testing the entire BNK-Forge stack on remote server (192.168.1.96). All modules validated and working correctly.
+
+**Test Results**:
+- Fresh start script working correctly
+- All infrastructure modules deploy successfully
+- All destroy operations complete cleanly (with retry loops for timing issues)
+- Module library sync from `release/2.2` branch working
+
+**Key Fixes Applied During Testing**:
+- `fix(infra): improve destroy cleanup with retry loops for timing issues`
+- `fix(eks): add pre-create cleanup for orphaned KMS alias`
+- `fix(eks): add KMS alias cleanup on destroy`
+- `fix(infra): add cleanup for orphaned ENIs and EKS security groups`
+- `fix(high-performance-nodes): replace kubectl with AWS CLI in provisioners`
+- `fix(alembic): shorten migration filename to fix 32-char limit` (in bnk-forge-v2)
+
+**Documentation Updates**:
+- Updated README.md with version badges and tested status
+- Added version compatibility table
+- Added configuration instructions for module library branch
+
+**Versions Tested**:
+- bnk-forge-v2: 2.6.3
+- bnk-forge-modules: release/2.2 branch
+- Target: F5 BNK 2.2 GA
+
+---
+
+### P0: BNK 2.2 GA Alignment (2026-02-04 - 2026-02-08)
+
+**Completed**: 2026-02-08
+**Duration**: Multiple sessions
+**Agent**: Claude (Opus 4.5)
 **Implementation Plan**: `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
 
 **Description**:
-Align bnk-forge-modules and bnk-forge-v2 with F5 BIG-IP Next for Kubernetes 2.2 GA documentation. This is P0 because stack templates reference modules that were archived or don't exist.
+Aligned bnk-forge-modules and bnk-forge-v2 with F5 BIG-IP Next for Kubernetes 2.2 GA documentation.
 
-**Key Finding**:
-The modules `bnk/bnk-secpolicy` and `bnk/bnk-netpolicy` were archived on 2026-02-03 but are still needed:
-- Stack templates in bnk-forge-v2 reference these modules
-- They create CR **instances** (not install CRDs - FLO does that)
-- They're required for complete 2.2 GA deployment per F5 docs
-
-**Branching Strategy**:
-- Create `release/2.2` branch for this work
-- Future F5 versions get their own branches: `release/2.3`, `release/2.4`, etc.
-
-**Implementation Stages**:
+**Implementation Stages Completed**:
 
 | Stage | Task | Status |
 |-------|------|--------|
-| 1.1 | Restore `bnk/bnk-secpolicy` from archive, update to F5 2.2 schema | Not Started |
-| 1.2 | Restore `bnk/bnk-netpolicy` from archive, update to F5 2.2 schema | Not Started |
-| 1.3 | Create new `bnk/bnk-gateway-ext` for IPAM integration | Not Started |
-| 2.1 | Update `bnk/gateway` with IPAM support | Not Started |
-| 3.1 | Update DEPENDENCY_GRAPH.md | Not Started |
-| 3.2 | Update archived/README.md | Not Started |
-| 4 | Add CI validation workflow | Not Started |
-| 5.1 | Update bnk-forge-v2 stack_templates.json | Not Started |
-| 5.2 | Resync catalog and test | Not Started |
+| 1.1 | Restore `bnk/bnk-secpolicy` from archive, update to F5 2.2 schema | Completed |
+| 1.2 | Restore `bnk/bnk-netpolicy` from archive, update to F5 2.2 schema | Completed |
+| 1.3 | Create new `bnk/bnk-gateway-ext` for IPAM integration | Completed |
+| 2.1 | Update `bnk/gateway` with IPAM support | Completed |
+| 3.1 | Update DEPENDENCY_GRAPH.md | Completed |
+| 3.2 | Update archived/README.md | Completed |
+| 4 | Add CI validation workflow | Deferred |
+| 5.1 | Update bnk-forge-v2 stack_templates.json | Completed |
+| 5.2 | Resync catalog and test | Completed |
 
-**Next Steps for Implementing Agent**:
-1. Create `release/2.2` branch: `git checkout -b release/2.2 main`
-2. Follow `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md` stage by stage
-3. Verify each stage with `tofu validate` before proceeding
-4. Update this file with progress
-
-**Estimated Time**: ~3.5 hours total
-
-**Files to Modify**:
-- `bnk/bnk-secpolicy/*` (restore from `archived/bnk/crds/bnk-secpolicy/`)
-- `bnk/bnk-netpolicy/*` (restore from `archived/bnk/crds/bnk-netpolicy/`)
-- `bnk/bnk-gateway-ext/*` (new module)
-- `bnk/gateway/*` (add IPAM support)
-- `DEPENDENCY_GRAPH.md`
-- `archived/README.md`
-- `.github/workflows/validate-modules.yml` (new)
-
-**Related**:
-- Implementation Plan: `.agent/IMPLEMENTATION_PLAN_BNK_22_ALIGNMENT.md`
-- F5 Docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/
-- ADR-007: Version-based branching (in DECISIONS.md)
-- ADR-008: Policy modules as CR configuration (in DECISIONS.md)
-
-**Cross-Repo Work (bnk-forge-v2)**:
-After modules are ready, update in bnk-forge-v2:
-- `backend/data/stack_templates.json` - Add cert-manager before FLO, add new modules
-- Trigger catalog sync
-- Test "F5 BNK Complete" stack end-to-end
+**Branching Strategy Implemented**:
+- Created `release/2.2` branch for production use
+- Future F5 versions get their own branches: `release/2.3`, `release/2.4`, etc.
 
 ---
 

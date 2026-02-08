@@ -1,6 +1,33 @@
 # BNK-Forge Official Module Library
 
+![Version](https://img.shields.io/badge/Version-2.2.0-blue)
+![Branch](https://img.shields.io/badge/Branch-release/2.2-green)
+![F5 BNK](https://img.shields.io/badge/F5_BNK-2.2_GA-orange)
+![Status](https://img.shields.io/badge/Status-Tested-brightgreen)
+
 This repository contains the official BNK-Forge module library - a curated collection of Terraform/Terragrunt modules for deploying infrastructure, Kubernetes prerequisites, and BIG-IP Next for Kubernetes (BNK) components.
+
+**Last Tested:** 2026-02-09 (2 full deploy/destroy cycles completed successfully)
+
+> **IMPORTANT:** Always use the `release/2.2` branch for production deployments. The `main` branch is for development and may be unstable.
+
+## Version Compatibility
+
+| Module Branch | bnk-forge-v2 | F5 BNK Version | Status |
+|---------------|--------------|----------------|--------|
+| **release/2.2** | 2.6.x | 2.2 GA | **Current - Tested** |
+| main | Development | N/A | Unstable |
+
+### Configuring BNK-Forge to Use This Library
+
+In BNK-Forge v2, go to **Settings > Defaults** and set:
+
+```
+Module Library Git URL: https://github.com/JLCode-tech/bnk-forge-modules.git
+Module Library Git Ref: release/2.2
+```
+
+Then sync the catalog at **Settings > Environment Config > Sync Modules**.
 
 ## Overview
 
