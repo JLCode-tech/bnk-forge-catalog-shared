@@ -466,39 +466,67 @@ resource "null_resource" "cleanup_eks_enis" {
       echo "=== EKS Security Group Cleanup ==="
       # EKS creates its own security group (eks-cluster-sg-*) that isn't managed by terraform
       # This SG blocks VPC deletion if not cleaned up
-      EKS_SG_IDS=$(aws ec2 describe-security-groups \
-        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-                  "Name=tag:aws:eks:cluster-name,Values=${self.triggers.cluster_name}" \
-        --query 'SecurityGroups[].GroupId' \
-        --output text \
-        --region ${self.triggers.region} \
-        --profile ${self.triggers.profile} 2>/dev/null || echo "")
+      # NOTE: This cleanup runs early in destroy, so we need to retry until the EKS cluster
+      # is fully deleted and the SG becomes orphaned/deletable
       
-      # Also check for security groups with EKS naming pattern
-      if [ -z "$EKS_SG_IDS" ] || [ "$EKS_SG_IDS" = "None" ]; then
+      MAX_RETRIES=30
+      RETRY_INTERVAL=10
+      
+      for i in $(seq 1 $MAX_RETRIES); do
+        echo "Checking for EKS security groups (attempt $i/$MAX_RETRIES)..."
+        
+        # Look for SGs by tag first
         EKS_SG_IDS=$(aws ec2 describe-security-groups \
           --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
-                    "Name=group-name,Values=eks-cluster-sg-${self.triggers.cluster_name}-*" \
+                    "Name=tag:aws:eks:cluster-name,Values=${self.triggers.cluster_name}" \
           --query 'SecurityGroups[].GroupId' \
           --output text \
           --region ${self.triggers.region} \
           --profile ${self.triggers.profile} 2>/dev/null || echo "")
-      fi
-      
-      if [ ! -z "$EKS_SG_IDS" ] && [ "$EKS_SG_IDS" != "None" ]; then
-        echo "Found EKS-managed security groups to clean up: $EKS_SG_IDS"
-        for sg in $EKS_SG_IDS; do
-          if [ ! -z "$sg" ] && [ "$sg" != "None" ]; then
-            echo "Deleting EKS security group: $sg"
-            aws ec2 delete-security-group \
-              --group-id $sg \
-              --region ${self.triggers.region} \
-              --profile ${self.triggers.profile} 2>/dev/null || echo "Security group $sg already deleted or in use"
+        
+        # Also check for security groups with EKS naming pattern
+        if [ -z "$EKS_SG_IDS" ] || [ "$EKS_SG_IDS" = "None" ]; then
+          EKS_SG_IDS=$(aws ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
+                      "Name=group-name,Values=eks-cluster-sg-${self.triggers.cluster_name}-*" \
+            --query 'SecurityGroups[].GroupId' \
+            --output text \
+            --region ${self.triggers.region} \
+            --profile ${self.triggers.profile} 2>/dev/null || echo "")
+        fi
+        
+        if [ ! -z "$EKS_SG_IDS" ] && [ "$EKS_SG_IDS" != "None" ]; then
+          echo "Found EKS-managed security groups: $EKS_SG_IDS"
+          DELETED_ANY=false
+          for sg in $EKS_SG_IDS; do
+            if [ ! -z "$sg" ] && [ "$sg" != "None" ]; then
+              echo "Attempting to delete EKS security group: $sg"
+              if aws ec2 delete-security-group \
+                --group-id $sg \
+                --region ${self.triggers.region} \
+                --profile ${self.triggers.profile} 2>/dev/null; then
+                echo "Successfully deleted security group $sg"
+                DELETED_ANY=true
+              else
+                echo "Could not delete $sg yet (may still be in use by EKS)"
+              fi
+            fi
+          done
+          
+          if [ "$DELETED_ANY" = "true" ]; then
+            echo "EKS security group cleanup completed"
+            break
           fi
-        done
-      else
-        echo "No EKS-managed security groups found for cleanup"
-      fi
+        else
+          echo "No EKS security groups found in VPC"
+          break
+        fi
+        
+        if [ $i -lt $MAX_RETRIES ]; then
+          echo "Waiting $RETRY_INTERVAL seconds for EKS cluster to fully terminate..."
+          sleep $RETRY_INTERVAL
+        fi
+      done
       
       echo "EKS cleanup completed"
     EOT

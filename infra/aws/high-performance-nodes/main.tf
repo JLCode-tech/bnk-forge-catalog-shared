@@ -670,6 +670,7 @@ resource "null_resource" "verify_dpdk_setup" {
 
 # Cleanup resources - handles orphaned ENIs created by eni_attachment_manager
 # When nodes are terminated, ENIs are detached but not deleted, blocking security group deletion
+# IMPORTANT: This runs AFTER the node group is destroyed (depends_on in reverse)
 resource "null_resource" "cleanup" {
   triggers = {
     nodegroup_name        = aws_eks_node_group.x86_high_perf.node_group_name
@@ -681,33 +682,47 @@ resource "null_resource" "cleanup" {
     when    = destroy
     command = <<-EOT
       echo "High-Performance Nodes cleanup initiated..."
-      echo "Cleaning up orphaned ENIs created by ENI attachment manager..."
+      echo "Waiting for node group instances to fully terminate..."
       
-      # Find and delete orphaned ENIs that were created for high-performance nodes
-      # These ENIs have the tag ENIType=external-dpdk and are in 'available' state (detached)
-      ORPHANED_ENIS=$(aws ec2 describe-network-interfaces \
-        --region ${self.triggers.region} \
-        --filters "Name=group-id,Values=${self.triggers.vpc_security_group_id}" \
-                  "Name=status,Values=available" \
-                  "Name=tag:ENIType,Values=external-dpdk" \
-        --query 'NetworkInterfaces[*].NetworkInterfaceId' \
-        --output text 2>/dev/null || echo "")
+      # Wait for instances to terminate and ENIs to become available
+      # The node group may be deleted but instances take time to fully terminate
+      MAX_RETRIES=12
+      RETRY_INTERVAL=10
       
-      if [ -n "$ORPHANED_ENIS" ] && [ "$ORPHANED_ENIS" != "None" ]; then
-        echo "Found orphaned ENIs: $ORPHANED_ENIS"
-        for ENI_ID in $ORPHANED_ENIS; do
-          echo "Deleting orphaned ENI: $ENI_ID"
-          aws ec2 delete-network-interface \
-            --region ${self.triggers.region} \
-            --network-interface-id "$ENI_ID" 2>/dev/null || echo "Warning: Could not delete $ENI_ID (may already be deleted)"
-        done
-        echo "Orphaned ENI cleanup completed"
-      else
-        echo "No orphaned ENIs found"
-      fi
+      for i in $(seq 1 $MAX_RETRIES); do
+        echo "Checking for orphaned ENIs (attempt $i/$MAX_RETRIES)..."
+        
+        # Find orphaned ENIs that were created for high-performance nodes
+        # These ENIs have the tag ENIType=external-dpdk and are in 'available' state (detached)
+        ORPHANED_ENIS=$(aws ec2 describe-network-interfaces \
+          --region ${self.triggers.region} \
+          --filters "Name=group-id,Values=${self.triggers.vpc_security_group_id}" \
+                    "Name=status,Values=available" \
+                    "Name=tag:ENIType,Values=external-dpdk" \
+          --query 'NetworkInterfaces[*].NetworkInterfaceId' \
+          --output text 2>/dev/null || echo "")
+        
+        if [ -n "$ORPHANED_ENIS" ] && [ "$ORPHANED_ENIS" != "None" ]; then
+          echo "Found orphaned ENIs: $ORPHANED_ENIS"
+          for ENI_ID in $ORPHANED_ENIS; do
+            echo "Deleting orphaned ENI: $ENI_ID"
+            aws ec2 delete-network-interface \
+              --region ${self.triggers.region} \
+              --network-interface-id "$ENI_ID" 2>/dev/null || echo "Warning: Could not delete $ENI_ID (may already be deleted)"
+          done
+          echo "Orphaned ENI cleanup completed"
+          break
+        else
+          if [ $i -lt $MAX_RETRIES ]; then
+            echo "No orphaned ENIs found yet, waiting $RETRY_INTERVAL seconds for instances to terminate..."
+            sleep $RETRY_INTERVAL
+          else
+            echo "No orphaned ENIs found after $MAX_RETRIES attempts (this is OK if instances terminated cleanly)"
+          fi
+        fi
+      done
       
       echo "Kubernetes resources (DaemonSets, ConfigMaps, etc.) will be destroyed by Terraform"
-      echo "EKS node group deletion may take several minutes"
       echo "Cleanup process completed"
     EOT
   }
