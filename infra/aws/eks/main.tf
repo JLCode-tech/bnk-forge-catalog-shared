@@ -69,28 +69,28 @@ resource "aws_launch_template" "nodegroup" {
   image_id      = data.aws_ami.eks_worker.id
   instance_type = var.instance_type
   key_name      = var.infrastructure_key_name
-  
+
   vpc_security_group_ids = [var.vpc_security_group_id]
-  
+
   tag_specifications {
     resource_type = "instance"
     tags = merge(var.common_tags, {
       Name = "${var.project_name}-worker-node"
     })
   }
-  
+
   tag_specifications {
     resource_type = "volume"
     tags = merge(var.common_tags, {
       Name = "${var.project_name}-worker-node-volume"
     })
   }
-  
+
   user_data = base64encode(templatefile("${path.module}/templates/nodegroup_userdata.sh", {
     cluster_name = "${var.project_name}-cluster"
     region       = var.aws_region
   }))
-  
+
   tags = var.common_tags
 }
 
@@ -100,19 +100,19 @@ resource "aws_eks_node_group" "main" {
   node_group_name = "${var.project_name}-nodes"
   node_role_arn   = var.nodegroup_role_arn
   subnet_ids      = var.private_external_subnet_ids
-  
+
   scaling_config {
     desired_size = var.node_count
     max_size     = var.node_count + 1
     min_size     = 1
   }
-  
+
   # Use launch template for proper instance naming
   launch_template {
     id      = aws_launch_template.nodegroup.id
     version = "$Latest"
   }
-  
+
   tags = var.common_tags
 }
 
@@ -178,10 +178,10 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy" {
 
 # EBS CSI Driver addon
 resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name             = aws_eks_cluster.main.name
-  addon_name               = "aws-ebs-csi-driver"
-  addon_version            = var.ebs_csi_addon_version
-  service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "aws-ebs-csi-driver"
+  addon_version               = var.ebs_csi_addon_version
+  service_account_role_arn    = aws_iam_role.ebs_csi_driver.arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -200,7 +200,7 @@ resource "aws_eks_addon" "ebs_csi_driver" {
 # IAM role for EFS CSI driver (conditional)
 resource "aws_iam_role" "efs_csi_driver" {
   count = var.enable_efs_csi_driver ? 1 : 0
-  
+
   name = "${var.project_name}-efs-csi-driver-role"
 
   assume_role_policy = jsonencode({
@@ -230,7 +230,7 @@ resource "aws_iam_role" "efs_csi_driver" {
 # Attach AWS managed policy for EFS CSI driver (conditional)
 resource "aws_iam_role_policy_attachment" "efs_csi_driver_policy" {
   count = var.enable_efs_csi_driver ? 1 : 0
-  
+
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
   role       = aws_iam_role.efs_csi_driver[0].name
 }
@@ -239,10 +239,10 @@ resource "aws_iam_role_policy_attachment" "efs_csi_driver_policy" {
 resource "aws_eks_addon" "efs_csi_driver" {
   count = var.enable_efs_csi_driver ? 1 : 0
 
-  cluster_name             = aws_eks_cluster.main.name
-  addon_name               = "aws-efs-csi-driver"
-  addon_version            = var.efs_csi_addon_version
-  service_account_role_arn = aws_iam_role.efs_csi_driver[0].arn
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "aws-efs-csi-driver"
+  addon_version               = var.efs_csi_addon_version
+  service_account_role_arn    = aws_iam_role.efs_csi_driver[0].arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -262,9 +262,9 @@ resource "aws_eks_addon" "efs_csi_driver" {
 resource "aws_eks_addon" "snapshot_controller" {
   count = var.enable_snapshot_controller ? 1 : 0
 
-  cluster_name      = aws_eks_cluster.main.name
-  addon_name        = "snapshot-controller"
-  addon_version     = var.snapshot_controller_addon_version
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "snapshot-controller"
+  addon_version               = var.snapshot_controller_addon_version
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -282,10 +282,10 @@ resource "aws_eks_addon" "snapshot_controller" {
 # Enhanced nodegroup cleanup with proper drainage
 resource "null_resource" "nodegroup_cleanup" {
   triggers = {
-    cluster_name    = aws_eks_cluster.main.name
-    nodegroup_name  = aws_eks_node_group.main.node_group_name
-    region          = var.aws_region
-    profile         = var.aws_profile
+    cluster_name   = aws_eks_cluster.main.name
+    nodegroup_name = aws_eks_node_group.main.node_group_name
+    region         = var.aws_region
+    profile        = var.aws_profile
   }
 
   provisioner "local-exec" {
@@ -374,7 +374,7 @@ resource "null_resource" "cleanup_lambda_enis" {
   ]
 }
 
-# Cleanup remaining EKS and orphaned ENIs
+# Cleanup remaining EKS ENIs and orphaned security groups
 resource "null_resource" "cleanup_eks_enis" {
   triggers = {
     vpc_id       = var.vpc_id
@@ -416,6 +416,45 @@ resource "null_resource" "cleanup_eks_enis" {
       fi
       
       echo "EKS ENI cleanup completed"
+      
+      echo "=== EKS Security Group Cleanup ==="
+      # EKS creates its own security group (eks-cluster-sg-*) that isn't managed by terraform
+      # This SG blocks VPC deletion if not cleaned up
+      EKS_SG_IDS=$(aws ec2 describe-security-groups \
+        --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
+                  "Name=tag:aws:eks:cluster-name,Values=${self.triggers.cluster_name}" \
+        --query 'SecurityGroups[].GroupId' \
+        --output text \
+        --region ${self.triggers.region} \
+        --profile ${self.triggers.profile} 2>/dev/null || echo "")
+      
+      # Also check for security groups with EKS naming pattern
+      if [ -z "$EKS_SG_IDS" ] || [ "$EKS_SG_IDS" = "None" ]; then
+        EKS_SG_IDS=$(aws ec2 describe-security-groups \
+          --filters "Name=vpc-id,Values=${self.triggers.vpc_id}" \
+                    "Name=group-name,Values=eks-cluster-sg-${self.triggers.cluster_name}-*" \
+          --query 'SecurityGroups[].GroupId' \
+          --output text \
+          --region ${self.triggers.region} \
+          --profile ${self.triggers.profile} 2>/dev/null || echo "")
+      fi
+      
+      if [ ! -z "$EKS_SG_IDS" ] && [ "$EKS_SG_IDS" != "None" ]; then
+        echo "Found EKS-managed security groups to clean up: $EKS_SG_IDS"
+        for sg in $EKS_SG_IDS; do
+          if [ ! -z "$sg" ] && [ "$sg" != "None" ]; then
+            echo "Deleting EKS security group: $sg"
+            aws ec2 delete-security-group \
+              --group-id $sg \
+              --region ${self.triggers.region} \
+              --profile ${self.triggers.profile} 2>/dev/null || echo "Security group $sg already deleted or in use"
+          fi
+        done
+      else
+        echo "No EKS-managed security groups found for cleanup"
+      fi
+      
+      echo "EKS cleanup completed"
     EOT
   }
 

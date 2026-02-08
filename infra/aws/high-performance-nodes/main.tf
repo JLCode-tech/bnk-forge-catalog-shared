@@ -668,21 +668,47 @@ resource "null_resource" "verify_dpdk_setup" {
   }
 }
 
-# Cleanup resources
-# Note: Kubernetes resources are managed by terraform and will be destroyed automatically
-# This resource just logs the cleanup - actual k8s resource deletion handled by terraform
+# Cleanup resources - handles orphaned ENIs created by eni_attachment_manager
+# When nodes are terminated, ENIs are detached but not deleted, blocking security group deletion
 resource "null_resource" "cleanup" {
   triggers = {
-    nodegroup_name = aws_eks_node_group.x86_high_perf.node_group_name
+    nodegroup_name        = aws_eks_node_group.x86_high_perf.node_group_name
+    region                = var.region
+    vpc_security_group_id = var.vpc_security_group_id
   }
 
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
       echo "High-Performance Nodes cleanup initiated..."
+      echo "Cleaning up orphaned ENIs created by ENI attachment manager..."
+      
+      # Find and delete orphaned ENIs that were created for high-performance nodes
+      # These ENIs have the tag ENIType=external-dpdk and are in 'available' state (detached)
+      ORPHANED_ENIS=$(aws ec2 describe-network-interfaces \
+        --region ${self.triggers.region} \
+        --filters "Name=group-id,Values=${self.triggers.vpc_security_group_id}" \
+                  "Name=status,Values=available" \
+                  "Name=tag:ENIType,Values=external-dpdk" \
+        --query 'NetworkInterfaces[*].NetworkInterfaceId' \
+        --output text 2>/dev/null || echo "")
+      
+      if [ -n "$ORPHANED_ENIS" ] && [ "$ORPHANED_ENIS" != "None" ]; then
+        echo "Found orphaned ENIs: $ORPHANED_ENIS"
+        for ENI_ID in $ORPHANED_ENIS; do
+          echo "Deleting orphaned ENI: $ENI_ID"
+          aws ec2 delete-network-interface \
+            --region ${self.triggers.region} \
+            --network-interface-id "$ENI_ID" 2>/dev/null || echo "Warning: Could not delete $ENI_ID (may already be deleted)"
+        done
+        echo "Orphaned ENI cleanup completed"
+      else
+        echo "No orphaned ENIs found"
+      fi
+      
       echo "Kubernetes resources (DaemonSets, ConfigMaps, etc.) will be destroyed by Terraform"
       echo "EKS node group deletion may take several minutes"
-      echo "Cleanup process started"
+      echo "Cleanup process completed"
     EOT
   }
 }
