@@ -30,6 +30,28 @@ resource "aws_kms_alias" "eks_secrets" {
   target_key_id = aws_kms_key.eks_secrets.key_id
 }
 
+# Cleanup KMS alias on destroy - alias can get orphaned since KMS keys have 7-day deletion window
+# This prevents "AlreadyExistsException" on re-deploy with same project name
+resource "null_resource" "cleanup_kms_alias" {
+  triggers = {
+    alias_name = "alias/${var.project_name}-eks-secrets-key"
+    region     = var.aws_region
+    profile    = var.aws_profile
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "Cleaning up KMS alias: ${self.triggers.alias_name}"
+      aws kms delete-alias \
+        --alias-name "${self.triggers.alias_name}" \
+        --region ${self.triggers.region} \
+        --profile ${self.triggers.profile} 2>/dev/null || echo "KMS alias already deleted or not found"
+      echo "KMS alias cleanup completed"
+    EOT
+  }
+}
+
 # EKS Cluster - using security module IAM roles
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-cluster"
