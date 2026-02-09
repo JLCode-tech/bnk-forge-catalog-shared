@@ -1,13 +1,22 @@
-# infrastructure-modules/spk-2.1/far-setup/main.tf
+# bnk/far-setup/main.tf
+# F5 BIG-IP Next for Kubernetes (BNK) 2.2 - FAR Setup
+# Sets up F5 Artifact Registry authentication and downloads manifest
 
 # =============================================================================
 # LOCAL VARIABLES
 # =============================================================================
 
 locals {
+  # Use new BNK naming, fall back to legacy SPK naming for backward compatibility
+  effective_namespace        = var.bnk_namespace != "" ? var.bnk_namespace : (var.spk_namespace != "" ? var.spk_namespace : "f5-bnk")
+  effective_manifest_version = var.bnk_manifest_version != "" ? var.bnk_manifest_version : var.spk_manifest_version
+
   # Create list of all namespaces that need FAR secrets
-  far_namespaces = [
-    var.spk_namespace,
+  far_namespaces = var.create_namespaces ? [
+    local.effective_namespace,
+    var.utils_namespace
+    ] : [
+    local.effective_namespace,
     var.utils_namespace
   ]
 
@@ -19,33 +28,35 @@ locals {
 }
 
 # =============================================================================
-# KUBERNETES NAMESPACES
+# KUBERNETES NAMESPACES (optional - prefer using bnk-namespaces module)
 # =============================================================================
-# Note: Kubernetes provider is configured by BNK-Forge platform
-# This module is cloud-agnostic - works with EKS, AKS, GKE, or any K8s cluster
 
-# Create SPK namespace for controller/TMM
-resource "kubernetes_namespace" "spk" {
+# Create BNK namespace for controller/TMM (only if create_namespaces = true)
+resource "kubernetes_namespace" "bnk" {
+  count = var.create_namespaces ? 1 : 0
+
   metadata {
-    name = var.spk_namespace
+    name = local.effective_namespace
     labels = {
-      "app.kubernetes.io/name"       = "spk"
+      "app.kubernetes.io/name"       = "bnk"
       "app.kubernetes.io/component"  = "controller"
       "app.kubernetes.io/managed-by" = "terraform"
-      "f5.com/spk-version"           = var.spk_manifest_version
+      "f5.com/bnk-version"           = local.effective_manifest_version
     }
   }
 }
 
-# Create utils namespace for shared components  
+# Create utils namespace for shared components (only if create_namespaces = true)
 resource "kubernetes_namespace" "utils" {
+  count = var.create_namespaces ? 1 : 0
+
   metadata {
     name = var.utils_namespace
     labels = {
-      "app.kubernetes.io/name"       = "spk"
+      "app.kubernetes.io/name"       = "bnk"
       "app.kubernetes.io/component"  = "utils"
       "app.kubernetes.io/managed-by" = "terraform"
-      "f5.com/spk-version"           = var.spk_manifest_version
+      "f5.com/bnk-version"           = local.effective_manifest_version
     }
   }
 }
@@ -54,15 +65,13 @@ resource "kubernetes_namespace" "utils" {
 # FAR AUTHENTICATION SECRETS
 # =============================================================================
 
-# Create FAR authentication secrets in each namespace
-resource "kubernetes_secret" "far_auth" {
-  for_each = toset(local.far_namespaces)
-
+# Create FAR authentication secrets in BNK namespace
+resource "kubernetes_secret" "far_auth_bnk" {
   metadata {
     name      = "far-secret"
-    namespace = each.value
+    namespace = local.effective_namespace
     labels = {
-      "app.kubernetes.io/name"       = "spk"
+      "app.kubernetes.io/name"       = "bnk"
       "app.kubernetes.io/component"  = "far-auth"
       "app.kubernetes.io/managed-by" = "terraform"
     }
@@ -81,7 +90,35 @@ resource "kubernetes_secret" "far_auth" {
   }
 
   depends_on = [
-    kubernetes_namespace.spk,
+    kubernetes_namespace.bnk
+  ]
+}
+
+# Create FAR authentication secrets in utils namespace
+resource "kubernetes_secret" "far_auth_utils" {
+  metadata {
+    name      = "far-secret"
+    namespace = var.utils_namespace
+    labels = {
+      "app.kubernetes.io/name"       = "bnk"
+      "app.kubernetes.io/component"  = "far-auth"
+      "app.kubernetes.io/managed-by" = "terraform"
+    }
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        "repo.f5.com" = {
+          auth = local.docker_auth
+        }
+      }
+    })
+  }
+
+  depends_on = [
     kubernetes_namespace.utils
   ]
 }
@@ -95,7 +132,7 @@ data "external" "manifest_download" {
   program = ["bash", "${path.module}/scripts/download-manifest.sh"]
 
   query = {
-    manifest_version         = var.spk_manifest_version
+    manifest_version         = local.effective_manifest_version
     chart_name               = var.manifest_chart_name
     work_dir                 = "${path.module}/work"
     service_account_key_file = var.service_account_key_file
@@ -118,8 +155,6 @@ data "external" "component_versions" {
 # =============================================================================
 
 # Validate that required component versions were parsed
-# Note: CWC, CRDs, F5Ingress, DSSM, Fluentd are now managed by FLO (F5 Lifecycle Operator)
-# FAR-setup only needs to validate prerequisites: cert_manager and flo
 resource "local_file" "version_validation" {
   filename = "${path.module}/work/versions-validated.json"
   content = jsonencode({

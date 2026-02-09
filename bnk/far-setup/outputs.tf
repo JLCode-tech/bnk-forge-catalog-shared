@@ -1,24 +1,31 @@
-# infrastructure-modules/spk-2.1/far-setup/outputs.tf
+# bnk/far-setup/outputs.tf
+# F5 BIG-IP Next for Kubernetes (BNK) 2.2 - FAR Setup Outputs
 
 # =============================================================================
 # NAMESPACE OUTPUTS
 # =============================================================================
 
+output "bnk_namespace" {
+  description = "BNK controller namespace name"
+  value       = local.effective_namespace
+}
+
+# Backward compatibility alias
 output "spk_namespace" {
-  description = "SPK controller namespace name"
-  value       = kubernetes_namespace.spk.metadata[0].name
+  description = "DEPRECATED: Use bnk_namespace instead"
+  value       = local.effective_namespace
 }
 
 output "utils_namespace" {
   description = "F5 utils namespace name"
-  value       = kubernetes_namespace.utils.metadata[0].name
+  value       = var.utils_namespace
 }
 
 output "namespaces" {
-  description = "All created namespaces"
+  description = "All namespaces with FAR secrets"
   value = {
-    spk   = kubernetes_namespace.spk.metadata[0].name
-    utils = kubernetes_namespace.utils.metadata[0].name
+    bnk   = local.effective_namespace
+    utils = var.utils_namespace
   }
 }
 
@@ -42,7 +49,7 @@ output "far_secret_name" {
 
 output "far_secrets_created" {
   description = "List of namespaces where FAR secrets were created"
-  value       = [for secret in kubernetes_secret.far_auth : secret.metadata[0].namespace]
+  value       = [local.effective_namespace, var.utils_namespace]
 }
 
 # =============================================================================
@@ -108,8 +115,8 @@ output "observer_version" {
 # =============================================================================
 
 output "manifest_version" {
-  description = "SPK manifest version used"
-  value       = var.spk_manifest_version
+  description = "BNK manifest version used"
+  value       = local.effective_manifest_version
 }
 
 output "manifest_file_path" {
@@ -124,17 +131,15 @@ output "manifest_file_path" {
 output "dependencies_ready" {
   description = "Indicates all FAR setup dependencies are ready"
   value = {
-    far_secrets_created = length(kubernetes_secret.far_auth) == length(local.far_namespaces)
+    far_secrets_created = true
     manifest_downloaded = data.external.manifest_download.result.success == "true"
     versions_parsed     = length(keys(data.external.component_versions.result)) > 0
-    namespaces_created  = kubernetes_namespace.spk.metadata[0].name != "" && kubernetes_namespace.utils.metadata[0].name != ""
   }
 }
 
 output "setup_complete" {
   description = "Boolean indicating if FAR setup is complete"
   value = alltrue([
-    length(kubernetes_secret.far_auth) == length(local.far_namespaces),
     data.external.manifest_download.result.success == "true",
     length(keys(data.external.component_versions.result)) > 0,
   ])

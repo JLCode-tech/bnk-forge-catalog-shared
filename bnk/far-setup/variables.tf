@@ -1,16 +1,24 @@
-# infrastructure-modules/spk-2.1/far-setup/variables.tf
+# bnk/far-setup/variables.tf
+# F5 BIG-IP Next for Kubernetes (BNK) 2.2 - FAR Setup Variables
 
 # =============================================================================
 # REQUIRED VARIABLES
 # =============================================================================
 
-variable "spk_manifest_version" {
-  description = "SPK manifest version to download from FAR"
+variable "bnk_manifest_version" {
+  description = "BNK manifest version to download from FAR (e.g., 2.2.0-3.2226.0-0.0.385)"
   type        = string
   validation {
-    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+$", var.spk_manifest_version))
-    error_message = "SPK manifest version must follow format: X.Y.Z-A.B.C-D.E.F (e.g., 2.1.0-3.1736.1-0.1.27)"
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+\\.[0-9]+\\.[0-9]+$", var.bnk_manifest_version))
+    error_message = "BNK manifest version must follow format: X.Y.Z-A.B.C-D.E.F (e.g., 2.2.0-3.2226.0-0.0.385)"
   }
+}
+
+# Backward compatibility alias
+variable "spk_manifest_version" {
+  description = "DEPRECATED: Use bnk_manifest_version instead. Kept for backward compatibility."
+  type        = string
+  default     = ""
 }
 
 variable "manifest_chart_name" {
@@ -28,14 +36,21 @@ variable "service_account_key_file" {
   }
 }
 
-variable "spk_namespace" {
-  description = "Kubernetes namespace for SPK controller and TMM components"
+variable "bnk_namespace" {
+  description = "Kubernetes namespace for BNK controller and TMM components"
   type        = string
-  default     = "f5-spk"
+  default     = "f5-bnk"
   validation {
-    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.spk_namespace))
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.bnk_namespace))
     error_message = "Namespace must be valid Kubernetes namespace name (lowercase alphanumeric and hyphens)"
   }
+}
+
+# Backward compatibility alias
+variable "spk_namespace" {
+  description = "DEPRECATED: Use bnk_namespace instead. Kept for backward compatibility."
+  type        = string
+  default     = ""
 }
 
 variable "utils_namespace" {
@@ -53,9 +68,9 @@ variable "utils_namespace" {
 # =============================================================================
 
 variable "create_namespaces" {
-  description = "Whether to create the SPK and utils namespaces"
+  description = "Whether to create the BNK and utils namespaces (set false if using bnk-namespaces module)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 # =============================================================================
@@ -81,4 +96,5 @@ variable "common_labels" {
 variable "cluster_name" {
   description = "Name of the Kubernetes cluster (used for resource naming and identification)"
   type        = string
+  default     = ""
 }
