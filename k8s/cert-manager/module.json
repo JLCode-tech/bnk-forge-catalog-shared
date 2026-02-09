@@ -1,21 +1,16 @@
 {
   "module": {
-    "name": "Cert-Manager",
+    "name": "Cert-Manager (Jetstack)",
     "path": "k8s/cert-manager",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "layer": "kubernetes",
     "category": "security",
-    "description": "Deploys cert-manager for automatic certificate management and TLS provisioning in Kubernetes. Required for BNK CWC and FLO webhook certificates.",
+    "description": "Deploys Jetstack cert-manager v1.16.1 for automatic certificate management. Per F5 BNK 2.2 GA docs: 'F5 tested BIG-IP Next for Kubernetes with Jetstack Cert Manager v1.16.1'. Creates self-signed ClusterIssuer for BNK component certificates.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
   "dependencies": {
-    "required": [
-      {
-        "module": "bnk/far-setup",
-        "reason": "Provides F5 registry authentication and component version information"
-      }
-    ],
+    "required": [],
     "optional": []
   },
   "inputs": {
@@ -26,62 +21,49 @@
         "description": "Name of the Kubernetes cluster (used for resource identification)",
         "source": "user",
         "example": "my-cluster"
-      },
-      {
-        "name": "namespace",
-        "type": "string",
-        "description": "Namespace for cert-manager deployment",
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "spk_namespace",
-        "example": "f5-spk"
-      },
-      {
-        "name": "far_secret_name",
-        "type": "string",
-        "description": "Name of the FAR registry secret for pulling images",
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "far_secret_name",
-        "example": "far-secret"
-      },
-      {
-        "name": "cert_manager_version",
-        "type": "string",
-        "description": "Version of cert-manager to deploy",
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "cert_manager_version",
-        "example": "v1.13.2"
       }
     ],
     "optional": [
       {
-        "name": "enable_webhook",
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace for cert-manager deployment (standard is 'cert-manager')",
+        "default": "cert-manager",
+        "source": "user"
+      },
+      {
+        "name": "cert_manager_version",
+        "type": "string",
+        "description": "Jetstack cert-manager version. F5 BNK 2.2 GA tested with v1.16.1",
+        "default": "v1.16.1",
+        "source": "user"
+      },
+      {
+        "name": "create_cluster_issuer",
         "type": "boolean",
-        "description": "Enable cert-manager webhook for validation",
+        "description": "Create self-signed ClusterIssuer for BNK certificates",
         "default": true,
         "source": "user"
       },
       {
-        "name": "install_crds",
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "Name of the CA ClusterIssuer (referenced by FLO global.certmgr.clusterIssuer)",
+        "default": "bnk-ca-cluster-issuer",
+        "source": "user"
+      },
+      {
+        "name": "controller_replicas",
+        "type": "number",
+        "description": "Number of cert-manager controller replicas",
+        "default": 1,
+        "source": "user"
+      },
+      {
+        "name": "create_namespace",
         "type": "boolean",
-        "description": "Install cert-manager CRDs",
+        "description": "Whether to create the cert-manager namespace",
         "default": true,
-        "source": "user"
-      },
-      {
-        "name": "resource_limits_cpu",
-        "type": "string",
-        "description": "CPU resource limits for cert-manager",
-        "default": "100m",
-        "source": "user"
-      },
-      {
-        "name": "resource_limits_memory",
-        "type": "string",
-        "description": "Memory resource limits for cert-manager",
-        "default": "128Mi",
         "source": "user"
       }
     ]
@@ -92,14 +74,14 @@
         "name": "cert_manager_ready",
         "type": "boolean",
         "description": "Flag indicating cert-manager is deployed and ready",
-        "used_by": ["bnk/cwc", "bnk/flo"],
+        "used_by": ["bnk/flo"],
         "sensitive": false
       },
       {
-        "name": "release_status",
+        "name": "cluster_issuer_name",
         "type": "string",
-        "description": "Status of the Helm release deployment",
-        "used_by": [],
+        "description": "Name of the ClusterIssuer for FLO and CNEInstance configuration",
+        "used_by": ["bnk/flo"],
         "sensitive": false
       },
       {
@@ -110,9 +92,9 @@
         "sensitive": false
       },
       {
-        "name": "webhook_service_name",
+        "name": "release_status",
         "type": "string",
-        "description": "Name of the cert-manager webhook service",
+        "description": "Status of the Helm release deployment",
         "used_by": [],
         "sensitive": false
       }
@@ -120,7 +102,7 @@
   },
   "providers": {
     "required": ["kubernetes", "helm"],
-    "optional": []
+    "optional": ["time", "null"]
   },
   "backend": {
     "recommendations": {
@@ -131,8 +113,8 @@
     }
   },
   "deployment": {
-    "order": 45,
-    "estimated_time": "5 minutes",
+    "order": 35,
+    "estimated_time": "3 minutes",
     "requires_user_input": false,
     "sensitive_inputs": []
   }

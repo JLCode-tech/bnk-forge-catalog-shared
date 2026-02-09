@@ -22,11 +22,6 @@ variable "gatewayclass_name" {
   }
 }
 
-variable "controller_namespace" {
-  description = "Namespace where F5 controller is deployed (typically f5-spk)"
-  type        = string
-}
-
 variable "flo_namespace" {
   description = "Namespace where FLO is deployed (BNKGatewayClass must be in same namespace as FLO)"
   type        = string

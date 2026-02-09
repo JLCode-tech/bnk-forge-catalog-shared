@@ -83,13 +83,24 @@ resource "helm_release" "flo" {
 
   values = [
     yamlencode({
+      # Global configuration - includes cert-manager ClusterIssuer
+      # Per F5 BNK 2.2 GA docs: global.certmgr.clusterIssuer must be set
+      global = {
+        imagePullSecrets = [
+          { name = var.far_secret_name }
+        ]
+        certmgr = {
+          clusterIssuer = var.cluster_issuer_name
+        }
+      }
+
       # Image configuration
       image = {
         repository = var.image_registry
         pullPolicy = "IfNotPresent"
       }
 
-      # Image pull secrets
+      # Image pull secrets (also at top level for compatibility)
       imagePullSecrets = [
         { name = var.far_secret_name }
       ]

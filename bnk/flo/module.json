@@ -98,6 +98,24 @@
         "source": "module",
         "from_module": "k8s/cert-manager",
         "from_output": "cert_manager_ready"
+      },
+      {
+        "name": "far_setup_complete",
+        "type": "boolean",
+        "description": "Dependency flag indicating FAR setup is complete",
+        "default": true,
+        "source": "module",
+        "from_module": "bnk/far-setup",
+        "from_output": "setup_complete"
+      },
+      {
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "Name of the ClusterIssuer for FLO certificate generation (from cert-manager)",
+        "default": "bnk-ca-cluster-issuer",
+        "source": "module",
+        "from_module": "k8s/cert-manager",
+        "from_output": "cluster_issuer_name"
       }
     ]
   },

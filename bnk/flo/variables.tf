@@ -149,6 +149,16 @@ variable "tolerations" {
 }
 
 # =============================================================================
+# CERTIFICATE CONFIGURATION
+# =============================================================================
+
+variable "cluster_issuer_name" {
+  description = "Name of the ClusterIssuer for FLO certificate generation (from cert-manager). Per F5 BNK 2.2: set global.certmgr.clusterIssuer in flo-values.yaml"
+  type        = string
+  default     = "bnk-ca-cluster-issuer"
+}
+
+# =============================================================================
 # DEPENDENCY INPUTS
 # =============================================================================
 
