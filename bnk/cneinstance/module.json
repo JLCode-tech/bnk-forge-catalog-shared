@@ -1,0 +1,100 @@
+{
+  "module": {
+    "name": "CNE Instance",
+    "path": "bnk/cneinstance",
+    "version": "1.0.0",
+    "layer": "bnk-system",
+    "category": "system",
+    "description": "Creates CNEInstance - the CNE controller that handles Gateway API CRs. Required for BNK 2.2 Gateway API mode.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO provides CNEInstance CRD"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name for the CNE instance",
+        "source": "user",
+        "default": "cne-instance"
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Namespace for CNE instance (same as FLO)",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_namespace",
+        "default": "f5-bnk"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready"
+      }
+    ],
+    "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "instance_config",
+        "type": "object",
+        "description": "CNE instance configuration",
+        "default": {"instance_type": "standard", "replicas": 1},
+        "source": "user"
+      },
+      {
+        "name": "resource_limits",
+        "type": "object",
+        "description": "Resource limits for CNE instance",
+        "default": {},
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "instance_ready",
+        "type": "boolean",
+        "description": "Flag indicating CNE instance is ready",
+        "used_by": ["bnk/bnk-gatewayclass"],
+        "sensitive": false
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name of the CNE instance",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "deployment": {
+    "order": 55,
+    "estimated_time": "2 minutes",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
+}
