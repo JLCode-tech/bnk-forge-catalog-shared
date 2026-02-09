@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "layer": "bnk-gateway",
     "category": "routing",
-    "description": "Creates Kubernetes Gateway API Route resources (HTTPRoute, GRPCRoute, TCPRoute, UDPRoute) for application traffic routing through BNK Gateway.",
+    "description": "Creates Kubernetes Gateway API Route resources (HTTPRoute, GRPCRoute, L4Route) for application traffic routing through BNK Gateway.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -14,10 +14,6 @@
       {
         "module": "bnk/gateway",
         "reason": "Routes must attach to an existing Gateway"
-      },
-      {
-        "module": "bnk/flo",
-        "reason": "Provides FLO controller for route processing"
       }
     ],
     "optional": []
@@ -25,105 +21,67 @@
   "inputs": {
     "required": [
       {
-        "name": "cluster_name",
-        "type": "string",
-        "description": "Name of the Kubernetes cluster (used for resource identification)",
-        "source": "user",
-        "example": "my-cluster"
-      },
-      {
         "name": "route_name",
         "type": "string",
         "description": "Name for the Route resource",
         "source": "user",
-        "example": "my-app-route"
+        "example": "my-app-route",
+        "default": "default-route"
       },
       {
         "name": "route_namespace",
         "type": "string",
         "description": "Namespace for Route deployment",
         "source": "user",
-        "example": "default"
-      },
-      {
-        "name": "gateway_name",
-        "type": "string",
-        "description": "Name of the Gateway to attach to",
-        "source": "module",
-        "from_module": "bnk/gateway",
-        "from_output": "gateway_name",
-        "example": "bnk-gateway"
+        "example": "gateway-ns",
+        "default": "gateway-ns"
       },
       {
         "name": "route_type",
         "type": "string",
-        "description": "Type of route (HTTPRoute, GRPCRoute, TCPRoute, UDPRoute, TLSRoute)",
+        "description": "Type of route (HTTPRoute, GRPCRoute, L4Route)",
         "source": "user",
-        "example": "HTTPRoute"
+        "example": "HTTPRoute",
+        "default": "HTTPRoute"
       },
       {
-        "name": "routing_rules",
+        "name": "parent_refs",
         "type": "list(object)",
-        "description": "List of routing rules (matches, filters, backend_refs)",
+        "description": "List of parent Gateways this route attaches to",
         "source": "user",
-        "example": [
-          {
-            "matches": [
-              {
-                "path": {
-                  "type": "PathPrefix",
-                  "value": "/api"
-                }
-              }
-            ],
-            "backend_refs": [
-              {
-                "name": "api-service",
-                "port": 8080
-              }
-            ]
-          }
-        ]
+        "example": [{"name": "bnk-gateway", "namespace": "gateway-ns"}],
+        "default": [{"name": "bnk-gateway", "namespace": "gateway-ns"}]
       },
       {
-        "name": "flo_ready",
+        "name": "rules",
+        "type": "list(object)",
+        "description": "Routing rules (matches, filters, backend_refs)",
+        "source": "user",
+        "example": [{"matches": [{"path": {"type": "PathPrefix", "value": "/"}}]}],
+        "default": [{"matches": [{"path": {"type": "PathPrefix", "value": "/"}}]}]
+      },
+      {
+        "name": "gateway_ready",
         "type": "boolean",
-        "description": "Dependency flag ensuring FLO is ready",
+        "description": "Dependency flag ensuring Gateway is ready",
         "source": "module",
-        "from_module": "bnk/flo",
-        "from_output": "flo_ready",
-        "example": true
+        "from_module": "bnk/gateway",
+        "from_output": "gateway_ready"
       }
     ],
     "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
+        "source": "user"
+      },
       {
         "name": "hostnames",
         "type": "list(string)",
         "description": "Hostnames for route matching",
         "default": [],
-        "source": "user"
-      },
-      {
-        "name": "gateway_namespace",
-        "type": "string",
-        "description": "Namespace of the Gateway (if different from route namespace)",
-        "default": "",
-        "source": "module",
-        "from_module": "bnk/gateway",
-        "from_output": "gateway_namespace"
-      },
-      {
-        "name": "timeout",
-        "type": "string",
-        "description": "Request timeout duration",
-        "default": "30s",
-        "source": "user"
-      },
-      {
-        "name": "retry_policy",
-        "type": "object",
-        "description": "Retry policy configuration",
-        "default": null,
         "source": "user"
       }
     ]
@@ -131,30 +89,9 @@
   "outputs": {
     "key_outputs": [
       {
-        "name": "route_ready",
-        "type": "boolean",
-        "description": "Flag indicating Route is accepted and programmed",
-        "used_by": [],
-        "sensitive": false
-      },
-      {
         "name": "route_name",
         "type": "string",
         "description": "Name of the created Route",
-        "used_by": [],
-        "sensitive": false
-      },
-      {
-        "name": "route_namespace",
-        "type": "string",
-        "description": "Namespace where Route is deployed",
-        "used_by": [],
-        "sensitive": false
-      },
-      {
-        "name": "parent_refs",
-        "type": "list(string)",
-        "description": "List of parent Gateway references",
         "used_by": [],
         "sensitive": false
       }
@@ -164,18 +101,10 @@
     "required": ["kubernetes"],
     "optional": []
   },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local"
-    }
-  },
   "deployment": {
     "order": 80,
-    "estimated_time": "2 minutes",
-    "requires_user_input": true,
+    "estimated_time": "1 minute",
+    "requires_user_input": false,
     "sensitive_inputs": []
   }
 }

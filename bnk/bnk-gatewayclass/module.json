@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "layer": "bnk-gateway",
     "category": "gateway",
-    "description": "Creates Kubernetes Gateway API GatewayClass resource for BNK. Defines the controller configuration and TMM resource allocations for Gateway instances.",
+    "description": "Creates Kubernetes Gateway API GatewayClass resource for BNK with TMM configuration.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -13,7 +13,7 @@
     "required": [
       {
         "module": "bnk/flo",
-        "reason": "FLO provides the Gateway API controller implementation and CRDs"
+        "reason": "FLO provides the Gateway API controller"
       }
     ],
     "optional": []
@@ -21,18 +21,12 @@
   "inputs": {
     "required": [
       {
-        "name": "cluster_name",
-        "type": "string",
-        "description": "Name of the Kubernetes cluster (used for resource identification)",
-        "source": "user",
-        "example": "my-cluster"
-      },
-      {
         "name": "gatewayclass_name",
         "type": "string",
         "description": "Name for the GatewayClass resource",
         "source": "user",
-        "example": "bnk-gatewayclass"
+        "example": "bnk-gatewayclass",
+        "default": "bnk-gatewayclass"
       },
       {
         "name": "flo_namespace",
@@ -41,7 +35,7 @@
         "source": "module",
         "from_module": "bnk/flo",
         "from_output": "flo_namespace",
-        "example": "f5-spk"
+        "default": "f5-bnk"
       },
       {
         "name": "flo_ready",
@@ -49,51 +43,22 @@
         "description": "Dependency flag ensuring FLO is ready",
         "source": "module",
         "from_module": "bnk/flo",
-        "from_output": "flo_ready",
-        "example": true
+        "from_output": "flo_ready"
       }
     ],
     "optional": [
       {
-        "name": "tmm_cpu_limit",
+        "name": "cluster_name",
         "type": "string",
-        "description": "CPU resource limit for TMM pods",
-        "default": "2",
-        "source": "user"
-      },
-      {
-        "name": "tmm_memory_limit",
-        "type": "string",
-        "description": "Memory resource limit for TMM pods",
-        "default": "4Gi",
-        "source": "user"
-      },
-      {
-        "name": "tmm_cpu_request",
-        "type": "string",
-        "description": "CPU resource request for TMM pods",
-        "default": "1",
-        "source": "user"
-      },
-      {
-        "name": "tmm_memory_request",
-        "type": "string",
-        "description": "Memory resource request for TMM pods",
-        "default": "2Gi",
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
         "source": "user"
       },
       {
         "name": "controller_name",
         "type": "string",
         "description": "Controller name for GatewayClass",
-        "default": "bnk.f5.com/gateway-controller",
-        "source": "user"
-      },
-      {
-        "name": "description",
-        "type": "string",
-        "description": "Description for the GatewayClass",
-        "default": "BNK Gateway API GatewayClass",
+        "default": "f5.com/gateway-controller",
         "source": "user"
       }
     ]
@@ -110,15 +75,8 @@
       {
         "name": "gatewayclass_ready",
         "type": "boolean",
-        "description": "Flag indicating GatewayClass is accepted and ready",
+        "description": "Flag indicating GatewayClass is ready",
         "used_by": ["bnk/gateway"],
-        "sensitive": false
-      },
-      {
-        "name": "controller_name",
-        "type": "string",
-        "description": "Controller managing this GatewayClass",
-        "used_by": [],
         "sensitive": false
       }
     ]
@@ -126,14 +84,6 @@
   "providers": {
     "required": ["kubernetes"],
     "optional": []
-  },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local"
-    }
   },
   "deployment": {
     "order": 60,

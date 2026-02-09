@@ -5,7 +5,7 @@
     "version": "2.0.0",
     "layer": "kubernetes",
     "category": "security",
-    "description": "Deploys Jetstack cert-manager v1.16.1 for automatic certificate management. Per F5 BNK 2.2 GA docs: 'F5 tested BIG-IP Next for Kubernetes with Jetstack Cert Manager v1.16.1'. Creates self-signed ClusterIssuer for BNK component certificates.",
+    "description": "Deploys Jetstack cert-manager v1.16.1 with self-signed ClusterIssuer for BNK certificates. Per F5 BNK 2.2 GA docs.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -14,56 +14,48 @@
     "optional": []
   },
   "inputs": {
-    "required": [
+    "required": [],
+    "optional": [
       {
         "name": "cluster_name",
         "type": "string",
-        "description": "Name of the Kubernetes cluster (used for resource identification)",
-        "source": "user",
-        "example": "my-cluster"
-      }
-    ],
-    "optional": [
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
+        "source": "user"
+      },
       {
         "name": "namespace",
         "type": "string",
-        "description": "Namespace for cert-manager deployment (standard is 'cert-manager')",
+        "description": "Namespace for cert-manager",
         "default": "cert-manager",
         "source": "user"
       },
       {
         "name": "cert_manager_version",
         "type": "string",
-        "description": "Jetstack cert-manager version. F5 BNK 2.2 GA tested with v1.16.1",
+        "description": "Jetstack cert-manager version (F5 tested v1.16.1)",
         "default": "v1.16.1",
         "source": "user"
       },
       {
         "name": "create_cluster_issuer",
         "type": "boolean",
-        "description": "Create self-signed ClusterIssuer for BNK certificates",
+        "description": "Create self-signed ClusterIssuer",
         "default": true,
         "source": "user"
       },
       {
         "name": "cluster_issuer_name",
         "type": "string",
-        "description": "Name of the CA ClusterIssuer (referenced by FLO global.certmgr.clusterIssuer)",
+        "description": "Name of the CA ClusterIssuer",
         "default": "bnk-ca-cluster-issuer",
         "source": "user"
       },
       {
-        "name": "controller_replicas",
-        "type": "number",
-        "description": "Number of cert-manager controller replicas",
-        "default": 1,
-        "source": "user"
-      },
-      {
-        "name": "create_namespace",
-        "type": "boolean",
-        "description": "Whether to create the cert-manager namespace",
-        "default": true,
+        "name": "ca_certificate_name",
+        "type": "string",
+        "description": "Name of the CA certificate",
+        "default": "bnk-ca",
         "source": "user"
       }
     ]
@@ -73,44 +65,22 @@
       {
         "name": "cert_manager_ready",
         "type": "boolean",
-        "description": "Flag indicating cert-manager is deployed and ready",
+        "description": "Flag indicating cert-manager is ready",
         "used_by": ["bnk/flo"],
         "sensitive": false
       },
       {
         "name": "cluster_issuer_name",
         "type": "string",
-        "description": "Name of the ClusterIssuer for FLO and CNEInstance configuration",
+        "description": "Name of the ClusterIssuer",
         "used_by": ["bnk/flo"],
-        "sensitive": false
-      },
-      {
-        "name": "namespace",
-        "type": "string",
-        "description": "Namespace where cert-manager is deployed",
-        "used_by": [],
-        "sensitive": false
-      },
-      {
-        "name": "release_status",
-        "type": "string",
-        "description": "Status of the Helm release deployment",
-        "used_by": [],
         "sensitive": false
       }
     ]
   },
   "providers": {
     "required": ["kubernetes", "helm"],
-    "optional": ["time", "null"]
-  },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local"
-    }
+    "optional": []
   },
   "deployment": {
     "order": 35,
