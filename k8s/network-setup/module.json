@@ -1,76 +1,59 @@
 {
   "module": {
-    "name": "Kubernetes Network Setup (Multus NADs)",
+    "name": "Network Attachment Definitions",
     "path": "k8s/network-setup",
     "version": "1.0.0",
     "layer": "kubernetes",
     "category": "networking",
-    "description": "Creates Multus Network Attachment Definitions (NADs) for external and internal networks. Required for BNK legacy SPK controller mode with multiple network interfaces.",
+    "description": "Creates Multus NetworkAttachmentDefinitions (NADs) for TMM external/internal networks. Required for BNK high-performance deployments.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
   "dependencies": {
-    "required": [],
+    "required": [
+      {
+        "module": "k8s/bnk-namespaces",
+        "reason": "NADs deployed to BNK namespace"
+      }
+    ],
     "optional": []
   },
   "inputs": {
     "required": [
       {
-        "name": "cluster_name",
-        "type": "string",
-        "description": "Name of the Kubernetes cluster (used for resource identification)",
-        "source": "user",
-        "example": "my-cluster"
-      },
-      {
         "name": "namespace",
         "type": "string",
-        "description": "Namespace for network attachment definitions",
-        "source": "user",
-        "example": "f5-spk"
+        "description": "Namespace for NADs (typically f5-bnk)",
+        "source": "module",
+        "from_module": "k8s/bnk-namespaces",
+        "from_output": "bnk_namespace",
+        "default": "f5-bnk"
       },
       {
         "name": "external_subnet_cidrs",
         "type": "list(string)",
-        "description": "CIDR blocks for external network subnets",
-        "source": "user",
-        "example": ["10.0.1.0/24", "10.0.2.0/24"]
+        "description": "External subnet CIDRs from VPC",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_external_subnet_cidrs",
+        "default": ["10.0.10.0/24", "10.0.11.0/24"]
       },
       {
         "name": "internal_subnet_cidrs",
         "type": "list(string)",
-        "description": "CIDR blocks for internal network subnets",
-        "source": "user",
-        "example": ["10.0.11.0/24", "10.0.12.0/24"]
+        "description": "Internal subnet CIDRs from VPC",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_internal_subnet_cidrs",
+        "default": ["10.0.20.0/24", "10.0.21.0/24"]
       }
     ],
     "optional": [
       {
-        "name": "external_nad_name",
+        "name": "cluster_name",
         "type": "string",
-        "description": "Name for external network attachment definition",
-        "default": "external-net",
-        "source": "user"
-      },
-      {
-        "name": "internal_nad_name",
-        "type": "string",
-        "description": "Name for internal network attachment definition",
-        "default": "internal-net",
-        "source": "user"
-      },
-      {
-        "name": "cni_plugin",
-        "type": "string",
-        "description": "CNI plugin to use (macvlan, ipvlan, bridge)",
-        "default": "macvlan",
-        "source": "user"
-      },
-      {
-        "name": "enable_ipam",
-        "type": "boolean",
-        "description": "Enable IPAM (IP Address Management) for NADs",
-        "default": true,
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
         "source": "user"
       }
     ]
@@ -80,29 +63,22 @@
       {
         "name": "external_nad_name",
         "type": "string",
-        "description": "Name of the external network attachment definition",
-        "used_by": ["bnk/f5-controller"],
+        "description": "Name of external NAD",
+        "used_by": ["bnk/bnk-gatewayclass"],
         "sensitive": false
       },
       {
         "name": "internal_nad_name",
         "type": "string",
-        "description": "Name of the internal network attachment definition",
-        "used_by": ["bnk/f5-controller"],
+        "description": "Name of internal NAD",
+        "used_by": ["bnk/bnk-gatewayclass"],
         "sensitive": false
       },
       {
         "name": "nads_ready",
         "type": "boolean",
-        "description": "Flag indicating NADs are created and ready",
-        "used_by": ["bnk/f5-controller"],
-        "sensitive": false
-      },
-      {
-        "name": "namespace",
-        "type": "string",
-        "description": "Namespace where NADs are deployed",
-        "used_by": [],
+        "description": "Flag indicating NADs are ready",
+        "used_by": ["bnk/bnk-gatewayclass"],
         "sensitive": false
       }
     ]
@@ -111,18 +87,10 @@
     "required": ["kubernetes"],
     "optional": []
   },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local"
-    }
-  },
   "deployment": {
-    "order": 20,
-    "estimated_time": "2 minutes",
-    "requires_user_input": true,
+    "order": 31,
+    "estimated_time": "1 minute",
+    "requires_user_input": false,
     "sensitive_inputs": []
   }
 }
