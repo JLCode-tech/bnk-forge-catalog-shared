@@ -3,17 +3,17 @@
 
 output "bnk_namespace" {
   description = "Name of the BNK core namespace (for FLO, CWC, TMM)"
-  value       = kubernetes_namespace.f5_bnk.metadata[0].name
+  value       = kubernetes_namespace_v1.f5_bnk.metadata[0].name
 }
 
 output "utils_namespace" {
   description = "Name of the utilities namespace (for IPAM, observability)"
-  value       = kubernetes_namespace.f5_utils.metadata[0].name
+  value       = kubernetes_namespace_v1.f5_utils.metadata[0].name
 }
 
 output "gateway_namespace" {
   description = "Name of the gateway namespace (for Gateway API resources)"
-  value       = var.create_gateway_namespace ? kubernetes_namespace.gateway[0].metadata[0].name : var.gateway_namespace
+  value       = var.create_gateway_namespace ? kubernetes_namespace_v1.gateway[0].metadata[0].name : var.gateway_namespace
 }
 
 output "namespaces_ready" {
@@ -21,9 +21,9 @@ output "namespaces_ready" {
   value       = true
 
   depends_on = [
-    kubernetes_namespace.f5_bnk,
-    kubernetes_namespace.f5_utils,
-    kubernetes_namespace.gateway
+    kubernetes_namespace_v1.f5_bnk,
+    kubernetes_namespace_v1.f5_utils,
+    kubernetes_namespace_v1.gateway
   ]
 }
 

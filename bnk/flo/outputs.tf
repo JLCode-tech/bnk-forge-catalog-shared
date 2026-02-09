@@ -1,13 +1,13 @@
-# infrastructure-modules/spk-2.1/flo/outputs.tf
+# bnk/flo/outputs.tf
 
 output "flo_namespace" {
   description = "Namespace where FLO is deployed"
-  value       = data.kubernetes_namespace.flo.metadata[0].name
+  value       = data.kubernetes_namespace_v1.flo.metadata[0].name
 }
 
 output "ipam_namespace" {
   description = "Namespace where IPAM operator is deployed"
-  value       = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? kubernetes_namespace.ipam[0].metadata[0].name : var.ipam_namespace
+  value       = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? kubernetes_namespace_v1.ipam[0].metadata[0].name : var.ipam_namespace
 }
 
 output "flo_ready" {

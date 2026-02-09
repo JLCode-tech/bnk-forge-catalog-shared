@@ -32,7 +32,7 @@ locals {
 # =============================================================================
 
 # Create BNK namespace for controller/TMM (only if create_namespaces = true)
-resource "kubernetes_namespace" "bnk" {
+resource "kubernetes_namespace_v1" "bnk" {
   count = var.create_namespaces ? 1 : 0
 
   metadata {
@@ -47,7 +47,7 @@ resource "kubernetes_namespace" "bnk" {
 }
 
 # Create utils namespace for shared components (only if create_namespaces = true)
-resource "kubernetes_namespace" "utils" {
+resource "kubernetes_namespace_v1" "utils" {
   count = var.create_namespaces ? 1 : 0
 
   metadata {
@@ -66,7 +66,7 @@ resource "kubernetes_namespace" "utils" {
 # =============================================================================
 
 # Create FAR authentication secrets in BNK namespace
-resource "kubernetes_secret" "far_auth_bnk" {
+resource "kubernetes_secret_v1" "far_auth_bnk" {
   metadata {
     name      = "far-secret"
     namespace = local.effective_namespace
@@ -90,12 +90,12 @@ resource "kubernetes_secret" "far_auth_bnk" {
   }
 
   depends_on = [
-    kubernetes_namespace.bnk
+    kubernetes_namespace_v1.bnk
   ]
 }
 
 # Create FAR authentication secrets in utils namespace
-resource "kubernetes_secret" "far_auth_utils" {
+resource "kubernetes_secret_v1" "far_auth_utils" {
   metadata {
     name      = "far-secret"
     namespace = var.utils_namespace
@@ -119,7 +119,7 @@ resource "kubernetes_secret" "far_auth_utils" {
   }
 
   depends_on = [
-    kubernetes_namespace.utils
+    kubernetes_namespace_v1.utils
   ]
 }
 

@@ -11,7 +11,7 @@
 # =============================================================================
 # cert-manager requires its own namespace (cert-manager is the standard)
 
-resource "kubernetes_namespace" "cert_manager" {
+resource "kubernetes_namespace_v1" "cert_manager" {
   count = var.create_namespace ? 1 : 0
 
   metadata {
@@ -31,7 +31,7 @@ resource "kubernetes_namespace" "cert_manager" {
 # Using official Jetstack cert-manager chart as recommended by F5 BNK 2.2 GA docs
 
 resource "helm_release" "cert_manager" {
-  depends_on = [kubernetes_namespace.cert_manager]
+  depends_on = [kubernetes_namespace_v1.cert_manager]
 
   name       = var.release_name
   namespace  = var.namespace

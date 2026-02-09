@@ -16,7 +16,7 @@
 # - Cluster-Wide Controller (CWC)
 # - TMM pods (Traffic Management Microkernel)
 
-resource "kubernetes_namespace" "f5_bnk" {
+resource "kubernetes_namespace_v1" "f5_bnk" {
   metadata {
     name = var.bnk_namespace
 
@@ -41,7 +41,7 @@ resource "kubernetes_namespace" "f5_bnk" {
 # - Observability components (OTEL collector, Fluentd)
 # - dSSM database
 
-resource "kubernetes_namespace" "f5_utils" {
+resource "kubernetes_namespace_v1" "f5_utils" {
   metadata {
     name = var.utils_namespace
 
@@ -66,7 +66,7 @@ resource "kubernetes_namespace" "f5_utils" {
 # - HTTPRoute, GRPCRoute, TCPRoute, etc.
 # - BNKSecPolicy, BNKNetPolicy
 
-resource "kubernetes_namespace" "gateway" {
+resource "kubernetes_namespace_v1" "gateway" {
   count = var.create_gateway_namespace ? 1 : 0
 
   metadata {
@@ -91,12 +91,12 @@ resource "kubernetes_namespace" "gateway" {
 # Creates the F5 Artifact Registry pull secret in each namespace
 # This is required for pulling BNK container images
 
-resource "kubernetes_secret" "far_secret_bnk" {
+resource "kubernetes_secret_v1" "far_secret_bnk" {
   count = var.create_far_secrets && var.far_docker_config != "" ? 1 : 0
 
   metadata {
     name      = var.far_secret_name
-    namespace = kubernetes_namespace.f5_bnk.metadata[0].name
+    namespace = kubernetes_namespace_v1.f5_bnk.metadata[0].name
   }
 
   type = "kubernetes.io/dockerconfigjson"
@@ -106,12 +106,12 @@ resource "kubernetes_secret" "far_secret_bnk" {
   }
 }
 
-resource "kubernetes_secret" "far_secret_utils" {
+resource "kubernetes_secret_v1" "far_secret_utils" {
   count = var.create_far_secrets && var.far_docker_config != "" ? 1 : 0
 
   metadata {
     name      = var.far_secret_name
-    namespace = kubernetes_namespace.f5_utils.metadata[0].name
+    namespace = kubernetes_namespace_v1.f5_utils.metadata[0].name
   }
 
   type = "kubernetes.io/dockerconfigjson"
@@ -121,12 +121,12 @@ resource "kubernetes_secret" "far_secret_utils" {
   }
 }
 
-resource "kubernetes_secret" "far_secret_gateway" {
+resource "kubernetes_secret_v1" "far_secret_gateway" {
   count = var.create_far_secrets && var.create_gateway_namespace && var.far_docker_config != "" ? 1 : 0
 
   metadata {
     name      = var.far_secret_name
-    namespace = kubernetes_namespace.gateway[0].metadata[0].name
+    namespace = kubernetes_namespace_v1.gateway[0].metadata[0].name
   }
 
   type = "kubernetes.io/dockerconfigjson"

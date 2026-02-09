@@ -41,14 +41,14 @@ locals {
 # Note: The FLO namespace (f5-spk) is created by far-setup module.
 # We use data sources to reference existing namespaces instead of creating them.
 
-data "kubernetes_namespace" "flo" {
+data "kubernetes_namespace_v1" "flo" {
   metadata {
     name = var.flo_namespace
   }
 }
 
 # IPAM namespace - only created if enabled AND not using the main flo namespace
-resource "kubernetes_namespace" "ipam" {
+resource "kubernetes_namespace_v1" "ipam" {
   count = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? 1 : 0
 
   metadata {
@@ -67,7 +67,7 @@ resource "kubernetes_namespace" "ipam" {
 
 resource "helm_release" "flo" {
   depends_on = [
-    data.kubernetes_namespace.flo,
+    data.kubernetes_namespace_v1.flo,
     var.cert_manager_ready,
     var.far_setup_complete
   ]
