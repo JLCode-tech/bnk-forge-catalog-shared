@@ -166,7 +166,7 @@ resource "kubernetes_manifest" "l4_route" {
   depends_on = [var.gateway_ready]
 
   manifest = {
-    apiVersion = "gateway.f5.com/v1alpha1"
+    apiVersion = "gateway.k8s.f5net.com/v1"
     kind       = "L4Route"
 
     metadata = {

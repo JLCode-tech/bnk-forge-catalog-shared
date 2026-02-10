@@ -1,12 +1,28 @@
-# infrastructure-modules/spk-2.1/bnk-gatewayclass/main.tf
-# BNKGatewayClass - Gateway API resource for BIG-IP Next
+# bnk-forge-modules/bnk/bnk-gatewayclass/main.tf
+# GatewayClass for F5 BIG-IP Next for Kubernetes (BNK 2.2 GA)
+#
+# Per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-gateway-api-gatewayclass.html
+# BNK 2.2 uses a STANDARD Kubernetes GatewayClass (gateway.networking.k8s.io/v1).
+# There is NO BNKGatewayClassConfig CRD — that was a fabrication.
+# TMM config is done via the F5BnkGateway CR (k8s.f5net.com/v1) and Gateway infrastructure annotations.
+#
+# The controllerName format is: f5.com/<namespace>-f5-cne-controller
+# Example: f5.com/f5-bnk-f5-cne-controller
 
 # =============================================================================
-# BNK GATEWAY CLASS CUSTOM RESOURCE
+# LOCALS
 # =============================================================================
 
-# BNKGatewayClass defines the class of Gateways that will be managed by F5
-# This must be deployed in the same namespace as FLO
+locals {
+  # Per F5 docs: controllerName = f5.com/<namespace>-f5-cne-controller
+  # Example: if flo_namespace = "f5-bnk" → "f5.com/f5-bnk-f5-cne-controller"
+  controller_name = var.controller_name != "" ? var.controller_name : "f5.com/${var.flo_namespace}-f5-cne-controller"
+}
+
+# =============================================================================
+# GATEWAY CLASS
+# =============================================================================
+
 resource "kubernetes_manifest" "bnk_gatewayclass" {
   depends_on = [var.flo_ready]
 
@@ -21,112 +37,12 @@ resource "kubernetes_manifest" "bnk_gatewayclass" {
         "app.kubernetes.io/component"  = "gateway-api"
         "app.kubernetes.io/managed-by" = "terraform"
       })
-      annotations = {
-        "description" = var.description
-      }
     }
 
     spec = {
-      # F5 controller name
-      controllerName = var.controller_name
-
-      # Description
-      description = var.description
-
-      # Parameters reference (optional - points to configuration)
-      parametersRef = {
-        group     = "gateway.f5.com"
-        kind      = "BNKGatewayClassConfig"
-        name      = kubernetes_manifest.bnk_gatewayclass_config.manifest.metadata.name
-        namespace = var.flo_namespace
-      }
-    }
-  }
-}
-
-# =============================================================================
-# BNK GATEWAY CLASS CONFIGURATION
-# =============================================================================
-
-# BNKGatewayClassConfig contains default parameters for Gateways
-resource "kubernetes_manifest" "bnk_gatewayclass_config" {
-  depends_on = [var.flo_ready]
-
-  manifest = {
-    apiVersion = "gateway.f5.com/v1"
-    kind       = "BNKGatewayClassConfig"
-
-    metadata = {
-      name      = "${var.gatewayclass_name}-config"
-      namespace = var.flo_namespace
-
-      labels = merge(var.common_labels, {
-        "app.kubernetes.io/name"       = "bnk-gatewayclass-config"
-        "app.kubernetes.io/component"  = "gateway-api"
-        "app.kubernetes.io/managed-by" = "terraform"
-      })
-    }
-
-    spec = {
-      # Default TMM configuration
-      tmm = {
-        replicas = var.default_tmm_replicas
-
-        resources = {
-          requests = {
-            cpu               = var.default_tmm_cpu
-            memory            = var.default_tmm_memory
-            "hugepages-2Mi"   = var.default_tmm_hugepages_2mi
-          }
-          limits = {
-            cpu               = var.default_tmm_cpu
-            memory            = var.default_tmm_memory
-            "hugepages-2Mi"   = var.default_tmm_hugepages_2mi
-          }
-        }
-
-        # High availability configuration
-        highAvailability = var.enable_ha ? {
-          enabled = true
-        } : null
-
-        # Pod anti-affinity for HA
-        affinity = var.anti_affinity_enabled ? {
-          podAntiAffinity = {
-            requiredDuringSchedulingIgnoredDuringExecution = [
-              {
-                labelSelector = {
-                  matchExpressions = [
-                    {
-                      key      = "app"
-                      operator = "In"
-                      values   = ["tmm"]
-                    }
-                  ]
-                }
-                topologyKey = "kubernetes.io/hostname"
-              }
-            ]
-          }
-        } : null
-      }
-
-      # Service configuration
-      service = {
-        type = var.default_service_type
-
-        # IPAM configuration (if enabled)
-        ipam = var.enable_ipam ? {
-          enabled   = true
-          namespace = var.ipam_namespace
-        } : null
-      }
-
-      # Network attachments for TMM pods
-      networkAttachments = {
-        external = var.network_attachments.external
-        internal = var.network_attachments.internal
-      }
+      # Per F5 docs: controllerName = f5.com/<namespace>-f5-cne-controller
+      controllerName = local.controller_name
+      description    = var.description
     }
   }
 }
@@ -136,12 +52,9 @@ resource "kubernetes_manifest" "bnk_gatewayclass_config" {
 # =============================================================================
 
 resource "time_sleep" "wait_for_gatewayclass" {
-  depends_on = [
-    kubernetes_manifest.bnk_gatewayclass,
-    kubernetes_manifest.bnk_gatewayclass_config
-  ]
+  depends_on = [kubernetes_manifest.bnk_gatewayclass]
 
-  create_duration = "10s"
+  create_duration = "15s"
 }
 
 resource "null_resource" "verify_gatewayclass" {
@@ -149,15 +62,15 @@ resource "null_resource" "verify_gatewayclass" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Verifying BNKGatewayClass ==="
+      echo "=== Verifying GatewayClass ==="
 
-      # Check GatewayClass status
-      kubectl get gatewayclass ${var.gatewayclass_name} -o yaml
+      # Check GatewayClass exists and show status
+      kubectl get gatewayclass ${var.gatewayclass_name} -o wide || echo "GatewayClass not found"
 
-      # Verify GatewayClass is accepted
-      kubectl wait --for=condition=Accepted gatewayclass/${var.gatewayclass_name} --timeout=60s || echo "GatewayClass not yet accepted"
+      # Wait for controller to accept the GatewayClass
+      kubectl wait --for=condition=Accepted gatewayclass/${var.gatewayclass_name} --timeout=120s || echo "WARNING: GatewayClass not yet accepted by controller"
 
-      echo "✓ BNKGatewayClass verification complete"
+      echo "GatewayClass verification complete"
     EOT
   }
 }

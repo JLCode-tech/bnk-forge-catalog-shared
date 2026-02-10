@@ -2,10 +2,10 @@
   "module": {
     "name": "BNK GatewayClass",
     "path": "bnk/bnk-gatewayclass",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "layer": "bnk-gateway",
     "category": "gateway",
-    "description": "Creates Kubernetes Gateway API GatewayClass resource for BNK with TMM configuration.",
+    "description": "Creates standard Kubernetes GatewayClass (gateway.networking.k8s.io/v1) for BNK 2.2 with auto-constructed controllerName.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -58,7 +58,7 @@
         "name": "controller_name",
         "type": "string",
         "description": "Controller name for GatewayClass",
-        "default": "f5.com/gateway-controller",
+        "default": "",
         "source": "user"
       }
     ]

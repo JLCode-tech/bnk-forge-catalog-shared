@@ -182,18 +182,20 @@ variable "gateway_addresses" {
 # =============================================================================
 
 variable "security_policy_refs" {
-  description = "List of BNKSecPolicy references to attach"
+  description = "List of security extension references (F5BigFwPolicy, F5BigDdosGlobal, etc.) to attach via BNKSecPolicy"
   type = list(object({
     name      = string
+    kind      = optional(string) # e.g., F5BigFwPolicy, F5BigDdosGlobal, F5BigLogProfile
     namespace = optional(string)
   }))
   default = []
 }
 
 variable "network_policy_refs" {
-  description = "List of BNKNetPolicy references to attach"
+  description = "List of network extension references (F5BigCneIrule, etc.) to attach via BNKNetPolicy"
   type = list(object({
     name      = string
+    kind      = optional(string) # e.g., F5BigCneIrule
     namespace = optional(string)
   }))
   default = []

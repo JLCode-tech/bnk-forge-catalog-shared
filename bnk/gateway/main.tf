@@ -136,14 +136,16 @@ resource "kubernetes_manifest" "gateway" {
 # =============================================================================
 
 # BNKSecPolicy attachments
+# Per BNK 2.2: BNKSecPolicy (gateway.k8s.f5net.com/v1alpha1) has extensionRefs + targetRefs in its spec.
+# The policy IS the attachment — it references the Gateway directly via targetRefs.
 resource "kubernetes_manifest" "security_policy_attachment" {
   for_each = { for idx, policy in var.security_policy_refs : idx => policy }
 
   depends_on = [kubernetes_manifest.gateway]
 
   manifest = {
-    apiVersion = "gateway.f5.com/v1alpha1"
-    kind       = "PolicyAttachment"
+    apiVersion = "gateway.k8s.f5net.com/v1alpha1"
+    kind       = "BNKSecPolicy"
 
     metadata = {
       name      = "${var.gateway_name}-secpolicy-${each.key}"
@@ -156,31 +158,35 @@ resource "kubernetes_manifest" "security_policy_attachment" {
     }
 
     spec = {
-      targetRef = {
-        group = "gateway.networking.k8s.io"
-        kind  = "Gateway"
-        name  = var.gateway_name
-      }
+      targetRefs = [
+        {
+          group = "gateway.networking.k8s.io"
+          kind  = "Gateway"
+          name  = var.gateway_name
+        }
+      ]
 
-      policyRef = {
-        group     = "gateway.f5.com"
-        kind      = "BNKSecPolicy"
-        name      = each.value.name
-        namespace = each.value.namespace != null ? each.value.namespace : var.gateway_namespace
-      }
+      extensionRefs = [
+        {
+          group = "k8s.f5net.com"
+          kind  = each.value.kind != null ? each.value.kind : "F5BigFwPolicy"
+          name  = each.value.name
+        }
+      ]
     }
   }
 }
 
 # BNKNetPolicy attachments
+# Per BNK 2.2: BNKNetPolicy (gateway.k8s.f5net.com/v1alpha1) has extensionRefs + targetRefs in its spec.
 resource "kubernetes_manifest" "network_policy_attachment" {
   for_each = { for idx, policy in var.network_policy_refs : idx => policy }
 
   depends_on = [kubernetes_manifest.gateway]
 
   manifest = {
-    apiVersion = "gateway.f5.com/v1alpha1"
-    kind       = "PolicyAttachment"
+    apiVersion = "gateway.k8s.f5net.com/v1alpha1"
+    kind       = "BNKNetPolicy"
 
     metadata = {
       name      = "${var.gateway_name}-netpolicy-${each.key}"
@@ -193,18 +199,21 @@ resource "kubernetes_manifest" "network_policy_attachment" {
     }
 
     spec = {
-      targetRef = {
-        group = "gateway.networking.k8s.io"
-        kind  = "Gateway"
-        name  = var.gateway_name
-      }
+      targetRefs = [
+        {
+          group = "gateway.networking.k8s.io"
+          kind  = "Gateway"
+          name  = var.gateway_name
+        }
+      ]
 
-      policyRef = {
-        group     = "gateway.f5.com"
-        kind      = "BNKNetPolicy"
-        name      = each.value.name
-        namespace = each.value.namespace != null ? each.value.namespace : var.gateway_namespace
-      }
+      extensionRefs = [
+        {
+          group = "k8s.f5net.com"
+          kind  = each.value.kind != null ? each.value.kind : "F5BigCneIrule"
+          name  = each.value.name
+        }
+      ]
     }
   }
 }
