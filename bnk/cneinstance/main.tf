@@ -45,66 +45,6 @@ locals {
       } : {}
     )
   }
-
-  # Python script to apply the CNEInstance using kubernetes client
-  apply_script = <<-PYTHON
-import json
-import sys
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
-
-manifest = json.loads(sys.argv[1])
-
-# Load kubeconfig from environment (set by tofu)
-config.load_kube_config()
-
-api = client.CustomObjectsApi()
-
-group = "k8s.f5.com"
-version = "v1"
-plural = "cneinstances"
-namespace = manifest["metadata"]["namespace"]
-name = manifest["metadata"]["name"]
-
-try:
-    # Try to get existing resource
-    existing = api.get_namespaced_custom_object(group, version, namespace, plural, name)
-    # Update existing
-    manifest["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
-    result = api.replace_namespaced_custom_object(group, version, namespace, plural, name, manifest)
-    print(f"Updated CNEInstance {name} in namespace {namespace}")
-except ApiException as e:
-    if e.status == 404:
-        # Create new
-        result = api.create_namespaced_custom_object(group, version, namespace, plural, manifest)
-        print(f"Created CNEInstance {name} in namespace {namespace}")
-    else:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-PYTHON
-
-  delete_script = <<-PYTHON
-import sys
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
-
-namespace = sys.argv[1]
-name = sys.argv[2]
-
-config.load_kube_config()
-
-api = client.CustomObjectsApi()
-
-try:
-    api.delete_namespaced_custom_object("k8s.f5.com", "v1", namespace, "cneinstances", name)
-    print(f"Deleted CNEInstance {name} from namespace {namespace}")
-except ApiException as e:
-    if e.status == 404:
-        print(f"CNEInstance {name} not found - already deleted")
-    else:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-PYTHON
 }
 
 # =============================================================================
@@ -116,17 +56,67 @@ resource "null_resource" "cneinstance" {
 
   triggers = {
     manifest_hash = sha256(jsonencode(local.cneinstance_manifest))
+    manifest_json = jsonencode(local.cneinstance_manifest)
     name          = var.instance_name
     namespace     = var.instance_namespace
   }
 
   provisioner "local-exec" {
-    command = "python3 -c '${replace(local.apply_script, "'", "\\'")}' '${jsonencode(local.cneinstance_manifest)}'"
+    command = <<-EOT
+python3 << 'PYEOF'
+import json
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+
+manifest = json.loads('''${jsonencode(local.cneinstance_manifest)}''')
+
+config.load_kube_config()
+api = client.CustomObjectsApi()
+
+group = "k8s.f5.com"
+version = "v1"
+plural = "cneinstances"
+namespace = manifest["metadata"]["namespace"]
+name = manifest["metadata"]["name"]
+
+try:
+    existing = api.get_namespaced_custom_object(group, version, namespace, plural, name)
+    manifest["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
+    result = api.replace_namespaced_custom_object(group, version, namespace, plural, name, manifest)
+    print(f"Updated CNEInstance {name} in namespace {namespace}")
+except ApiException as e:
+    if e.status == 404:
+        result = api.create_namespaced_custom_object(group, version, namespace, plural, manifest)
+        print(f"Created CNEInstance {name} in namespace {namespace}")
+    else:
+        raise
+PYEOF
+    EOT
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "python3 -c '${replace(local.delete_script, "'", "\\'")}' '${self.triggers.namespace}' '${self.triggers.name}'"
+    command = <<-EOT
+python3 << 'PYEOF'
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+
+namespace = "${self.triggers.namespace}"
+name = "${self.triggers.name}"
+
+config.load_kube_config()
+api = client.CustomObjectsApi()
+
+try:
+    api.delete_namespaced_custom_object("k8s.f5.com", "v1", namespace, "cneinstances", name)
+    print(f"Deleted CNEInstance {name} from namespace {namespace}")
+except ApiException as e:
+    if e.status == 404:
+        print(f"CNEInstance {name} not found - already deleted")
+    else:
+        raise
+PYEOF
+    EOT
   }
 }
 
@@ -150,14 +140,14 @@ resource "null_resource" "verify_instance" {
   provisioner "local-exec" {
     command = <<-EOT
       echo "=== Verifying CNEInstance ${var.instance_name} ==="
-      python3 -c "
+python3 << 'PYEOF'
 from kubernetes import client, config
 config.load_kube_config()
 api = client.CustomObjectsApi()
 result = api.get_namespaced_custom_object('k8s.f5.com', 'v1', '${var.instance_namespace}', 'cneinstances', '${var.instance_name}')
-print(f'CNEInstance {result[\"metadata\"][\"name\"]} found in namespace {result[\"metadata\"][\"namespace\"]}')
-print(f'Status: {result.get(\"status\", \"pending\")}')
-"
+print(f"CNEInstance {result['metadata']['name']} found in namespace {result['metadata']['namespace']}")
+print(f"Status: {result.get('status', 'pending')}")
+PYEOF
       echo "✓ CNEInstance verification complete"
     EOT
   }
