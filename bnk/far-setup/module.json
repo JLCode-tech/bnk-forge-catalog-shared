@@ -57,8 +57,8 @@
         "description": "Namespace for BNK components (should match bnk-namespaces output)",
         "default": "f5-bnk",
         "source": "module",
-        "source_module": "k8s/bnk-namespaces",
-        "source_output": "bnk_namespace"
+        "from_module": "k8s/bnk-namespaces",
+        "from_output": "bnk_namespace"
       },
       {
         "name": "utils_namespace",
@@ -66,8 +66,8 @@
         "description": "Namespace for utility components (should match bnk-namespaces output)",
         "default": "f5-utils",
         "source": "module",
-        "source_module": "k8s/bnk-namespaces",
-        "source_output": "utils_namespace"
+        "from_module": "k8s/bnk-namespaces",
+        "from_output": "utils_namespace"
       },
       {
         "name": "create_namespaces",
