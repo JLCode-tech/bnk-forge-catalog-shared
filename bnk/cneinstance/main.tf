@@ -2,37 +2,26 @@
 # CneInstance - CNE Instance Configuration
 
 # =============================================================================
-# CNE INSTANCE
+# LOCAL VALUES
 # =============================================================================
 
-resource "kubernetes_manifest" "cneinstance" {
-  depends_on = [var.flo_ready]
+locals {
+  labels = merge(var.common_labels, {
+    "app.kubernetes.io/name"       = var.instance_name
+    "app.kubernetes.io/component"  = "cne-instance"
+    "app.kubernetes.io/managed-by" = "terraform"
+  })
 
-  # Tell Terraform to ignore schema validation for spec fields
-  # This is needed because the CNEInstance CRD schema isn't fully exposed to Terraform
-  computed_fields = [
-    "spec",
-    "metadata.labels",
-    "metadata.annotations",
-  ]
-
-  manifest = {
+  # Build the CNEInstance manifest as YAML
+  cneinstance_manifest = yamlencode({
     apiVersion = "k8s.f5.com/v1"
     kind       = "CNEInstance"
-
     metadata = {
-      name      = var.instance_name
-      namespace = var.instance_namespace
-
-      labels = merge(var.common_labels, {
-        "app.kubernetes.io/name"       = var.instance_name
-        "app.kubernetes.io/component"  = "cne-instance"
-        "app.kubernetes.io/managed-by" = "terraform"
-      })
-
+      name        = var.instance_name
+      namespace   = var.instance_namespace
+      labels      = local.labels
       annotations = var.annotations
     }
-
     spec = merge(
       {
         instanceType = var.instance_config.instance_type
@@ -54,6 +43,33 @@ resource "kubernetes_manifest" "cneinstance" {
         affinity = var.instance_config.affinity
       } : {}
     )
+  })
+}
+
+# =============================================================================
+# CNE INSTANCE - Using kubectl apply to avoid kubernetes_manifest schema issues
+# =============================================================================
+
+resource "null_resource" "cneinstance" {
+  depends_on = [var.flo_ready]
+
+  triggers = {
+    manifest_hash = sha256(local.cneinstance_manifest)
+    name          = var.instance_name
+    namespace     = var.instance_namespace
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo '${local.cneinstance_manifest}' | kubectl apply -f -
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      kubectl delete cneinstance ${self.triggers.name} -n ${self.triggers.namespace} --ignore-not-found=true
+    EOT
   }
 }
 
@@ -62,7 +78,7 @@ resource "kubernetes_manifest" "cneinstance" {
 # =============================================================================
 
 resource "time_sleep" "wait_for_instance" {
-  depends_on = [kubernetes_manifest.cneinstance]
+  depends_on = [null_resource.cneinstance]
 
   create_duration = "10s"
 }
@@ -72,12 +88,12 @@ resource "null_resource" "verify_instance" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Verifying CneInstance ${var.instance_name} ==="
+      echo "=== Verifying CNEInstance ${var.instance_name} ==="
 
       # Check instance exists
       kubectl get cneinstance ${var.instance_name} -n ${var.instance_namespace} || echo "Instance not found yet"
 
-      echo "✓ CneInstance verification complete"
+      echo "✓ CNEInstance verification complete"
     EOT
   }
 }

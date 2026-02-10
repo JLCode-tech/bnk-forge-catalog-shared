@@ -1,13 +1,13 @@
 # infrastructure-modules/bnk/cneinstance/outputs.tf
 
 output "instance_name" {
-  description = "Name of the CneInstance resource"
-  value       = kubernetes_manifest.cneinstance.manifest.metadata.name
+  description = "Name of the CNEInstance resource"
+  value       = var.instance_name
 }
 
 output "instance_namespace" {
   description = "Namespace where CNE instance is deployed"
-  value       = kubernetes_manifest.cneinstance.manifest.metadata.namespace
+  value       = var.instance_namespace
 }
 
 output "instance_ready" {
