@@ -55,8 +55,11 @@ locals {
     Environment = var.environment
   }
 
-  # F5 SPK specific node labels for x86_64
+  # F5 SPK/BNK specific node labels for x86_64
+  # Per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html
+  # TMM pods require label: app=f5-tmm
   x86_f5_spk_labels = var.f5_spk_enabled ? {
+    "app"                 = "f5-tmm" # Required by F5 BNK for TMM scheduling
     "f5.com/spk-node"     = "true"
     "f5.com/tmm-capable"  = "true"
     "f5.com/numa-node"    = tostring(var.f5_numa_node)
@@ -351,6 +354,23 @@ resource "aws_eks_node_group" "x86_high_perf" {
     for_each = var.f5_spk_enabled && var.enable_taints ? [
       {
         key    = "f5.com/spk-node"
+        value  = "true"
+        effect = "NO_SCHEDULE"
+      }
+    ] : []
+    content {
+      key    = taint.value.key
+      value  = taint.value.value
+      effect = taint.value.effect
+    }
+  }
+
+  # F5 BNK DPU taint - per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html
+  # This taint restricts nodes to running only TMM and prevents control plane workloads
+  dynamic "taint" {
+    for_each = var.f5_spk_enabled && var.enable_taints ? [
+      {
+        key    = "dpu"
         value  = "true"
         effect = "NO_SCHEDULE"
       }
