@@ -43,7 +43,10 @@ resource "helm_release" "cert_manager" {
   values = [
     yamlencode({
       # Install CRDs - required for cert-manager to function
-      installCRDs = true
+      # Note: installCRDs is deprecated, use crds.enabled instead
+      crds = {
+        enabled = true
+      }
 
       # Global settings
       global = {
