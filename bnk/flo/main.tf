@@ -47,17 +47,56 @@ data "kubernetes_namespace_v1" "flo" {
   }
 }
 
-# IPAM namespace - only created if enabled AND not using the main flo namespace
-resource "kubernetes_namespace_v1" "ipam" {
+# IPAM namespace - lookup only. Created by bnk-namespaces module (f5-utils).
+# Previously this was a resource that would fail on redeploy when the namespace
+# already existed. Using a data source avoids the conflict.
+data "kubernetes_namespace_v1" "ipam" {
   count = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? 1 : 0
 
   metadata {
     name = var.ipam_namespace
+  }
+}
 
-    labels = merge(var.common_labels, {
-      name    = var.ipam_namespace
-      purpose = "f5-ipam-operator"
-    })
+# =============================================================================
+# ADOPT EXISTING CRDs — Fix for destroy/redeploy cycle
+# =============================================================================
+# Helm never deletes CRDs on uninstall (by design, to protect user data).
+# On re-install to a different namespace, Helm refuses because the CRDs have
+# ownership annotations pointing to the old release/namespace.
+#
+# This pre-install step re-labels any existing FLO CRDs so Helm can adopt them.
+# Safe to run when no CRDs exist (kubectl annotate --overwrite is idempotent).
+
+resource "null_resource" "adopt_flo_crds" {
+  # Re-run whenever the target namespace changes
+  triggers = {
+    flo_namespace = var.flo_namespace
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Adopting existing FLO CRDs for namespace ${var.flo_namespace} ==="
+
+      # Find all CRDs owned by any previous FLO Helm release
+      CRDS=$(kubectl get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{end}' 2>/dev/null \
+        | grep -E '\tflo$' | awk '{print $1}')
+
+      if [ -z "$CRDS" ]; then
+        echo "No existing FLO CRDs found — clean install"
+        exit 0
+      fi
+
+      ADOPTED=0
+      for crd in $CRDS; do
+        kubectl annotate crd "$crd" \
+          meta.helm.sh/release-name=flo \
+          meta.helm.sh/release-namespace=${var.flo_namespace} \
+          --overwrite 2>/dev/null && ADOPTED=$((ADOPTED+1))
+      done
+
+      echo "✓ Adopted $ADOPTED FLO CRDs for namespace ${var.flo_namespace}"
+    EOT
   }
 }
 
@@ -68,6 +107,7 @@ resource "kubernetes_namespace_v1" "ipam" {
 resource "helm_release" "flo" {
   depends_on = [
     data.kubernetes_namespace_v1.flo,
+    null_resource.adopt_flo_crds,
     var.cert_manager_ready,
     var.far_setup_complete
   ]
