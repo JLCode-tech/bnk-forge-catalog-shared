@@ -37,22 +37,18 @@ locals {
         }
 
         # Registry configuration
-        registry = merge(
-          {
-            uri             = var.registry_uri
-            imagePullPolicy = var.image_pull_policy
-          },
-          length(var.image_pull_secrets) > 0 ? {
-            imagePullSecrets = [for secret in var.image_pull_secrets : { name = secret }]
-          } : {}
-        )
+        registry = {
+          uri              = var.registry_uri
+          imagePullPolicy  = var.image_pull_policy
+          imagePullSecrets = [{ name = var.far_secret_name }]
+        }
 
         # Network attachments (from network-setup module outputs)
         networkAttachments = [var.external_nad_name, var.internal_nad_name]
 
         # Certificate configuration
-        certificate = var.cluster_issuer != "" ? {
-          clusterIssuer = var.cluster_issuer
+        certificate = var.cluster_issuer_name != "" ? {
+          clusterIssuer = var.cluster_issuer_name
         } : {}
       },
       # Advanced configuration

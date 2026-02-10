@@ -87,8 +87,8 @@ variable "deployment_size" {
 # OPTIONAL VARIABLES - Certificate Configuration
 # =============================================================================
 
-variable "cluster_issuer" {
-  description = "Name of the cert-manager ClusterIssuer for certificate management"
+variable "cluster_issuer_name" {
+  description = "Name of the cert-manager ClusterIssuer (from cert-manager module)"
   type        = string
   default     = ""
 }
@@ -108,10 +108,10 @@ variable "image_pull_policy" {
   }
 }
 
-variable "image_pull_secrets" {
-  description = "List of image pull secret names for private registry authentication"
-  type        = list(string)
-  default     = []
+variable "far_secret_name" {
+  description = "Name of the FAR pull secret (from far-setup module)"
+  type        = string
+  default     = "far-secret"
 }
 
 # =============================================================================
