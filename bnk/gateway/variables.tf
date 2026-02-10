@@ -113,12 +113,9 @@ variable "tmm_resources" {
 # =============================================================================
 
 variable "network_attachments" {
-  description = "Network attachment overrides for TMM pods"
-  type = object({
-    external = optional(string)
-    internal = optional(string)
-  })
-  default = null
+  description = "Network attachment overrides for TMM pods. Accepts either an object {external, internal} or a list [external, internal] (from cneinstance output)."
+  type        = any
+  default     = null
 }
 
 # =============================================================================

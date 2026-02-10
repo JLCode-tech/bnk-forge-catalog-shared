@@ -2,6 +2,28 @@
 # Gateway API Gateway resource deployment (F5 BNK 2.2 GA)
 
 # =============================================================================
+# LOCALS
+# =============================================================================
+
+locals {
+  # Normalize network_attachments — accepts either:
+  #   object: {external = "ext-nad", internal = "int-nad"}
+  #   list:   ["ext-nad", "int-nad"]  (from cneinstance output)
+  #   null:   not set
+  network_attachments_normalized = var.network_attachments == null ? null : (
+    try(
+      # If it's an object with external/internal keys, use as-is
+      { external = var.network_attachments.external, internal = var.network_attachments.internal },
+      # If it's a list/tuple, map positionally: [0]=external, [1]=internal
+      try(
+        { external = var.network_attachments[0], internal = var.network_attachments[1] },
+        null
+      )
+    )
+  )
+}
+
+# =============================================================================
 # GATEWAY RESOURCE
 # =============================================================================
 
@@ -92,10 +114,10 @@ resource "kubernetes_manifest" "gateway" {
       } : {},
 
       # Infrastructure configuration (F5-specific overrides and IPAM reference)
-      var.tmm_replicas != null || var.tmm_resources != null || var.network_attachments != null || var.service_type != null || var.infrastructure_parameters_ref != null ? {
+      var.tmm_replicas != null || var.tmm_resources != null || local.network_attachments_normalized != null || var.service_type != null || var.infrastructure_parameters_ref != null ? {
         infrastructure = merge(
           # Annotations for TMM configuration
-          var.tmm_replicas != null || var.tmm_resources != null || var.network_attachments != null || var.service_type != null ? {
+          var.tmm_replicas != null || var.tmm_resources != null || local.network_attachments_normalized != null || var.service_type != null ? {
             annotations = merge(
               var.tmm_replicas != null ? {
                 "f5.com/tmm-replicas" = tostring(var.tmm_replicas)
@@ -109,8 +131,8 @@ resource "kubernetes_manifest" "gateway" {
                   }
                 })
               } : {},
-              var.network_attachments != null ? {
-                "f5.com/network-attachments" = jsonencode(var.network_attachments)
+              local.network_attachments_normalized != null ? {
+                "f5.com/network-attachments" = jsonencode(local.network_attachments_normalized)
               } : {},
               var.service_type != null ? {
                 "f5.com/service-type" = var.service_type
