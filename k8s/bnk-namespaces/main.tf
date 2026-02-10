@@ -2,18 +2,17 @@
 # BNK Namespaces Module for F5 BIG-IP Next for Kubernetes
 #
 # Creates the required namespaces for BNK deployment:
-# - f5-bnk: Core BNK components (FLO, CWC, TMM)
-# - f5-utils: Utility components (IPAM, observability)
+# - f5-bnk: TMM data plane pods
+# - f5-operator: Control plane (FLO, CNE controller, CWC)
+# - f5-utils: Utility components (IPAM, observability, dSSM, Fluentd)
 # - Gateway namespace: User-defined namespace for Gateway resources
 #
 # Reference: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/
 
 # =============================================================================
-# BNK CORE NAMESPACE (f5-bnk)
+# BNK DATA PLANE NAMESPACE (f5-bnk)
 # =============================================================================
-# This namespace hosts the core BNK components:
-# - F5 Lifecycle Operator (FLO)
-# - Cluster-Wide Controller (CWC)
+# This namespace hosts the BNK data plane:
 # - TMM pods (Traffic Management Microkernel)
 
 resource "kubernetes_namespace_v1" "f5_bnk" {
@@ -28,7 +27,32 @@ resource "kubernetes_namespace_v1" "f5_bnk" {
     }
 
     annotations = {
-      "description" = "F5 BIG-IP Next for Kubernetes core components"
+      "description" = "F5 BIG-IP Next for Kubernetes data plane (TMM pods)"
+    }
+  }
+}
+
+# =============================================================================
+# OPERATOR NAMESPACE (f5-operator)
+# =============================================================================
+# This namespace hosts the BNK control plane:
+# - F5 Lifecycle Operator (FLO)
+# - CNE Controller
+# - Cluster-Wide Controller (CWC)
+
+resource "kubernetes_namespace_v1" "f5_operator" {
+  metadata {
+    name = var.operator_namespace
+
+    labels = {
+      "app.kubernetes.io/name"       = "f5-operator"
+      "app.kubernetes.io/component"  = "bnk-operators"
+      "app.kubernetes.io/managed-by" = "terraform"
+      "f5.com/product"               = "bnk"
+    }
+
+    annotations = {
+      "description" = "F5 BNK operators and controllers (FLO, CNE, CWC)"
     }
   }
 }
@@ -97,6 +121,21 @@ resource "kubernetes_secret_v1" "far_secret_bnk" {
   metadata {
     name      = var.far_secret_name
     namespace = kubernetes_namespace_v1.f5_bnk.metadata[0].name
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = var.far_docker_config
+  }
+}
+
+resource "kubernetes_secret_v1" "far_secret_operator" {
+  count = var.create_far_secrets && var.far_docker_config != "" ? 1 : 0
+
+  metadata {
+    name      = var.far_secret_name
+    namespace = kubernetes_namespace_v1.f5_operator.metadata[0].name
   }
 
   type = "kubernetes.io/dockerconfigjson"

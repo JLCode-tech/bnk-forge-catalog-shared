@@ -8,9 +8,15 @@
 # =============================================================================
 
 variable "bnk_namespace" {
-  description = "Namespace for core BNK components (FLO, CWC, TMM). Per F5 docs, 'f5-bnk' is standard."
+  description = "Namespace for BNK data plane (TMM pods). Per F5 docs, 'f5-bnk' is standard."
   type        = string
   default     = "f5-bnk"
+}
+
+variable "operator_namespace" {
+  description = "Namespace for BNK control plane (FLO, CNE controller, CWC). Separates operators from data plane."
+  type        = string
+  default     = "f5-operator"
 }
 
 variable "utils_namespace" {

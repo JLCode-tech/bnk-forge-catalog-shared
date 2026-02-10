@@ -30,11 +30,11 @@
       {
         "name": "instance_namespace",
         "type": "string",
-        "description": "Namespace for CNE instance (same as FLO)",
+        "description": "Namespace for CNE instance (same as FLO control plane namespace)",
         "source": "module",
         "from_module": "bnk/flo",
         "from_output": "flo_namespace",
-        "default": "f5-bnk"
+        "default": "f5-operator"
       },
       {
         "name": "flo_ready",

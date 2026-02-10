@@ -2,12 +2,17 @@
 # BNK Namespaces Module Outputs
 
 output "bnk_namespace" {
-  description = "Name of the BNK core namespace (for FLO, CWC, TMM)"
+  description = "Name of the BNK data plane namespace (TMM pods)"
   value       = kubernetes_namespace_v1.f5_bnk.metadata[0].name
 }
 
+output "operator_namespace" {
+  description = "Name of the BNK operator namespace (FLO, CNE controller, CWC)"
+  value       = kubernetes_namespace_v1.f5_operator.metadata[0].name
+}
+
 output "utils_namespace" {
-  description = "Name of the utilities namespace (for IPAM, observability)"
+  description = "Name of the utilities namespace (IPAM, observability, dSSM)"
   value       = kubernetes_namespace_v1.f5_utils.metadata[0].name
 }
 
@@ -22,6 +27,7 @@ output "namespaces_ready" {
 
   depends_on = [
     kubernetes_namespace_v1.f5_bnk,
+    kubernetes_namespace_v1.f5_operator,
     kubernetes_namespace_v1.f5_utils,
     kubernetes_namespace_v1.gateway
   ]

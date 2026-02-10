@@ -38,7 +38,7 @@ locals {
 # =============================================================================
 # NAMESPACE REFERENCES
 # =============================================================================
-# Note: The FLO namespace is created by the bnk-namespaces module (or far-setup).
+# Note: The FLO namespace (f5-operator) is created by the bnk-namespaces module.
 # We use data sources to reference existing namespaces instead of creating them.
 
 data "kubernetes_namespace_v1" "flo" {

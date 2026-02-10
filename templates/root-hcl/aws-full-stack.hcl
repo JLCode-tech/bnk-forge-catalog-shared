@@ -193,7 +193,8 @@ dependency "far_setup" {
   config_path = "../bnk/far-setup"
 
   mock_outputs = {
-    spk_namespace         = "f5-spk"
+    bnk_namespace         = "f5-bnk"
+    operator_namespace    = "f5-operator"
     utils_namespace       = "f5-utils"
     far_secret_name       = "far-secret"
     cert_manager_version  = "1.13.0"
@@ -244,7 +245,7 @@ dependency "flo" {
 
   mock_outputs = {
     flo_ready        = true
-    flo_namespace    = "f5-spk"
+    flo_namespace    = "f5-operator"
     crds_installed   = true
   }
 

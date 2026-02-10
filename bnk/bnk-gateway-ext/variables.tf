@@ -16,9 +16,9 @@ variable "gateway_ext_name" {
 }
 
 variable "namespace" {
-  description = "Namespace for the F5BnkGateway"
+  description = "Namespace for the F5BnkGateway (typically the gateway namespace)"
   type        = string
-  default     = "default"
+  default     = "gateway-ns"
 }
 
 # =============================================================================

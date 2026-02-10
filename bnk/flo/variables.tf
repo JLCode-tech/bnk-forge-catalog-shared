@@ -12,9 +12,9 @@ variable "cluster_name" {
 }
 
 variable "flo_namespace" {
-  description = "Kubernetes namespace for F5 Lifecycle Operator"
+  description = "Kubernetes namespace for F5 Lifecycle Operator (control plane)"
   type        = string
-  default     = "f5-operators"
+  default     = "f5-operator"
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.flo_namespace))
@@ -101,7 +101,7 @@ variable "enable_ipam_operator" {
 variable "ipam_namespace" {
   description = "Namespace for IPAM operator resources"
   type        = string
-  default     = "f5-ipam"
+  default     = "f5-utils"
 }
 
 # =============================================================================

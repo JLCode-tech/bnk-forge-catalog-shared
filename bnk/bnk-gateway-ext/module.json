@@ -40,8 +40,8 @@
       {
         "name": "namespace",
         "type": "string",
-        "description": "Namespace for the F5BnkGateway",
-        "default": "default",
+        "description": "Namespace for the F5BnkGateway (typically the gateway namespace)",
+        "default": "gateway-ns",
         "source": "user"
       },
       {

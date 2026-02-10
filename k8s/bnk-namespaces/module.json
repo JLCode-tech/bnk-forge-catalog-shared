@@ -2,10 +2,10 @@
   "module": {
     "name": "BNK Namespaces",
     "path": "k8s/bnk-namespaces",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "layer": "kubernetes",
     "category": "setup",
-    "description": "Creates required namespaces for F5 BNK deployment: f5-bnk (core components), f5-utils (utilities), and gateway namespace (Gateway API resources). Per F5 CloudDocs, these namespaces are standard for BNK 2.2 deployments.",
+    "description": "Creates required namespaces for F5 BNK deployment: f5-bnk (TMM data plane), f5-operator (FLO/CNE control plane), f5-utils (utilities), and gateway namespace (Gateway API resources). Per F5 CloudDocs best practices.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -19,8 +19,15 @@
       {
         "name": "bnk_namespace",
         "type": "string",
-        "description": "Namespace for core BNK components (FLO, CWC, TMM)",
+        "description": "Namespace for BNK data plane (TMM pods)",
         "default": "f5-bnk",
+        "source": "user"
+      },
+      {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Namespace for BNK control plane (FLO, CNE controller, CWC)",
+        "default": "f5-operator",
         "source": "user"
       },
       {
@@ -72,14 +79,21 @@
       {
         "name": "bnk_namespace",
         "type": "string",
-        "description": "Name of the BNK core namespace",
-        "used_by": ["bnk/flo", "bnk/far-setup"],
+        "description": "Name of the BNK data plane namespace (TMM pods)",
+        "used_by": ["bnk/far-setup", "k8s/network-setup", "k8s/cert-manager"],
+        "sensitive": false
+      },
+      {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Name of the BNK operator namespace (FLO, CNE, CWC)",
+        "used_by": ["bnk/flo", "bnk/cneinstance", "bnk/bnk-gatewayclass"],
         "sensitive": false
       },
       {
         "name": "utils_namespace",
         "type": "string",
-        "description": "Name of the utilities namespace",
+        "description": "Name of the utilities namespace (IPAM, observability, dSSM)",
         "used_by": ["bnk/flo"],
         "sensitive": false
       },

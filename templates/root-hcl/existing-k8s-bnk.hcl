@@ -121,7 +121,8 @@ dependency "far_setup" {
   config_path = "../bnk/far-setup"
 
   mock_outputs = {
-    spk_namespace         = "f5-spk"
+    bnk_namespace         = "f5-bnk"
+    operator_namespace    = "f5-operator"
     utils_namespace       = "f5-utils"
     far_secret_name       = "far-secret"
     cert_manager_version  = "1.13.0"
@@ -143,7 +144,7 @@ dependency "cert_manager" {
   mock_outputs = {
     cert_manager_ready = true
     release_status     = "deployed"
-    namespace          = "f5-utils"
+    namespace          = "cert-manager"
   }
 
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
@@ -173,7 +174,7 @@ dependency "flo" {
 
   mock_outputs = {
     flo_ready        = true
-    flo_namespace    = "f5-spk"
+    flo_namespace    = "f5-operator"
     crds_installed   = true
   }
 
@@ -297,7 +298,7 @@ inputs = {
 
   # Module-specific inputs will be added here based on selected module
   # Examples:
-  # flo_namespace = dependency.far_setup.outputs.spk_namespace
+  # flo_namespace = dependency.far_setup.outputs.operator_namespace
   # flo_ready = dependency.flo.outputs.flo_ready
   # gatewayclass_name = dependency.bnk_gatewayclass.outputs.gatewayclass_name
 }
