@@ -485,8 +485,15 @@ resource "null_resource" "wait_for_eni_attachment" {
 # MULTUS CNI DEPLOYMENT
 # ==============================================
 
-resource "kubernetes_manifest" "multus_serviceaccount" {
+# NetworkAttachmentDefinition CRD - must be installed FIRST before any other Multus resources
+resource "kubernetes_manifest" "multus_crd" {
   depends_on = [null_resource.wait_for_x86_nodes]
+
+  manifest = yamldecode(file("${path.module}/manifests/multus-crd.yaml"))
+}
+
+resource "kubernetes_manifest" "multus_serviceaccount" {
+  depends_on = [kubernetes_manifest.multus_crd]
 
   manifest = yamldecode(file("${path.module}/manifests/multus-serviceaccount.yaml"))
 }
