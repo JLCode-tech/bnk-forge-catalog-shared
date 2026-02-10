@@ -9,7 +9,7 @@ resource "kubernetes_manifest" "cneinstance" {
   depends_on = [var.flo_ready]
 
   manifest = {
-    apiVersion = "k8s.f5net.com/v1"
+    apiVersion = "k8s.f5.com/v1"
     kind       = "CneInstance"
 
     metadata = {
