@@ -105,6 +105,30 @@ variable "helm_timeout" {
 }
 
 # =============================================================================
+# BNK CERTIFICATE CONFIGURATION
+# =============================================================================
+# These variables control the creation of BNK-specific certificates using
+# cert-manager Certificate CRDs. This replaces the old f5-cert-gen approach
+# with fully managed, auto-rotating certificates.
+
+variable "bnk_namespace" {
+  description = "Namespace where BNK components are deployed (CWC and OTEL certs are created here)"
+  type        = string
+  default     = "f5-bnk"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.bnk_namespace))
+    error_message = "Namespace must be a valid Kubernetes namespace name"
+  }
+}
+
+variable "create_otel_certs" {
+  description = "Create OTEL telemetry certificates via cert-manager. Replaces the static Helm-embedded cert from FLO with a managed, auto-rotating one. NOTE: CWC certs are NOT needed here — FLO auto-creates those as cert-manager Certificate CRDs (tls-spkcwc-*, tls-csmqkview-*, etc.)."
+  type        = bool
+  default     = true
+}
+
+# =============================================================================
 # LEGACY VARIABLES (for backward compatibility)
 # =============================================================================
 # These are kept for backward compatibility but no longer used with Jetstack

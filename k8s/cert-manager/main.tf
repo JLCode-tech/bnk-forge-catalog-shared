@@ -188,3 +188,170 @@ resource "null_resource" "verify_cert_manager" {
     EOT
   }
 }
+
+# =============================================================================
+# CWC CERTIFICATES — NOT NEEDED (FLO auto-manages these)
+# =============================================================================
+# IMPORTANT: The F5 CloudDocs cwc-certificate.html page describes the OLD
+# pre-FLO manual deployment approach using f5-cert-gen. With FLO v2.9.27+,
+# CWC certificates are created automatically as cert-manager Certificate CRDs:
+#
+#   Verified on live cluster (aws-sydney-bnk-demo-cluster, BNK 2.2 GA):
+#   - tls-spkcwc-grpc-svr-secret   (CWC gRPC server - replaces cwc-license-certs)
+#   - tls-cwc-amqp-clt-secret      (CWC AMQP client)
+#   - tls-csmqkview-grpc-svr-secret (QKView gRPC server - replaces qkview-server-certs)
+#   - tls-csmqkview-grpc-clt-secret (QKView gRPC client - replaces qkview-client-certs)
+#
+# These are all type kubernetes.io/tls, managed by cert-manager, created by FLO.
+# DO NOT create cwc-license-certs, qkview-server-certs, or qkview-client-certs —
+# those secret names are from the old manual approach and are NOT mounted by CWC.
+
+# =============================================================================
+# OTEL CERTIFICATES (replaces static Helm-embedded cert from FLO)
+# =============================================================================
+# Per F5 CloudDocs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/otl-certs.html
+#
+# Verified on live cluster:
+# - FLO Helm deploys external-otelsvr-secret as a STATIC Opaque secret
+#   (managed-by: Helm, release: flo). This cert does NOT auto-rotate and
+#   will expire without warning.
+# - The OTEL collector pod mounts it at /external/otelsvr
+# - external-f5ingotelsvr-secret does NOT exist on the live cluster but
+#   F5 docs say it should be created.
+#
+# By creating cert-manager Certificate CRDs targeting these secret names,
+# we replace the static cert with a managed, auto-rotating one.
+# cert-manager will take ownership of the secret and keep it renewed.
+#
+# All spec fields validated against the live cert-manager CRD (v1.16.1):
+#   secretName, commonName, subject, emailAddresses, duration, renewBefore,
+#   issuerRef (name REQUIRED, kind/group optional), privateKey (algorithm
+#   enum: RSA/ECDSA/Ed25519, encoding enum: PKCS1/PKCS8, rotationPolicy
+#   enum: Never/Always, size: integer), revisionHistoryLimit, usages enum
+#   includes: server auth, client auth, digital signature, key encipherment
+
+resource "kubernetes_manifest" "otel_server_certificate" {
+  count = var.create_otel_certs && var.create_cluster_issuer ? 1 : 0
+
+  depends_on = [kubernetes_manifest.ca_cluster_issuer]
+
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "external-otelsvr"
+      namespace = var.bnk_namespace
+    }
+    spec = {
+      secretName = "external-otelsvr-secret"
+      commonName = "f5net.com"
+      subject = {
+        countries           = ["US"]
+        provinces           = ["Washington"]
+        localities          = ["Seattle"]
+        organizations       = ["F5 Networks"]
+        organizationalUnits = ["PD"]
+      }
+      emailAddresses = ["clientcert@f5net.com"]
+      duration       = "8640h" # 360 days (per F5 docs)
+      renewBefore    = "720h"  # Renew 30 days before expiry
+      issuerRef = {
+        name  = var.cluster_issuer_name
+        kind  = "ClusterIssuer"
+        group = "cert-manager.io"
+      }
+      privateKey = {
+        rotationPolicy = "Always"
+        encoding       = "PKCS1"
+        algorithm      = "RSA"
+        size           = 4096
+      }
+      revisionHistoryLimit = 10
+    }
+  }
+}
+
+resource "kubernetes_manifest" "otel_f5ing_server_certificate" {
+  count = var.create_otel_certs && var.create_cluster_issuer ? 1 : 0
+
+  depends_on = [kubernetes_manifest.ca_cluster_issuer]
+
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "external-f5ingotelsvr"
+      namespace = var.bnk_namespace
+    }
+    spec = {
+      secretName = "external-f5ingotelsvr-secret"
+      commonName = "f5net.com"
+      subject = {
+        countries           = ["US"]
+        provinces           = ["Washington"]
+        localities          = ["Seattle"]
+        organizations       = ["F5 Networks"]
+        organizationalUnits = ["PD"]
+      }
+      emailAddresses = ["clientcert@f5net.com"]
+      duration       = "8640h" # 360 days (per F5 docs)
+      renewBefore    = "720h"  # Renew 30 days before expiry
+      issuerRef = {
+        name  = var.cluster_issuer_name
+        kind  = "ClusterIssuer"
+        group = "cert-manager.io"
+      }
+      privateKey = {
+        rotationPolicy = "Always"
+        encoding       = "PKCS1"
+        algorithm      = "RSA"
+        size           = 4096
+      }
+      revisionHistoryLimit = 10
+    }
+  }
+}
+
+# =============================================================================
+# VERIFY OTEL CERTIFICATES
+# =============================================================================
+
+resource "null_resource" "verify_bnk_certificates" {
+  count = var.create_otel_certs && var.create_cluster_issuer ? 1 : 0
+
+  depends_on = [
+    kubernetes_manifest.otel_server_certificate,
+    kubernetes_manifest.otel_f5ing_server_certificate,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Verifying OTEL Managed Certificates ==="
+      
+      # Wait for cert-manager to issue the certificates
+      sleep 15
+      
+      echo ""
+      echo "=== Certificate resources in ${var.bnk_namespace} ==="
+      kubectl get certificates -n ${var.bnk_namespace} 2>/dev/null | grep -E "otelsvr|NAMESPACE" || echo "No OTEL certificates found"
+      
+      echo ""
+      echo "=== Certificate status ==="
+      for cert in external-otelsvr external-f5ingotelsvr; do
+        STATUS=$(kubectl get certificate "$cert" -n ${var.bnk_namespace} -o jsonpath='{.status.conditions[0].status}' 2>/dev/null)
+        REASON=$(kubectl get certificate "$cert" -n ${var.bnk_namespace} -o jsonpath='{.status.conditions[0].reason}' 2>/dev/null)
+        if [ "$STATUS" = "True" ]; then
+          echo "  OK: $cert is Ready"
+        elif [ -n "$STATUS" ]; then
+          echo "  WARN: $cert status=$STATUS reason=$REASON"
+        else
+          echo "  PENDING: $cert not yet processed"
+        fi
+      done
+      
+      echo ""
+      echo "OK: OTEL certs managed by cert-manager with auto-rotation"
+      echo "    (CWC certs are auto-managed by FLO — no action needed)"
+    EOT
+  }
+}

@@ -38,7 +38,7 @@ locals {
 # =============================================================================
 # NAMESPACE REFERENCES
 # =============================================================================
-# Note: The FLO namespace (f5-spk) is created by far-setup module.
+# Note: The FLO namespace is created by the bnk-namespaces module (or far-setup).
 # We use data sources to reference existing namespaces instead of creating them.
 
 data "kubernetes_namespace_v1" "flo" {
@@ -160,16 +160,108 @@ resource "helm_release" "flo" {
 }
 
 # =============================================================================
+# CPCL KEY — Download and apply the real F5 JWT verification key
+# =============================================================================
+# The FLO Helm chart deploys a placeholder cpcl-key-cm ConfigMap with "..."
+# values for the RSA key material. CWC needs the REAL key to verify JWT
+# license tokens. We download it from F5 CloudDocs and overwrite the placeholder.
+#
+# This MUST happen after FLO Helm install (which creates the ConfigMap) but
+# before CWC attempts JWT verification (which happens on CWC pod startup).
+
+resource "null_resource" "apply_cpcl_key" {
+  depends_on = [helm_release.flo]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Downloading real CPCL key from F5 CloudDocs ==="
+
+      # Download the real CPCL key (contains RSA public keys for JWT verification)
+      CPCL_URL="https://clouddocs.f5.com/service-proxy/latest/cpcl-key.yaml"
+      CPCL_FILE="/tmp/cpcl-key-$$.yaml"
+
+      if ! curl -sL --fail --connect-timeout 30 --max-time 60 "$CPCL_URL" -o "$CPCL_FILE"; then
+        echo "WARNING: Failed to download CPCL key from $CPCL_URL"
+        echo "License activation may fail. You can manually apply the key later:"
+        echo "  kubectl apply -f <cpcl-key.yaml> -n ${var.flo_namespace}"
+        exit 0  # Don't fail the deployment — key can be applied later
+      fi
+
+      # Validate the downloaded file has real key data (not HTML error page)
+      if grep -q "<!DOCTYPE html>" "$CPCL_FILE" 2>/dev/null; then
+        echo "WARNING: Got HTML instead of YAML from F5 CloudDocs. CPCL key not applied."
+        rm -f "$CPCL_FILE"
+        exit 0
+      fi
+
+      # Validate it has actual RSA key material (not placeholders)
+      if ! grep -q '"n":' "$CPCL_FILE" 2>/dev/null; then
+        echo "WARNING: CPCL key file missing RSA 'n' field. Skipping."
+        rm -f "$CPCL_FILE"
+        exit 0
+      fi
+
+      echo "=== Applying real CPCL key to ${var.flo_namespace} namespace ==="
+      kubectl apply -f "$CPCL_FILE" -n ${var.flo_namespace} 2>&1
+
+      rm -f "$CPCL_FILE"
+      echo "✓ Real CPCL key applied successfully"
+    EOT
+  }
+}
+
+# =============================================================================
+# LICENSE SECRET CLEANUP — Clear stale license state for fresh activation
+# =============================================================================
+# If redeploying FLO with a new JWT token, old license secrets from a previous
+# activation attempt must be cleaned up. CWC checks these on startup and may
+# skip activation if it sees old state.
+
+resource "null_resource" "cleanup_license_secrets" {
+  depends_on = [null_resource.apply_cpcl_key]
+
+  # Re-run cleanup whenever jwt_token changes
+  triggers = {
+    jwt_hash = sha256(var.jwt_token)
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Cleaning stale license secrets in ${var.flo_namespace} ==="
+      NS="${var.flo_namespace}"
+
+      for secret in activationmessage activationstatus activationtimestamp \
+                    configreport configreportsignedackresponse context csr \
+                    customerprovidedid digitalassetid digitalassetname \
+                    digitalassetversion entitlements initialregistrationstatus \
+                    licensekey licensestatus modeofoperation previousreportname \
+                    previousreportverifieddate productname statehistory \
+                    statesofdecay switchlicensestatus telemetrystatus \
+                    telemetryreports; do
+        kubectl delete secret -n "$NS" "$secret" 2>/dev/null && \
+          echo "  cleaned: $secret" || true
+      done
+
+      echo "✓ License secrets cleanup complete"
+    EOT
+  }
+}
+
+# =============================================================================
 # WAIT FOR FLO TO BE READY
 # =============================================================================
 
 resource "time_sleep" "wait_for_flo" {
-  depends_on = [helm_release.flo]
+  depends_on = [
+    helm_release.flo,
+    null_resource.apply_cpcl_key,
+    null_resource.cleanup_license_secrets
+  ]
 
   create_duration = "30s" # Wait for FLO operator to become ready
 }
 
-# Verify FLO deployment
+# Verify FLO deployment and license activation
 resource "null_resource" "verify_flo" {
   depends_on = [time_sleep.wait_for_flo]
 
@@ -190,6 +282,31 @@ resource "null_resource" "verify_flo" {
       echo "=== Verifying CRDs installed by FLO ==="
       kubectl get crd | grep -E "gatewayclass|gateway" || echo "Gateway CRDs not yet available"
 
+      # Verify CPCL key has real data (not placeholders)
+      echo ""
+      echo "=== Verifying CPCL key ==="
+      CPCL_N=$(kubectl get configmap cpcl-key-cm -n ${var.flo_namespace} -o jsonpath='{.data.jwt\.key}' 2>/dev/null | grep -o '"n":"[^"]*"' | head -1 | cut -d'"' -f4)
+      if [ -z "$CPCL_N" ] || [ "$CPCL_N" = "..." ]; then
+        echo "WARNING: CPCL key still has placeholder values! License activation will fail."
+        echo "Run: kubectl apply -f <cpcl-key.yaml> -n ${var.flo_namespace}"
+      else
+        echo "✓ CPCL key has real RSA key material (n field length: $${#CPCL_N})"
+      fi
+
+      # Check CWC license status
+      echo ""
+      echo "=== Checking license status ==="
+      STATUS=$(kubectl get secret licensestatus -n ${var.flo_namespace} -o jsonpath='{.data.licensestatus}' 2>/dev/null | base64 -d 2>/dev/null)
+      if echo "$STATUS" | grep -q '"IsActive":true'; then
+        echo "✓ License is ACTIVE"
+        echo "$STATUS" | grep -o '"EntitlementType":"[^"]*"' || true
+        echo "$STATUS" | grep -o '"LicenseExpiryDate":"[^"]*"' || true
+      else
+        echo "⚠ License not yet active. CWC may still be initializing."
+        echo "Check: kubectl logs -n ${var.flo_namespace} -l app=cwc -c f5-spk-cwc --tail=20"
+      fi
+
+      echo ""
       echo "✓ FLO deployment verification complete"
     EOT
   }

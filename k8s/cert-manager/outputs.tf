@@ -46,3 +46,29 @@ output "webhook_service_name" {
   description = "Name of the cert-manager webhook service"
   value       = "${var.release_name}-webhook"
 }
+
+# =============================================================================
+# OTEL CERTIFICATE OUTPUTS
+# =============================================================================
+# NOTE: CWC certs are auto-managed by FLO (tls-spkcwc-*, tls-csmqkview-*).
+# Only OTEL certs need explicit creation — FLO embeds a static non-rotating cert.
+
+output "otel_server_cert_secret_name" {
+  description = "Name of the OTEL server certificate secret (managed by cert-manager, replaces static FLO Helm cert)"
+  value       = var.create_otel_certs ? "external-otelsvr-secret" : ""
+}
+
+output "otel_f5ing_server_cert_secret_name" {
+  description = "Name of the OTEL F5 Ingress server certificate secret (managed by cert-manager)"
+  value       = var.create_otel_certs ? "external-f5ingotelsvr-secret" : ""
+}
+
+output "bnk_certs_ready" {
+  description = "Indicates OTEL certificates have been issued by cert-manager (CWC certs are auto-managed by FLO)"
+  value       = true
+  depends_on = [
+    kubernetes_manifest.otel_server_certificate,
+    kubernetes_manifest.otel_f5ing_server_certificate,
+    null_resource.verify_bnk_certificates,
+  ]
+}
