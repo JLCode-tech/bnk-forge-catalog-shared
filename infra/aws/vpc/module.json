@@ -91,10 +91,24 @@
         "sensitive": false
       },
       {
+        "name": "private_external_subnet_cidrs",
+        "type": "list(string)",
+        "description": "CIDR blocks of the private external subnets",
+        "used_by": ["k8s/network-setup"],
+        "sensitive": false
+      },
+      {
         "name": "private_internal_subnet_ids",
         "type": "list(string)",
         "description": "IDs of the private internal subnets",
         "used_by": ["infra/aws/eks"],
+        "sensitive": false
+      },
+      {
+        "name": "private_internal_subnet_cidrs",
+        "type": "list(string)",
+        "description": "CIDR blocks of the private internal subnets",
+        "used_by": ["k8s/network-setup"],
         "sensitive": false
       },
       {

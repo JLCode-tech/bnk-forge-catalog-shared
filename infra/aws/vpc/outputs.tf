@@ -41,9 +41,19 @@ output "private_external_subnet_ids" {
   value       = [aws_subnet.private_external_a.id, aws_subnet.private_external_b.id]
 }
 
+output "private_external_subnet_cidrs" {
+  description = "CIDR blocks of the private external subnets"
+  value       = [aws_subnet.private_external_a.cidr_block, aws_subnet.private_external_b.cidr_block]
+}
+
 output "private_internal_subnet_ids" {
   description = "IDs of the private internal subnets"
   value       = [aws_subnet.private_internal_a.id, aws_subnet.private_internal_b.id]
+}
+
+output "private_internal_subnet_cidrs" {
+  description = "CIDR blocks of the private internal subnets"
+  value       = [aws_subnet.private_internal_a.cidr_block, aws_subnet.private_internal_b.cidr_block]
 }
 
 output "all_private_subnet_ids" {
