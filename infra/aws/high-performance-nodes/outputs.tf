@@ -1,16 +1,16 @@
 # outputs.tf - High Performance Nodes Module Outputs
 
-output "high_perf_nodegroup_arn" {
+output "nodegroup_arn" {
   description = "ARN of the high-performance node group"
   value       = aws_eks_node_group.x86_high_perf.arn
 }
 
-output "high_perf_nodegroup_name" {
+output "nodegroup_name" {
   description = "Name of the high-performance node group"
   value       = aws_eks_node_group.x86_high_perf.node_group_name
 }
 
-output "high_perf_nodegroup_status" {
+output "nodegroup_status" {
   description = "Status of the high-performance node group"
   value       = aws_eks_node_group.x86_high_perf.status
 }
@@ -50,13 +50,15 @@ output "networking_components" {
   }
 }
 
-output "f5_spk_readiness" {
-  description = "Infrastructure readiness for F5 SPK installation"
+output "f5_bnk_readiness" {
+  description = "Infrastructure readiness for F5 BNK (BIG-IP Next for Kubernetes) installation"
   value = {
     multus_cni_ready      = "NetworkAttachmentDefinition CRDs available"
-    sriov_resources_ready = "SR-IOV VFs available for TMM pods"
+    sriov_resources_ready = "SR-IOV devices available for TMM pods"
     dpdk_optimized        = "DPDK-optimized nodes with hugepages"
-    networking_ready      = "Infrastructure ready for F5 SPK deployment"
+    networking_ready      = "Infrastructure ready for F5 BNK deployment"
+    tmm_nodes             = "${var.tmm_node_count} node(s) labeled app=f5-tmm with dpu=true:NoSchedule taint"
+    bnk_cp_nodes          = "${var.node_count - var.tmm_node_count} node(s) untainted for BNK control plane"
   }
 }
 
@@ -73,23 +75,21 @@ output "dpdk_scripts_uploaded" {
   ]
 }
 
-output "high_perf_summary" {
+output "summary" {
   description = "Summary of high-performance nodes configuration"
   value = {
-    project_name       = var.project_name
-    environment        = var.environment
-    nodegroup_name     = aws_eks_node_group.x86_high_perf.node_group_name
-    nodegroup_status   = aws_eks_node_group.x86_high_perf.status
-    instance_type      = var.instance_type
-    node_count         = var.node_count
-    architecture       = "x86_64"
-    f5_spk_enabled     = var.f5_spk_enabled
-    taints_enabled     = var.enable_taints
-    cpu_manager_policy = var.cpu_manager_policy
-    hugepages_2mi      = var.hugepages_2mi
-    hugepages_1gi      = var.hugepages_1gi
-    s3_bucket          = aws_s3_bucket.dpdk_scripts.id
-    networking_stack   = "multus-sriov-dpdk"
-    script_management  = "s3-based"
+    project_name     = var.project_name
+    environment      = var.environment
+    nodegroup_name   = aws_eks_node_group.x86_high_perf.node_group_name
+    nodegroup_status = aws_eks_node_group.x86_high_perf.status
+    instance_type    = var.instance_type
+    node_count       = var.node_count
+    tmm_node_count   = var.tmm_node_count
+    architecture     = "x86_64"
+    f5_bnk_enabled   = var.f5_bnk_enabled
+    hugepages_2mi    = var.hugepages_2mi
+    hugepages_1gi    = var.hugepages_1gi
+    s3_bucket        = aws_s3_bucket.dpdk_scripts.id
+    networking_stack = "multus-sriov-dpdk"
   }
 }

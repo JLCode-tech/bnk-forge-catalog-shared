@@ -55,30 +55,33 @@ locals {
     Environment = var.environment
   }
 
-  # F5 SPK/BNK specific node labels for x86_64
+  # F5 BNK (BIG-IP Next for Kubernetes) specific node labels for x86_64
   # Per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html
-  # TMM pods require label: app=f5-tmm
-  x86_f5_spk_labels = var.f5_spk_enabled ? {
-    "app"                 = "f5-tmm" # Required by F5 BNK for TMM scheduling
-    "f5.com/spk-node"     = "true"
+  #
+  # NOTE: app=f5-tmm label and dpu=true:NoSchedule taint are NOT set at node group level.
+  # They are applied selectively to only tmm_node_count nodes via the configure_tmm_nodes
+  # resource below. This ensures remaining nodes stay available for BNK control plane pods
+  # (dSSM, RabbitMQ, CWC, Observer, CRD Conversion, OTEL Collector, etc.)
+  x86_f5_bnk_labels = var.f5_bnk_enabled ? {
+    "f5.com/bnk-node"     = "true"
     "f5.com/tmm-capable"  = "true"
     "f5.com/numa-node"    = tostring(var.f5_numa_node)
     "f5.com/cpu-cores"    = tostring(var.f5_tmm_cpu_cores)
     "f5.com/architecture" = "x86_64"
-    "spk"                 = "tmm"
     "workload-type"       = "high-performance"
-    "sriov-capable"       = "true"
     "dpdk-enabled"        = "true"
   } : {}
 
   # Combine all x86_64 labels
+  # All high-perf nodes get these labels. TMM-specific labels (app=f5-tmm)
+  # are added selectively via configure_tmm_nodes below.
   x86_combined_node_labels = merge({
     "node-type"    = "high-performance"
     "sriov"        = "enabled"
     "dpdk"         = "enabled"
     "is_worker"    = "true"
     "architecture" = "x86_64"
-  }, local.x86_f5_spk_labels)
+  }, local.x86_f5_bnk_labels)
 }
 
 # ==============================================
@@ -277,8 +280,8 @@ resource "aws_launch_template" "x86_high_perf_nodegroup" {
       Name           = "${var.project_name}-x86-high-perf-worker"
       "Architecture" = "x86_64"
       "NodeType"     = "high-performance"
-      }, var.f5_spk_enabled ? {
-      "f5.com/spk-node" = "true"
+      }, var.f5_bnk_enabled ? {
+      "f5.com/bnk-node" = "true"
       "f5.com/tmm-node" = "true"
     } : {})
   }
@@ -296,7 +299,7 @@ resource "aws_launch_template" "x86_high_perf_nodegroup" {
     region           = var.region
     hugepages_2mi    = var.hugepages_2mi
     hugepages_1gi    = var.hugepages_1gi
-    f5_spk_enabled   = var.f5_spk_enabled ? "true" : "false"
+    f5_bnk_enabled   = var.f5_bnk_enabled ? "true" : "false"
     f5_tmm_cpu_cores = var.f5_tmm_cpu_cores
     f5_numa_node     = var.f5_numa_node
   }))
@@ -330,57 +333,15 @@ resource "aws_eks_node_group" "x86_high_perf" {
     max_unavailable = 1
   }
 
-  # x86_64 labels
+  # x86_64 labels — applied to ALL nodes in the group
   labels = local.x86_combined_node_labels
 
-  # High-performance taint
-  dynamic "taint" {
-    for_each = var.enable_taints ? [
-      {
-        key    = "high-performance"
-        value  = "true"
-        effect = "NO_SCHEDULE"
-      }
-    ] : []
-    content {
-      key    = taint.value.key
-      value  = taint.value.value
-      effect = taint.value.effect
-    }
-  }
-
-  # F5 SPK specific taint
-  dynamic "taint" {
-    for_each = var.f5_spk_enabled && var.enable_taints ? [
-      {
-        key    = "f5.com/spk-node"
-        value  = "true"
-        effect = "NO_SCHEDULE"
-      }
-    ] : []
-    content {
-      key    = taint.value.key
-      value  = taint.value.value
-      effect = taint.value.effect
-    }
-  }
-
-  # F5 BNK DPU taint - per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html
-  # This taint restricts nodes to running only TMM and prevents control plane workloads
-  dynamic "taint" {
-    for_each = var.f5_spk_enabled && var.enable_taints ? [
-      {
-        key    = "dpu"
-        value  = "true"
-        effect = "NO_SCHEDULE"
-      }
-    ] : []
-    content {
-      key    = taint.value.key
-      value  = taint.value.value
-      effect = taint.value.effect
-    }
-  }
+  # NOTE: No taints at node group level.
+  # Per F5 BNK docs (https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html):
+  #   - TMM nodes need: label app=f5-tmm + taint dpu=true:NoSchedule
+  #   - Non-TMM nodes must remain untainted for BNK control plane pods
+  # EKS node group taints apply to ALL nodes equally, so we apply taints
+  # selectively via the configure_tmm_nodes resource after nodes are ready.
 
   depends_on = [
     aws_iam_role_policy_attachment.nodegroup_s3_access,
@@ -649,12 +610,102 @@ resource "kubernetes_manifest" "dpdk_daemonset" {
 }
 
 # ==============================================
+# SELECTIVE TMM NODE CONFIGURATION
+# ==============================================
+# Per F5 BNK docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html
+# - TMM nodes need: label app=f5-tmm + taint dpu=true:NoSchedule
+# - Non-TMM nodes must remain untainted for BNK control plane pods
+#   (dSSM, RabbitMQ, CWC, Observer, CRD Conversion, OTEL Collector, etc.)
+#
+# This step runs after all DaemonSets are deployed, discovers the high-perf
+# node names, and selectively labels/taints only the first tmm_node_count nodes.
+
+resource "null_resource" "configure_tmm_nodes" {
+  depends_on = [
+    kubernetes_manifest.dpdk_daemonset,
+    null_resource.wait_for_x86_nodes
+  ]
+
+  triggers = {
+    tmm_node_count = var.tmm_node_count
+    cluster_name   = var.cluster_name
+    region         = var.region
+    nodegroup_name = aws_eks_node_group.x86_high_perf.node_group_name
+    f5_bnk_enabled = var.f5_bnk_enabled ? "true" : "false"
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Configuring TMM-dedicated nodes ==="
+      echo "TMM node count: ${var.tmm_node_count}"
+      echo "F5 BNK enabled: ${var.f5_bnk_enabled}"
+      echo "Total nodes: ${var.node_count}"
+      
+      if [ "${var.f5_bnk_enabled}" != "true" ] || [ "${var.tmm_node_count}" -eq "0" ]; then
+        echo "TMM node configuration skipped (f5_bnk_enabled=${var.f5_bnk_enabled}, tmm_node_count=${var.tmm_node_count})"
+        exit 0
+      fi
+      
+      # Update kubeconfig for kubectl access
+      aws eks update-kubeconfig \
+        --name ${var.cluster_name} \
+        --region ${var.region} \
+        --kubeconfig /tmp/hp-nodes-kubeconfig 2>/dev/null
+      
+      export KUBECONFIG=/tmp/hp-nodes-kubeconfig
+      
+      # Get high-performance node names (sorted for deterministic ordering)
+      HP_NODES=$$(kubectl get nodes -l node-type=high-performance \
+        --sort-by=.metadata.creationTimestamp \
+        -o jsonpath='{.items[*].metadata.name}')
+      
+      echo "High-performance nodes found: $$HP_NODES"
+      
+      TMM_COUNT=0
+      for NODE in $$HP_NODES; do
+        if [ $$TMM_COUNT -lt ${var.tmm_node_count} ]; then
+          echo "=== Configuring $$NODE as TMM-dedicated node ==="
+          
+          # Apply app=f5-tmm label (required by TMM pod nodeSelector)
+          kubectl label node $$NODE app=f5-tmm --overwrite
+          
+          # Apply dpu=true:NoSchedule taint (restricts node to TMM + system daemonsets)
+          kubectl taint nodes $$NODE dpu=true:NoSchedule --overwrite 2>/dev/null || \
+            echo "Taint already exists on $$NODE"
+          
+          echo "  $$NODE: labeled app=f5-tmm, tainted dpu=true:NoSchedule"
+          TMM_COUNT=$$((TMM_COUNT + 1))
+        else
+          echo "=== Configuring $$NODE as BNK control plane node (no taint) ==="
+          
+          # Ensure NO TMM label on non-TMM nodes
+          kubectl label node $$NODE app- 2>/dev/null || true
+          
+          # Ensure NO dpu taint on non-TMM nodes
+          kubectl taint nodes $$NODE dpu=true:NoSchedule- 2>/dev/null || true
+          
+          echo "  $$NODE: untainted, available for BNK control plane pods"
+        fi
+      done
+      
+      echo ""
+      echo "=== TMM Node Configuration Summary ==="
+      echo "TMM-dedicated nodes: $$TMM_COUNT of ${var.node_count}"
+      echo "BNK control plane nodes: $$((${var.node_count} - TMM_COUNT)) of ${var.node_count}"
+      
+      # Clean up
+      rm -f /tmp/hp-nodes-kubeconfig
+    EOT
+  }
+}
+
+# ==============================================
 # FINAL VERIFICATION
 # ==============================================
 
-resource "null_resource" "verify_dpdk_setup" {
+resource "null_resource" "verify_setup" {
   depends_on = [
-    kubernetes_manifest.dpdk_daemonset
+    null_resource.configure_tmm_nodes
   ]
 
   provisioner "local-exec" {
@@ -662,35 +713,31 @@ resource "null_resource" "verify_dpdk_setup" {
       echo "=== x86_64 High-Performance Nodes Setup Complete ==="
       echo "Architecture: x86_64"
       echo "Instance Type: ${var.instance_type}"
-      echo "F5 SPK enabled: ${var.f5_spk_enabled}"
-      echo "Taints enabled: ${var.enable_taints}"
+      echo "F5 BNK enabled: ${var.f5_bnk_enabled}"
+      echo "TMM dedicated nodes: ${var.tmm_node_count} of ${var.node_count}"
       echo "S3 bucket: ${aws_s3_bucket.dpdk_scripts.id}"
-      echo "Multus IP Manager: ${var.ecr_registry}/multus-ip-manager:${var.multus_container_version}"
       echo
       
-      # Verify node group status via AWS CLI
-      echo "Verifying EKS node group status..."
       aws eks describe-nodegroup \
         --cluster-name ${var.cluster_name} \
         --nodegroup-name ${aws_eks_node_group.x86_high_perf.node_group_name} \
         --region ${var.region} \
-        --query "nodegroup.{Status:status,DesiredSize:scalingConfig.desiredSize,MinSize:scalingConfig.minSize,MaxSize:scalingConfig.maxSize,InstanceTypes:instanceTypes,AmiType:amiType}" \
+        --query "nodegroup.{Status:status,DesiredSize:scalingConfig.desiredSize}" \
         --output table
       echo
       
       echo "=== Deployed Components ==="
-      echo "- Multus CNI DaemonSet"
-      echo "- SR-IOV CNI Installer DaemonSet"
-      echo "- SR-IOV Device Plugin DaemonSet"
-      echo "- DPDK Configurator DaemonSet"
-      echo "- ENI Attachment Manager DaemonSet"
+      echo "- Multus CNI DaemonSet (all high-perf nodes)"
+      echo "- SR-IOV CNI Installer DaemonSet (all high-perf nodes)"
+      echo "- SR-IOV Device Plugin DaemonSet (all high-perf nodes)"
+      echo "- DPDK Configurator DaemonSet (all high-perf nodes)"
+      echo "- ENI Attachment Manager DaemonSet (all high-perf nodes)"
       echo
-      
-      echo "=== Infrastructure Ready for F5 BNK Installation ==="
-      echo "- High-performance nodes with SR-IOV/DPDK support are deployed"
-      echo "- ENI attachment manager handles secondary network interfaces"
-      echo "- Use 'kubectl get nodes -l node-type=high-performance' to verify nodes"
-      echo "- Use 'kubectl get pods -n kube-system' to verify networking components"
+      echo "=== Node Topology ==="
+      echo "- ${var.tmm_node_count} node(s): app=f5-tmm label + dpu=true:NoSchedule (TMM only)"
+      echo "- $$((${var.node_count} - ${var.tmm_node_count})) node(s): no taint (BNK control plane + general workloads)"
+      echo
+      echo "=== Ready for F5 BNK Installation ==="
     EOT
   }
 }

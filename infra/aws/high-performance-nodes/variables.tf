@@ -111,11 +111,12 @@ variable "hugepages_1gi" {
   default     = 2
 }
 
-# F5 SPK specific configuration
-variable "f5_spk_enabled" {
-  description = "Enable F5 SPK specific configurations"
+# F5 BNK (BIG-IP Next for Kubernetes) configuration
+# Per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/
+variable "f5_bnk_enabled" {
+  description = "Enable F5 BNK (BIG-IP Next for Kubernetes) specific configurations including TMM node labels, taints, and SR-IOV device plugin"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "f5_tmm_cpu_cores" {
@@ -135,6 +136,16 @@ variable "enable_taints" {
   description = "Enable taints on high-performance nodes"
   type        = bool
   default     = true
+}
+
+variable "tmm_node_count" {
+  description = "Number of nodes to dedicate for TMM (tainted with dpu=true:NoSchedule and labeled app=f5-tmm). Remaining nodes stay untainted for BNK control plane pods. Set to 0 to not taint any nodes for TMM."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.tmm_node_count >= 0
+    error_message = "tmm_node_count must be >= 0."
+  }
 }
 
 # Container configuration

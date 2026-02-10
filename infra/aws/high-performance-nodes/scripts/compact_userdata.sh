@@ -26,7 +26,7 @@ S3_BUCKET="${s3_bucket_name}"
 REGION="${region}"
 HUGEPAGES_2MI="${hugepages_2mi}"
 HUGEPAGES_1GI="${hugepages_1gi}"
-F5_SPK_ENABLED="${f5_spk_enabled}"
+F5_BNK_ENABLED="${f5_bnk_enabled}"
 F5_TMM_CPU_CORES="${f5_tmm_cpu_cores}"
 F5_NUMA_NODE="${f5_numa_node}"
 
@@ -121,7 +121,7 @@ if ! is_checkpoint_complete "kernel_params"; then
         
         KERNEL_PARAMS="default_hugepagesz=2M hugepagesz=2M hugepages=$$HUGEPAGES_2MI hugepagesz=1G hugepages=$$HUGEPAGES_1GI intel_iommu=on iommu=pt"
         
-        if [ "$$F5_SPK_ENABLED" = "true" ]; then
+        if [ "$$F5_BNK_ENABLED" = "true" ]; then
             TOTAL_CPUS=$$(nproc)
             if [ $$TOTAL_CPUS -gt $$F5_TMM_CPU_CORES ]; then
                 ISOLATED_CPUS="$${F5_TMM_CPU_CORES}-$$((TOTAL_CPUS-1))"
@@ -250,7 +250,7 @@ done
     "$$HUGEPAGES_1GI" \\
     "$$REGION" \\
     "$$S3_BUCKET" \\
-    "$$F5_SPK_ENABLED" \\
+    "$$F5_BNK_ENABLED" \\
     "$$F5_TMM_CPU_CORES" \\
     "$$F5_NUMA_NODE"
 
@@ -279,7 +279,7 @@ metadata:
 data:
   hugepages_2mi: "$$HUGEPAGES_2MI"
   hugepages_1gi: "$$HUGEPAGES_1GI"  
-  f5_spk_enabled: "$$F5_SPK_ENABLED"
+  f5_bnk_enabled: "$$F5_BNK_ENABLED"
   f5_tmm_cpu_cores: "$$F5_TMM_CPU_CORES"
   f5_numa_node: "$$F5_NUMA_NODE"
   s3_bucket: "$$S3_BUCKET"

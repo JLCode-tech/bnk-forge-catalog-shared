@@ -2,7 +2,7 @@
   "module": {
     "name": "AWS EKS High-Performance Node Group",
     "path": "infra/aws/high-performance-nodes",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "layer": "infrastructure",
     "category": "compute",
     "description": "Creates dedicated high-performance EKS node group with optimized instance types (c5n, c6i) for BNK Gateway traffic management workloads.",
@@ -129,6 +129,20 @@
         "source": "user"
       },
       {
+        "name": "f5_bnk_enabled",
+        "type": "boolean",
+        "description": "Enable F5 BNK (BIG-IP Next for Kubernetes) specific configurations including TMM node labels and SR-IOV device plugin",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "tmm_node_count",
+        "type": "number",
+        "description": "Number of nodes to dedicate for TMM (tainted with dpu=true:NoSchedule and labeled app=f5-tmm). Remaining nodes stay untainted for BNK control plane pods.",
+        "default": 1,
+        "source": "user"
+      },
+      {
         "name": "enable_multus",
         "type": "boolean",
         "description": "Enable Multus CNI for multiple network interfaces",
@@ -144,13 +158,6 @@
           "bnk-traffic": "enabled"
         },
         "source": "user"
-      },
-      {
-        "name": "node_taints",
-        "type": "list(object)",
-        "description": "Kubernetes taints to apply to nodes",
-        "default": [],
-        "source": "user"
       }
     ]
   },
@@ -164,6 +171,13 @@
         "sensitive": false
       },
       {
+        "name": "nodegroup_arn",
+        "type": "string",
+        "description": "ARN of the high-performance node group",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
         "name": "nodegroup_status",
         "type": "string",
         "description": "Status of the node group deployment",
@@ -171,17 +185,17 @@
         "sensitive": false
       },
       {
-        "name": "nodegroup_id",
-        "type": "string",
-        "description": "ID of the node group",
-        "used_by": [],
+        "name": "f5_bnk_readiness",
+        "type": "object",
+        "description": "Infrastructure readiness status for F5 BNK installation",
+        "used_by": ["bnk/flo", "bnk/cneinstance"],
         "sensitive": false
       },
       {
-        "name": "node_labels",
-        "type": "map(string)",
-        "description": "Kubernetes labels applied to nodes",
-        "used_by": ["bnk/f5-controller", "bnk/gateway"],
+        "name": "summary",
+        "type": "object",
+        "description": "Summary of high-performance nodes configuration including TMM node topology",
+        "used_by": [],
         "sensitive": false
       }
     ]

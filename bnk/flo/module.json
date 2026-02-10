@@ -45,8 +45,8 @@
         "description": "Namespace for FLO deployment",
         "source": "module",
         "from_module": "bnk/far-setup",
-        "from_output": "spk_namespace",
-        "example": "f5-spk"
+        "from_output": "bnk_namespace",
+        "example": "f5-bnk"
       },
       {
         "name": "flo_version",

@@ -2,11 +2,11 @@
 set -o xtrace
 
 # Parameters from userdata
-HUGEPAGES_2MI=${1:-4096}  # Updated default for F5 SPK (8Gi)
+HUGEPAGES_2MI=${1:-4096}  # Updated default for F5 BNK (8Gi)
 HUGEPAGES_1GI=${2:-2}
 REGION=${3:-us-west-2}
 S3_BUCKET=${4}
-F5_SPK_ENABLED=${5:-false}
+F5_BNK_ENABLED=${5:-false}
 F5_TMM_CPU_CORES=${6:-4}
 F5_NUMA_NODE=${7:-0}
 
@@ -44,14 +44,14 @@ validate_alphanumeric_dash "$REGION"
 if [ -n "$S3_BUCKET" ]; then
     validate_s3_bucket "$S3_BUCKET"
 fi
-if [ "$F5_SPK_ENABLED" = "true" ]; then
+if [ "$F5_BNK_ENABLED" = "true" ]; then
     validate_int "$F5_TMM_CPU_CORES"
     validate_int "$F5_NUMA_NODE"
 fi
 
-log "Starting enhanced DPDK setup with F5 SPK support"
+log "Starting enhanced DPDK setup with F5 BNK support"
 log "Parameters: hugepages_2mi=$HUGEPAGES_2MI, hugepages_1gi=$HUGEPAGES_1GI, region=$REGION"
-log "F5 SPK: enabled=$F5_SPK_ENABLED, cpu_cores=$F5_TMM_CPU_CORES, numa_node=$F5_NUMA_NODE"
+log "F5 BNK: enabled=$F5_BNK_ENABLED, cpu_cores=$F5_TMM_CPU_CORES, numa_node=$F5_NUMA_NODE"
 
 # Error handling
 err_report() {
@@ -70,9 +70,9 @@ yum install -y net-tools pciutils numactl-devel libhugetlbfs-utils libpcap-devel
     kernel kernel-devel kernel-headers git gcc make wget python3 python3-pip \
     htop iotop sysstat perf
 
-# Install additional packages for F5 SPK if enabled
-if [ "$F5_SPK_ENABLED" = "true" ]; then
-    log "Installing F5 SPK specific packages"
+# Install additional packages for F5 BNK if enabled
+if [ "$F5_BNK_ENABLED" = "true" ]; then
+    log "Installing F5 BNK specific packages"
     yum install -y tuned tuned-utils irqbalance
     
     # Install performance tuning profile
@@ -147,8 +147,8 @@ else
     
     cp /etc/default/grub /etc/default/grub.backup
     
-    # Enhanced hugepages configuration for F5 SPK
-    if [ "$F5_SPK_ENABLED" = "true" ]; then
+    # Enhanced hugepages configuration for F5 BNK
+    if [ "$F5_BNK_ENABLED" = "true" ]; then
         HUGEPAGES_PARAMS="default_hugepagesz=2M hugepagesz=2M hugepages=$HUGEPAGES_2MI hugepagesz=1G hugepages=$HUGEPAGES_1GI intel_iommu=on iommu=pt numa_balancing=disable"
     else
         HUGEPAGES_PARAMS="default_hugepagesz=2M hugepagesz=2M hugepages=$HUGEPAGES_2MI hugepagesz=1G hugepages=$HUGEPAGES_1GI intel_iommu=on iommu=pt"
@@ -169,45 +169,45 @@ fi
 echo $HUGEPAGES_2MI > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages 2>/dev/null || true
 
 # =======================
-# F5 SPK SPECIFIC CONFIGURATION
+# F5 BNK SPECIFIC CONFIGURATION
 # =======================
-if [ "$F5_SPK_ENABLED" = "true" ]; then
-    log "Applying F5 SPK specific configurations"
+if [ "$F5_BNK_ENABLED" = "true" ]; then
+    log "Applying F5 BNK specific configurations"
     
-    # Create F5 SPK directories
-    mkdir -p /etc/f5-spk/
-    mkdir -p /var/log/f5-spk/
+    # Create F5 BNK directories
+    mkdir -p /etc/f5-bnk/
+    mkdir -p /var/log/f5-bnk/
     
-    # F5 SPK hugepages verification
-    log "F5 SPK hugepages verification: Total 2Mi pages requested: $HUGEPAGES_2MI ($(($HUGEPAGES_2MI * 2))Mi = $(($HUGEPAGES_2MI * 2 / 1024))Gi)"
+    # F5 BNK hugepages verification
+    log "F5 BNK hugepages verification: Total 2Mi pages requested: $HUGEPAGES_2MI ($(($HUGEPAGES_2MI * 2))Mi = $(($HUGEPAGES_2MI * 2 / 1024))Gi)"
     
-    # F5 SPK specific NUMA configuration
-    cat << F5_NUMA_CONFIG > /etc/f5-spk/numa-config.conf
-# F5 SPK NUMA Configuration
+    # F5 BNK specific NUMA configuration
+    cat << F5_NUMA_CONFIG > /etc/f5-bnk/numa-config.conf
+# F5 BNK NUMA Configuration
 NUMA_NODE=$F5_NUMA_NODE
 TMM_CPU_CORES=$F5_TMM_CPU_CORES
 HUGEPAGES_2MI=$HUGEPAGES_2MI
 HUGEPAGES_1GI=$HUGEPAGES_1GI
 F5_NUMA_CONFIG
     
-    # IRQ affinity optimization for F5 SPK
-    cat << 'F5_IRQ_SCRIPT' > /usr/local/bin/f5-spk-irq-optimization.sh
+    # IRQ affinity optimization for F5 BNK
+    cat << 'F5_IRQ_SCRIPT' > /usr/local/bin/f5-bnk-irq-optimization.sh
 #!/bin/bash
-# F5 SPK IRQ optimization script
+# F5 BNK IRQ optimization script
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/f5-spk/irq-optimization.log
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/f5-bnk/irq-optimization.log
 }
 
-# Source F5 SPK configuration
-if [ -f /etc/f5-spk/numa-config.conf ]; then
-    source /etc/f5-spk/numa-config.conf
+# Source F5 BNK configuration
+if [ -f /etc/f5-bnk/numa-config.conf ]; then
+    source /etc/f5-bnk/numa-config.conf
 else
-    log "F5 SPK NUMA configuration not found"
+    log "F5 BNK NUMA configuration not found"
     exit 1
 fi
 
-log "Starting F5 SPK IRQ optimization for NUMA node $NUMA_NODE"
+log "Starting F5 BNK IRQ optimization for NUMA node $NUMA_NODE"
 
 # Set IRQ affinity for network interfaces to complement NUMA node
 # Extract IRQs for eth* interfaces from /proc/interrupts in a single pass
@@ -225,27 +225,27 @@ for irq in $irqs; do
     fi
 done
 
-log "F5 SPK IRQ optimization completed"
+log "F5 BNK IRQ optimization completed"
 F5_IRQ_SCRIPT
     
-    chmod +x /usr/local/bin/f5-spk-irq-optimization.sh
+    chmod +x /usr/local/bin/f5-bnk-irq-optimization.sh
     
-    # Create F5 SPK systemd service
-    cat << F5_SERVICE > /usr/lib/systemd/system/f5-spk-optimization.service
+    # Create F5 BNK systemd service
+    cat << F5_SERVICE > /usr/lib/systemd/system/f5-bnk-optimization.service
 [Unit]
-Description=F5 SPK Performance Optimization
+Description=F5 BNK Performance Optimization
 After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/f5-spk-irq-optimization.sh
+ExecStart=/usr/local/bin/f5-bnk-irq-optimization.sh
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 F5_SERVICE
     
-    systemctl enable f5-spk-optimization.service
+    systemctl enable f5-bnk-optimization.service
 fi
 
 # =======================
@@ -253,7 +253,7 @@ fi
 # =======================
 log "Configuring network settings"
 
-# Enhanced network optimizations for F5 SPK
+# Enhanced network optimizations for F5 BNK
 cat << 'SYSCTL_EOF' >> /etc/sysctl.conf
 net.ipv4.conf.default.rp_filter = 0
 net.ipv4.conf.all.rp_filter = 0
@@ -338,9 +338,9 @@ if ! mountpoint -q /mnt/huge-1g; then
     mount -t hugetlbfs -o pagesize=1G nodev /mnt/huge-1g 2>/dev/null || true
 fi
 
-# F5 SPK specific optimizations
-if [ -f /usr/local/bin/f5-spk-irq-optimization.sh ]; then
-    /usr/local/bin/f5-spk-irq-optimization.sh
+# F5 BNK specific optimizations
+if [ -f /usr/local/bin/f5-bnk-irq-optimization.sh ]; then
+    /usr/local/bin/f5-bnk-irq-optimization.sh
 fi
 PERF_SCRIPT
 
@@ -353,11 +353,11 @@ cat << 'VERIFY_SCRIPT' > /usr/local/bin/verify-dpdk-setup.sh
 echo "=== Enhanced DPDK High-Performance Node Verification ==="
 echo "Date: $(date)"
 echo
-echo "=== F5 SPK Configuration ==="
-if [ -f /etc/f5-spk/numa-config.conf ]; then
-    cat /etc/f5-spk/numa-config.conf
+echo "=== F5 BNK Configuration ==="
+if [ -f /etc/f5-bnk/numa-config.conf ]; then
+    cat /etc/f5-bnk/numa-config.conf
 else
-    echo "F5 SPK not configured"
+    echo "F5 BNK not configured"
 fi
 echo
 echo "=== Hugepages Status ==="
@@ -382,9 +382,9 @@ echo
 echo "=== CPU Information ==="
 lscpu | grep -E "(CPU\(s\)|NUMA node|Model name)"
 echo
-echo "=== F5 SPK Verification Commands ==="
-echo "kubectl get nodes -l f5.com/spk-node=true"
-echo "kubectl get nodes -l spk=tmm"
+echo "=== F5 BNK Verification Commands ==="
+echo "kubectl get nodes -l f5.com/bnk-node=true"
+echo "kubectl get nodes -l app=f5-tmm"
 echo "kubectl describe nodes -l node-type=high-performance | grep -A10 -B10 hugepages"
 VERIFY_SCRIPT
 
@@ -405,8 +405,8 @@ sleep 30
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Post-reboot verification" >> /var/log/dpdk-setup.log
 /usr/local/bin/verify-dpdk-setup.sh >> /var/log/dpdk-setup.log
 systemctl start config-sriov.service
-if [ -f /usr/lib/systemd/system/f5-spk-optimization.service ]; then
-    systemctl start f5-spk-optimization.service
+if [ -f /usr/lib/systemd/system/f5-bnk-optimization.service ]; then
+    systemctl start f5-bnk-optimization.service
 fi
 POST_REBOOT_SCRIPT
     
@@ -418,10 +418,10 @@ POST_REBOOT_SCRIPT
 else
     log "Starting services without reboot"
     systemctl start config-sriov.service
-    if [ -f /usr/lib/systemd/system/f5-spk-optimization.service ]; then
-        systemctl start f5-spk-optimization.service
+    if [ -f /usr/lib/systemd/system/f5-bnk-optimization.service ]; then
+        systemctl start f5-bnk-optimization.service
     fi
     /usr/local/bin/verify-dpdk-setup.sh >> /var/log/dpdk-setup.log
 fi
 
-log "Enhanced DPDK setup with F5 SPK support completed"
+log "Enhanced DPDK setup with F5 BNK support completed"

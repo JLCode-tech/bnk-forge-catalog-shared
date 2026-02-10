@@ -19,7 +19,7 @@ spec:
     spec:
       hostNetwork: true
       nodeSelector:
-        sriov: "enabled"
+        node-type: high-performance
       tolerations:
       - key: node-role.kubernetes.io/master
         operator: Exists
@@ -27,16 +27,11 @@ spec:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
-      - key: f5.com/spk-node
+      - key: dpu
         value: "true"
         operator: Equal
         effect: NoSchedule
       - key: high-performance
-        value: "true"
-        operator: Equal
-        effect: NoSchedule
-      # F5 BNK DPU taint - per F5 docs
-      - key: dpu
         value: "true"
         operator: Equal
         effect: NoSchedule

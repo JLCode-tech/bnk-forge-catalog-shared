@@ -23,7 +23,7 @@ spec:
         operator: Equal
         value: "true"
         effect: NoSchedule
-      - key: f5.com/spk-node
+      - key: dpu
         operator: Equal
         value: "true"
         effect: NoSchedule
