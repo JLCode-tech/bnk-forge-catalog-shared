@@ -2,7 +2,7 @@
   "module": {
     "name": "AWS EKS High-Performance Node Group",
     "path": "infra/aws/high-performance-nodes",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "layer": "infrastructure",
     "category": "compute",
     "description": "Creates dedicated high-performance EKS node group with optimized instance types (c5n, c6i) for BNK Gateway traffic management workloads.",

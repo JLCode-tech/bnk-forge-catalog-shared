@@ -106,32 +106,112 @@ log "Starting robust DPDK setup - Instance: $$INSTANCE_ID, AZ: $$AZ"
 # ================================
 # PHASE 1: KERNEL PARAMETERS
 # ================================
+# LESSON LEARNED (aws-sydney-bnk-demo-cluster, 2026-02-10):
+#   The EKS AL2 AMI bootstrap regenerates /boot/grub2/grub.cfg AFTER userdata runs,
+#   overriding any sed modifications to /etc/default/grub. The fix uses THREE layers:
+#   1. Drop-in grub config that appends kernel args (survives regeneration)
+#   2. Runtime sysfs hugepages allocation (immediate, no reboot needed)
+#   3. Systemd service for persistence across reboots
 if ! is_checkpoint_complete "kernel_params"; then
     log "Phase 1: Configuring kernel parameters"
     
-    # Check if hugepages already configured
+    KERNEL_PARAMS="default_hugepagesz=2M hugepagesz=2M hugepages=$$HUGEPAGES_2MI hugepagesz=1G hugepages=$$HUGEPAGES_1GI intel_iommu=on iommu=pt"
+    
+    if [ "$$F5_BNK_ENABLED" = "true" ]; then
+        TOTAL_CPUS=$$(nproc)
+        if [ $$TOTAL_CPUS -gt $$F5_TMM_CPU_CORES ]; then
+            ISOLATED_CPUS="$${F5_TMM_CPU_CORES}-$$((TOTAL_CPUS-1))"
+            KERNEL_PARAMS="$$KERNEL_PARAMS isolcpus=$$ISOLATED_CPUS nohz_full=$$ISOLATED_CPUS rcu_nocbs=$$ISOLATED_CPUS numa_balancing=disable"
+        fi
+    fi
+    
+    # Check if hugepages already configured in running kernel
     if grep -q "hugepagesz=2M" /proc/cmdline; then
-        log "Hugepages already configured"
+        log "Hugepages already in kernel cmdline"
         NEEDS_REBOOT=false
     else
-        log "Adding hugepages to kernel parameters"
+        log "Adding hugepages to kernel parameters (3-layer approach)"
         NEEDS_REBOOT=true
         
+        # === Layer 1: Drop-in GRUB config (survives EKS bootstrap regeneration) ===
+        # EKS AL2 AMI runs grub2-mkconfig which reads /etc/default/grub AND drop-in configs.
+        # A drop-in in /etc/default/grub.d/ is NOT overwritten by bootstrap.
+        mkdir -p /etc/default/grub.d
+        cat << GRUB_DROPIN_EOF > /etc/default/grub.d/99-dpdk-hugepages.cfg
+# Added by compact_userdata.sh for DPDK/hugepages support
+# This drop-in survives EKS AMI bootstrap GRUB regeneration
+GRUB_CMDLINE_LINUX="$$GRUB_CMDLINE_LINUX $$KERNEL_PARAMS"
+GRUB_DROPIN_EOF
+        
+        # Also apply to /etc/default/grub as a belt-and-suspenders approach
         cp /etc/default/grub /etc/default/grub.backup
-        
-        KERNEL_PARAMS="default_hugepagesz=2M hugepagesz=2M hugepages=$$HUGEPAGES_2MI hugepagesz=1G hugepages=$$HUGEPAGES_1GI intel_iommu=on iommu=pt"
-        
-        if [ "$$F5_BNK_ENABLED" = "true" ]; then
-            TOTAL_CPUS=$$(nproc)
-            if [ $$TOTAL_CPUS -gt $$F5_TMM_CPU_CORES ]; then
-                ISOLATED_CPUS="$${F5_TMM_CPU_CORES}-$$((TOTAL_CPUS-1))"
-                KERNEL_PARAMS="$$KERNEL_PARAMS isolcpus=$$ISOLATED_CPUS nohz_full=$$ISOLATED_CPUS rcu_nocbs=$$ISOLATED_CPUS numa_balancing=disable"
-            fi
+        if ! grep -q "hugepagesz=2M" /etc/default/grub; then
+            sed -i "s/biosdevname=0/& $$KERNEL_PARAMS/g" /etc/default/grub
         fi
         
-        sed -i "s/biosdevname=0/& $$KERNEL_PARAMS/g" /etc/default/grub
         grub2-mkconfig -o /boot/grub2/grub.cfg
+        
+        # Verify the GRUB config actually contains our params
+        if grep -q "hugepagesz=2M" /boot/grub2/grub.cfg; then
+            log "GRUB config verified: hugepages params present"
+        else
+            log "WARNING: GRUB config missing hugepages — will rely on sysfs + systemd fallback"
+        fi
     fi
+    
+    # === Layer 2: Runtime sysfs allocation (immediate, no reboot) ===
+    # This ensures hugepages are available NOW even before reboot applies GRUB params.
+    # The DPDK DaemonSet also does this, but doing it early means pods don't wait.
+    log "Allocating hugepages via sysfs (runtime)..."
+    echo $$HUGEPAGES_2MI > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages 2>/dev/null || true
+    echo $$HUGEPAGES_1GI > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages 2>/dev/null || true
+    
+    # Mount hugetlbfs
+    mkdir -p /mnt/huge-2m /mnt/huge-1g
+    mount -t hugetlbfs -o pagesize=2M nodev /mnt/huge-2m 2>/dev/null || true
+    mount -t hugetlbfs -o pagesize=1G nodev /mnt/huge-1g 2>/dev/null || true
+    
+    # Disable transparent hugepages (conflicts with explicit hugepages)
+    echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+    echo never > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+    
+    ACTUAL_2MI=$$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages 2>/dev/null || echo 0)
+    ACTUAL_1GI=$$(cat /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages 2>/dev/null || echo 0)
+    log "Runtime hugepages: 2Mi=$$ACTUAL_2MI (target $$HUGEPAGES_2MI), 1Gi=$$ACTUAL_1GI (target $$HUGEPAGES_1GI)"
+    
+    # === Layer 3: Systemd service for persistence across reboots ===
+    # Even if GRUB fails, this service re-applies hugepages on every boot.
+    cat << 'HUGEPAGES_SERVICE_EOF' > /usr/lib/systemd/system/dpdk-hugepages.service
+[Unit]
+Description=DPDK Hugepages Allocation
+DefaultDependencies=no
+Before=kubelet.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/dpdk-hugepages.sh
+
+[Install]
+WantedBy=multi-user.target
+HUGEPAGES_SERVICE_EOF
+    
+    cat << HUGEPAGES_SCRIPT_EOF > /usr/local/bin/dpdk-hugepages.sh
+#!/bin/bash
+# Ensure hugepages are allocated on every boot (belt-and-suspenders for GRUB failures)
+echo $$HUGEPAGES_2MI > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+echo $$HUGEPAGES_1GI > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
+mkdir -p /mnt/huge-2m /mnt/huge-1g
+mount -t hugetlbfs -o pagesize=2M nodev /mnt/huge-2m 2>/dev/null || true
+mount -t hugetlbfs -o pagesize=1G nodev /mnt/huge-1g 2>/dev/null || true
+echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+echo never > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+echo "[\$$(date '+%Y-%m-%d %H:%M:%S')] Hugepages allocated: 2Mi=\$$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages), 1Gi=\$$(cat /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages)" >> /var/log/dpdk-hugepages.log
+HUGEPAGES_SCRIPT_EOF
+    
+    chmod +x /usr/local/bin/dpdk-hugepages.sh
+    systemctl enable dpdk-hugepages.service
     
     checkpoint "kernel_params"
 fi

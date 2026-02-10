@@ -2,6 +2,40 @@
 
 All notable changes to this module will be documented in this file.
 
+## [2.1.0] - 2026-02-10
+
+### Fixed — Bulletproof Deployment (Lessons from Live Cluster)
+
+These fixes address two root causes discovered on aws-sydney-bnk-demo-cluster that
+caused TMM to be stuck in Pending state on first deploy:
+
+#### 1. EKS AMI GRUB Hugepages Persistence
+**Root cause**: EKS AL2 AMI bootstrap regenerates `/boot/grub2/grub.cfg` AFTER userdata
+runs, overriding `sed` modifications to `/etc/default/grub`. Hugepages params were lost.
+
+**Fix**: Three-layer hugepages allocation in `compact_userdata.sh`:
+- **Layer 1**: GRUB drop-in config (`/etc/default/grub.d/99-dpdk-hugepages.cfg`) — survives
+  EKS bootstrap regeneration
+- **Layer 2**: Runtime sysfs allocation — hugepages available immediately without reboot
+- **Layer 3**: `dpdk-hugepages.service` systemd unit — ensures hugepages on every boot
+
+#### 2. SR-IOV Device Plugin Race Condition
+**Root cause**: SR-IOV device plugin deployed BEFORE DPDK configurator, so it scanned for
+vfio-pci devices before they were bound. Result: 0 allocatable resources, TMM can't schedule.
+
+**Fix**: Three-part ordering guarantee:
+- **Terraform ordering**: DPDK configurator now deploys before SR-IOV device plugin
+- **Init container**: `wait-for-vfio` init container on SR-IOV device plugin pods waits
+  for `/dev/vfio/noiommu-*` devices to exist before starting the plugin
+- **Readiness polling**: `wait_for_dpdk` resource polls DPDK DaemonSet readiness before
+  deploying SR-IOV device plugin
+
+### Changed
+- Deployment order: DPDK configurator → SR-IOV device plugin (was reversed)
+- SR-IOV device plugin image: `latest-amd64` → `v3.7.0-amd64` (pinned, reproducible)
+- All DaemonSet wait resources: `sleep 60` → actual readiness polling with 5min timeout
+- Module version bumped to 2.1.0
+
 ## [2.0.0] - 2026-02-10
 
 ### Breaking Changes
