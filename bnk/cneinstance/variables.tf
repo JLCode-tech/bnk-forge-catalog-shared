@@ -1,50 +1,135 @@
 # infrastructure-modules/bnk/cneinstance/variables.tf
-# CneInstance Module Variables - CNE Instance Configuration
+# CNEInstance Module Variables - BNK GA 2.2
+# This module creates a CNEInstance custom resource for BIG-IP Next for Kubernetes
 
 # =============================================================================
 # REQUIRED VARIABLES
 # =============================================================================
 
 variable "cluster_name" {
-  description = "Name of the Kubernetes cluster (used for resource naming and identification)"
+  description = "Name of the Kubernetes cluster (used for EKS authentication)"
   type        = string
 }
 
 variable "instance_name" {
-  description = "Name of the CneInstance resource"
+  description = "Name of the CNEInstance resource"
   type        = string
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.instance_name))
-    error_message = "Instance name must be valid Kubernetes resource name"
+    error_message = "Instance name must be valid Kubernetes resource name (lowercase, alphanumeric, hyphens)"
   }
 }
 
 variable "instance_namespace" {
-  description = "Namespace where CNE instance will be deployed"
+  description = "Namespace where CNEInstance will be deployed"
   type        = string
 }
 
-variable "instance_config" {
-  description = "CNE instance configuration settings"
-  type = object({
-    instance_type = optional(string, "standard")
-    replicas      = optional(number, 1)
-    affinity      = optional(map(any), {})
-  })
+variable "manifest_version" {
+  description = "The CNEInstance/BNK version to be installed (e.g., '2.2.0')"
+  type        = string
+}
+
+variable "registry_uri" {
+  description = "Container registry URI for BNK images (e.g., 'myregistry.example.com/f5-bnk')"
+  type        = string
+}
+
+variable "network_attachments" {
+  description = "List of network attachment definition names for CNE instance networking"
+  type        = list(string)
+
+  validation {
+    condition     = length(var.network_attachments) > 0
+    error_message = "At least one network attachment must be specified"
+  }
 }
 
 # =============================================================================
-# OPTIONAL VARIABLES
+# OPTIONAL VARIABLES - Product Configuration
 # =============================================================================
 
-variable "resource_limits" {
-  description = "Resource limits for CNE instance"
+variable "product_type" {
+  description = "Product type: 'BNK' for BIG-IP Next for Kubernetes or 'CNF' for Cloud Native Functions"
+  type        = string
+  default     = "BNK"
+
+  validation {
+    condition     = contains(["BNK", "CNF"], var.product_type)
+    error_message = "Product type must be 'BNK' or 'CNF'"
+  }
+}
+
+variable "gateway_api_enabled" {
+  description = "Enable Gateway API support for this CNEInstance"
+  type        = bool
+  default     = true
+}
+
+# =============================================================================
+# OPTIONAL VARIABLES - Deployment Configuration
+# =============================================================================
+
+variable "deployment_size" {
+  description = "Deployment size determines resource allocation: Small, Medium, Large, or Max"
+  type        = string
+  default     = "Small"
+
+  validation {
+    condition     = contains(["Small", "Medium", "Large", "Max"], var.deployment_size)
+    error_message = "Deployment size must be one of: Small, Medium, Large, Max"
+  }
+}
+
+# =============================================================================
+# OPTIONAL VARIABLES - Certificate Configuration
+# =============================================================================
+
+variable "cluster_issuer" {
+  description = "Name of the cert-manager ClusterIssuer for certificate management"
+  type        = string
+  default     = ""
+}
+
+# =============================================================================
+# OPTIONAL VARIABLES - Registry Configuration
+# =============================================================================
+
+variable "image_pull_policy" {
+  description = "Image pull policy: Always, IfNotPresent, or Never"
+  type        = string
+  default     = "IfNotPresent"
+
+  validation {
+    condition     = contains(["Always", "IfNotPresent", "Never"], var.image_pull_policy)
+    error_message = "Image pull policy must be one of: Always, IfNotPresent, Never"
+  }
+}
+
+variable "image_pull_secrets" {
+  description = "List of image pull secret names for private registry authentication"
+  type        = list(string)
+  default     = []
+}
+
+# =============================================================================
+# OPTIONAL VARIABLES - Advanced Configuration
+# =============================================================================
+
+variable "demo_mode" {
+  description = "Enable demo mode (disables hugepages requirement, uses generalized drivers)"
+  type        = bool
+  default     = false
+}
+
+variable "advanced_config" {
+  description = "Advanced configuration options (optional)"
   type = object({
-    cpu_request    = optional(string, "500m")
-    cpu_limit      = optional(string, "2000m")
-    memory_request = optional(string, "1Gi")
-    memory_limit   = optional(string, "4Gi")
+    maintenance_mode = optional(bool, false)
+    env_discovery = optional(object({
+      enabled = optional(bool, false)
+    }), {})
   })
   default = {}
 }
@@ -69,7 +154,7 @@ variable "common_labels" {
 }
 
 variable "annotations" {
-  description = "Annotations to add to the CNE instance resource"
+  description = "Annotations to add to the CNEInstance resource"
   type        = map(string)
   default     = {}
 }

@@ -1,6 +1,6 @@
 # infrastructure-modules/bnk/cneinstance/main.tf
-# CneInstance - CNE Instance Configuration
-# Uses Python kubernetes client to apply CRD (avoids terraform kubernetes_manifest schema issues)
+# CNEInstance - BIG-IP Next for Kubernetes GA 2.2
+# Creates CNEInstance custom resource using Python kubernetes client
 
 # =============================================================================
 # LOCAL VALUES
@@ -11,9 +11,10 @@ locals {
     "app.kubernetes.io/name"       = var.instance_name
     "app.kubernetes.io/component"  = "cne-instance"
     "app.kubernetes.io/managed-by" = "terraform"
+    "app.kubernetes.io/version"    = var.manifest_version
   })
 
-  # Build the CNEInstance manifest
+  # Build the CNEInstance manifest for BNK GA 2.2
   cneinstance_manifest = {
     apiVersion = "k8s.f5.com/v1"
     kind       = "CNEInstance"
@@ -25,29 +26,56 @@ locals {
     }
     spec = merge(
       {
-        instanceType = var.instance_config.instance_type
-        replicas     = var.instance_config.replicas
+        # Required fields
+        manifestVersion = var.manifest_version
+        deploymentSize  = var.deployment_size
+
+        # Product configuration
+        product = {
+          type       = var.product_type
+          gatewayAPI = var.gateway_api_enabled
+        }
+
+        # Registry configuration
+        registry = merge(
+          {
+            uri             = var.registry_uri
+            imagePullPolicy = var.image_pull_policy
+          },
+          length(var.image_pull_secrets) > 0 ? {
+            imagePullSecrets = [for secret in var.image_pull_secrets : { name = secret }]
+          } : {}
+        )
+
+        # Network attachments
+        networkAttachments = var.network_attachments
+
+        # Certificate configuration
+        certificate = var.cluster_issuer != "" ? {
+          clusterIssuer = var.cluster_issuer
+        } : {}
       },
-      length(var.resource_limits) > 0 ? {
-        resources = {
-          requests = {
-            cpu    = var.resource_limits.cpu_request
-            memory = var.resource_limits.memory_request
-          }
-          limits = {
-            cpu    = var.resource_limits.cpu_limit
-            memory = var.resource_limits.memory_limit
+      # Advanced configuration
+      var.demo_mode ? {
+        advanced = {
+          demoMode = {
+            enabled = true
           }
         }
       } : {},
-      length(var.instance_config.affinity) > 0 ? {
-        affinity = var.instance_config.affinity
+      var.advanced_config.maintenance_mode ? {
+        advanced = merge(
+          try(var.advanced_config.maintenance_mode, false) ? {
+            maintenanceMode = {
+              enabled = true
+            }
+          } : {}
+        )
       } : {}
     )
   }
 
-  # Kubeconfig for Python to use
-  # Uses data sources from bnk_forge_providers.tf (injected by BNK-Forge)
+  # Kubeconfig for Python to use (from injected provider data sources)
   kubeconfig = {
     apiVersion = "v1"
     kind       = "Config"
@@ -76,7 +104,7 @@ locals {
 }
 
 # =============================================================================
-# CNE INSTANCE - Using Python kubernetes client with dynamic kubeconfig
+# CNE INSTANCE - Using Python kubernetes client
 # =============================================================================
 
 resource "null_resource" "cneinstance" {
@@ -219,7 +247,7 @@ PYEOF
 resource "time_sleep" "wait_for_instance" {
   depends_on = [null_resource.cneinstance]
 
-  create_duration = "10s"
+  create_duration = "30s"
 }
 
 resource "null_resource" "verify_instance" {
@@ -250,7 +278,9 @@ try:
     api = client.CustomObjectsApi()
     result = api.get_namespaced_custom_object('k8s.f5.com', 'v1', '${var.instance_namespace}', 'cneinstances', '${var.instance_name}')
     print(f"CNEInstance {result['metadata']['name']} found in namespace {result['metadata']['namespace']}")
-    print(f"Status: {result.get('status', 'pending')}")
+    status = result.get('status', {})
+    print(f"Phase: {status.get('phase', 'Unknown')}")
+    print(f"Ready: {status.get('ready', 'Unknown')}")
 finally:
     os.unlink(kubeconfig_path)
 PYEOF
