@@ -108,7 +108,7 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
 - **Key Outputs**: storage_classes_deployed, storage_class_names
 - **Required For**: BNK modules requiring persistent storage
 
-#### infra/aws/high-performance-nodes
+#### infra/aws/high-performance-nodes (v2.0.0)
 - **Layer**: Platform
 - **Dependencies**: vpc, security, eks
 - **Required Inputs**:
@@ -117,8 +117,12 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
   - vpc_security_group_id (from security)
   - nodegroup_role_arn (from security)
   - key_pair_name (from security)
-- **Key Outputs**: nodegroup_name, nodegroup_status
-- **Required For**: High-performance TMM pods (DPU/GPU nodes)
+  - ecr_registry (user-provided)
+- **Key Config**: f5_bnk_enabled (default: true), tmm_node_count (default: 1)
+- **Key Outputs**: nodegroup_name, nodegroup_status, f5_bnk_readiness, summary
+- **Deploys**: Multus CNI, SR-IOV device plugin, SR-IOV CNI, DPDK configurator, ENI attachment manager
+- **Node Topology**: tmm_node_count nodes get app=f5-tmm + dpu=true:NoSchedule; rest untainted for BNK CP
+- **Required For**: TMM pods (needs hugepages-2Mi, intel.com/external_netdevice, intel.com/internal_netdevice)
 
 ### Kubernetes Layer
 
@@ -151,10 +155,10 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
 - **Dependencies**: Kubernetes cluster (any)
 - **Required Inputs**:
   - cluster_name
-  - spk_manifest_version
+  - bnk_manifest_version
   - service_account_key_file (user-provided FAR credentials)
 - **Key Outputs**:
-  - spk_namespace
+  - bnk_namespace (also aliased as spk_namespace for backward compat)
   - utils_namespace
   - far_secret_name
   - setup_complete
