@@ -21,11 +21,17 @@ output "utils_namespace" {
   value       = var.utils_namespace
 }
 
+output "operator_namespace" {
+  description = "BNK operator namespace name (FLO + all BNK components)"
+  value       = var.operator_namespace
+}
+
 output "namespaces" {
   description = "All namespaces with FAR secrets"
   value = {
-    bnk   = local.effective_namespace
-    utils = var.utils_namespace
+    bnk      = local.effective_namespace
+    operator = var.operator_namespace
+    utils    = var.utils_namespace
   }
 }
 
@@ -49,7 +55,7 @@ output "far_secret_name" {
 
 output "far_secrets_created" {
   description = "List of namespaces where FAR secrets were created"
-  value       = [local.effective_namespace, var.utils_namespace]
+  value       = [local.effective_namespace, var.operator_namespace, var.utils_namespace]
 }
 
 # =============================================================================

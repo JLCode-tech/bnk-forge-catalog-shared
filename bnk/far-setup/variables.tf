@@ -53,6 +53,16 @@ variable "spk_namespace" {
   default     = ""
 }
 
+variable "operator_namespace" {
+  description = "Kubernetes namespace for FLO and all BNK components deployed via CNEInstance"
+  type        = string
+  default     = "f5-operator"
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.operator_namespace))
+    error_message = "Namespace must be valid Kubernetes namespace name (lowercase alphanumeric and hyphens)"
+  }
+}
+
 variable "utils_namespace" {
   description = "Kubernetes namespace for shared F5 utility components"
   type        = string

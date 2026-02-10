@@ -72,11 +72,18 @@ resource "null_resource" "adopt_flo_crds" {
   # Re-run whenever the target namespace changes
   triggers = {
     flo_namespace = var.flo_namespace
+    cluster_name  = var.cluster_name
   }
 
   provisioner "local-exec" {
     command = <<-EOT
       echo "=== Adopting existing FLO CRDs for namespace ${var.flo_namespace} ==="
+
+      # Configure kubectl to talk to the cluster (same auth as terraform providers)
+      if [ -n "${var.cluster_name}" ]; then
+        aws eks update-kubeconfig --name "${var.cluster_name}" --kubeconfig /tmp/kubeconfig-adopt-$$ 2>/dev/null
+        export KUBECONFIG="/tmp/kubeconfig-adopt-$$"
+      fi
 
       # Find all CRDs owned by any previous FLO Helm release
       CRDS=$(kubectl get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{end}' 2>/dev/null \
@@ -84,6 +91,7 @@ resource "null_resource" "adopt_flo_crds" {
 
       if [ -z "$CRDS" ]; then
         echo "No existing FLO CRDs found — clean install"
+        rm -f /tmp/kubeconfig-adopt-$$ 2>/dev/null
         exit 0
       fi
 
@@ -95,6 +103,7 @@ resource "null_resource" "adopt_flo_crds" {
           --overwrite 2>/dev/null && ADOPTED=$((ADOPTED+1))
       done
 
+      rm -f /tmp/kubeconfig-adopt-$$ 2>/dev/null
       echo "✓ Adopted $ADOPTED FLO CRDs for namespace ${var.flo_namespace}"
     EOT
   }

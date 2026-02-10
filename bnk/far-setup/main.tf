@@ -12,11 +12,9 @@ locals {
   effective_manifest_version = var.bnk_manifest_version != "" ? var.bnk_manifest_version : var.spk_manifest_version
 
   # Create list of all namespaces that need FAR secrets
-  far_namespaces = var.create_namespaces ? [
+  far_namespaces = [
     local.effective_namespace,
-    var.utils_namespace
-    ] : [
-    local.effective_namespace,
+    var.operator_namespace,
     var.utils_namespace
   ]
 
@@ -92,6 +90,31 @@ resource "kubernetes_secret_v1" "far_auth_bnk" {
   depends_on = [
     kubernetes_namespace_v1.bnk
   ]
+}
+
+# Create FAR authentication secrets in operator namespace (FLO + all BNK components)
+resource "kubernetes_secret_v1" "far_auth_operator" {
+  metadata {
+    name      = "far-secret"
+    namespace = var.operator_namespace
+    labels = {
+      "app.kubernetes.io/name"       = "bnk"
+      "app.kubernetes.io/component"  = "far-auth"
+      "app.kubernetes.io/managed-by" = "terraform"
+    }
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        "repo.f5.com" = {
+          auth = local.docker_auth
+        }
+      }
+    })
+  }
 }
 
 # Create FAR authentication secrets in utils namespace
