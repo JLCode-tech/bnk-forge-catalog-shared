@@ -39,5 +39,5 @@ output "gateway_api_enabled" {
 
 output "network_attachments" {
   description = "Network attachment definitions used"
-  value       = var.network_attachments
+  value       = [var.external_nad_name, var.internal_nad_name]
 }

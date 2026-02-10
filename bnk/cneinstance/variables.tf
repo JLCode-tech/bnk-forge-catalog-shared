@@ -34,16 +34,17 @@ variable "manifest_version" {
 variable "registry_uri" {
   description = "Container registry URI for BNK images (e.g., 'myregistry.example.com/f5-bnk')"
   type        = string
+  default     = "repo.f5.com"
 }
 
-variable "network_attachments" {
-  description = "List of network attachment definition names for CNE instance networking"
-  type        = list(string)
+variable "external_nad_name" {
+  description = "Name of the external network attachment definition (from network-setup module)"
+  type        = string
+}
 
-  validation {
-    condition     = length(var.network_attachments) > 0
-    error_message = "At least one network attachment must be specified"
-  }
+variable "internal_nad_name" {
+  description = "Name of the internal network attachment definition (from network-setup module)"
+  type        = string
 }
 
 # =============================================================================

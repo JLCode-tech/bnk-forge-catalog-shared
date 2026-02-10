@@ -47,8 +47,8 @@ locals {
           } : {}
         )
 
-        # Network attachments
-        networkAttachments = var.network_attachments
+        # Network attachments (from network-setup module outputs)
+        networkAttachments = [var.external_nad_name, var.internal_nad_name]
 
         # Certificate configuration
         certificate = var.cluster_issuer != "" ? {
