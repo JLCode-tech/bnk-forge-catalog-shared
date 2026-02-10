@@ -10,7 +10,7 @@ resource "kubernetes_manifest" "cneinstance" {
 
   manifest = {
     apiVersion = "k8s.f5.com/v1"
-    kind       = "CneInstance"
+    kind       = "CNEInstance"
 
     metadata = {
       name      = var.instance_name
