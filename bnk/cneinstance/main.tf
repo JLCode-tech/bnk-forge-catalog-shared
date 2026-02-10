@@ -3,18 +3,6 @@
 # Uses Python kubernetes client to apply CRD (avoids terraform kubernetes_manifest schema issues)
 
 # =============================================================================
-# DATA SOURCES - Get EKS cluster info for kubeconfig
-# =============================================================================
-
-data "aws_eks_cluster" "cluster" {
-  name = var.cluster_name
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = var.cluster_name
-}
-
-# =============================================================================
 # LOCAL VALUES
 # =============================================================================
 
@@ -59,6 +47,7 @@ locals {
   }
 
   # Kubeconfig for Python to use
+  # Uses data sources from bnk_forge_providers.tf (injected by BNK-Forge)
   kubeconfig = {
     apiVersion = "v1"
     kind       = "Config"
@@ -156,7 +145,6 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 # For destroy, we need to re-generate kubeconfig from EKS
-# This is a simplified approach - in production would need IAM auth
 import subprocess
 import json
 
