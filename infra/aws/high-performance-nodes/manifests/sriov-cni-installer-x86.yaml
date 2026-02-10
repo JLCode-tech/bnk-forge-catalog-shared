@@ -36,6 +36,11 @@ spec:
         operator: Equal
         value: "true"
         effect: NoSchedule
+      # F5 BNK DPU taint - per F5 docs
+      - key: dpu
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
       initContainers:
       - name: install-sriov-cni
         # Sentinel: Pinned version to avoid mutable tag 'latest'
