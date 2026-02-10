@@ -8,6 +8,14 @@
 resource "kubernetes_manifest" "cneinstance" {
   depends_on = [var.flo_ready]
 
+  # Tell Terraform to ignore schema validation for spec fields
+  # This is needed because the CNEInstance CRD schema isn't fully exposed to Terraform
+  computed_fields = [
+    "spec",
+    "metadata.labels",
+    "metadata.annotations",
+  ]
+
   manifest = {
     apiVersion = "k8s.f5.com/v1"
     kind       = "CNEInstance"
