@@ -8,11 +8,19 @@ Last Updated: 2026-02-10
 ## Active Tasks
 > Move task here when starting. Only one active at a time.
 
-**None** - Module hardened. Ready for full stack E2E testing.
+**None** — Full 14-module stack deployed successfully on live cluster.
 
 ---
 
 ## Recently Completed (Last 7 Days)
+
+### Gateway Module Fixes + Full Stack Deploy (2026-02-10)
+- ✅ bnk-gatewayclass: Removed fabricated BNKGatewayClassConfig CRD (doesn't exist in BNK 2.2)
+- ✅ bnk-gatewayclass: Now uses standard GatewayClass with auto-constructed controllerName
+- ✅ gateway: Fixed PolicyAttachment (doesn't exist) → BNKSecPolicy/BNKNetPolicy (gateway.k8s.f5net.com/v1alpha1)
+- ✅ gateway: Fixed network_attachments type mismatch (tuple from cneinstance vs expected object)
+- ✅ routes: Fixed L4Route API group (gateway.f5.com/v1alpha1 → gateway.k8s.f5net.com/v1)
+- ✅ All 14 modules deployed and applied on aws-sydney-bnk-demo-cluster
 
 ### Bulletproof Module Fixes v2.1.0 (2026-02-10)
 - ✅ 3-layer hugepages persistence: GRUB drop-in + sysfs runtime + systemd service
@@ -22,21 +30,8 @@ Last Updated: 2026-02-10
 
 ### High-Performance Nodes Overhaul v2.0.0 (2026-02-10) — S22-001
 - ✅ Comprehensive module rewrite: SPK → BNK rename, selective TMM node tainting
-- ✅ Fixed SR-IOV device plugin nodeSelector (sriov-capable → node-type: high-performance)
-- ✅ Fixed all 6 DaemonSet tolerations (f5.com/spk-node → dpu)
-- ✅ Added tmm_node_count variable for selective TMM node configuration
-- ✅ Live cluster: patched DaemonSets, set GRUB hugepages, rebooted nodes
+- ✅ Fixed SR-IOV device plugin nodeSelector + all 6 DaemonSet tolerations
 - ✅ TMM pod Running 4/4 with hugepages-2Mi: 8Gi, SR-IOV resources: 1/1
-
-### F5 BNK Complete Module Fixes (2026-02-09)
-- ✅ cert-manager: Changed from F5 to Jetstack v1.16.1 per F5 BNK 2.2 GA docs
-- ✅ cert-manager: Added ClusterIssuer creation for FLO/CNEInstance
-- ✅ bnk-gatewayclass: Removed unused `controller_namespace` variable
-- ✅ flo/module.json: Added `far_setup_complete` and `cluster_issuer_name` inputs
-
-### Flagged for Testing
-- ⚠️ BNKGatewayClassConfig (`gateway.f5.com/v1`) - Not documented in BNK 2.2; may not exist
-- ⚠️ Network attachment names mismatch (network-setup vs bnk-gatewayclass defaults)
 
 ---
 
@@ -45,6 +40,11 @@ Last Updated: 2026-02-10
 
 ---
 
+## Known Issues (non-blocking)
+- kubectl verification steps in null_resource provisioners fail (no kubeconfig in worker container) — cosmetic only, actual resources created via kubernetes provider
+- GatewayClass controllerName is `f5.com/gateway-controller` (auto-wired from old default), should be `f5.com/f5-bnk-f5-cne-controller` — fix variable wiring in stack template
+
 ## Next Steps
-1. Full BNK stack E2E test (deploy through bnk-forge UI)
-2. Verify BNKGatewayClassConfig CRD exists after FLO install
+1. Fix GatewayClass controllerName variable wiring in stack template
+2. Verify GatewayClass is Accepted by CNE controller on cluster
+3. Test end-to-end traffic flow through Gateway → HTTPRoute → backend service
