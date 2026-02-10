@@ -43,12 +43,21 @@ terraform validate
 find . -name "module.json" -exec jq empty {} \;
 ```
 
+## MANDATORY: Version Bump on Every Push
+
+**Every push to origin MUST include a version bump. No exceptions.**
+
+- Bump revision in `VERSION` file (e.g. `2.2-rev.1` → `2.2-rev.2`)
+- Format: `{BNK_VERSION}-rev.{N}` where N increments each push
+- When a new `release/X.Y` branch is created, start at `X.Y-rev.1`
+
 ## Key Rules
 - **Document as you work** - next agent depends on it
 - **Security first** - no hardcoded secrets
 - **Test changes** - always validate
 - **Preserve compatibility** - don't break existing users
 - **Update module.json** - keep metadata in sync
+- **Bump VERSION** - every push, no exceptions
 
 ## Reference
 - `DEPENDENCY_GRAPH.md` - module dependencies
