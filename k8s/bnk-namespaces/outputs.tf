@@ -33,7 +33,9 @@ output "namespaces_ready" {
   ]
 }
 
-output "far_secret_name" {
-  description = "Name of the FAR image pull secret (if created)"
-  value       = var.create_far_secrets ? var.far_secret_name : ""
-}
+
+# NOTE: far_secret_name output REMOVED — it was a name collision hazard.
+# The far-setup module outputs far_secret_name="far-secret". If bnk-namespaces
+# also outputs it (as "" when create_far_secrets=false), the auto-wiring
+# system may pick up the empty string and override the real value downstream.
+# Only far-setup should be the source of truth for far_secret_name.
