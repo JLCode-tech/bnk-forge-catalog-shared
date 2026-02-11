@@ -12,10 +12,6 @@ terraform {
       source  = "hashicorp/helm"
       version = ">= 2.10.0"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = ">= 0.9.0"
-    }
     null = {
       source  = "hashicorp/null"
       version = ">= 3.2.0"

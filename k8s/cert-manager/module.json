@@ -2,10 +2,10 @@
   "module": {
     "name": "Cert-Manager (Jetstack)",
     "path": "k8s/cert-manager",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "layer": "kubernetes",
     "category": "security",
-    "description": "Deploys Jetstack cert-manager v1.16.1 with self-signed ClusterIssuer and OTEL telemetry certs for BNK. CWC certs are auto-managed by FLO. OTEL certs replace the static Helm-embedded cert with managed auto-rotating ones.",
+    "description": "Deploys Jetstack cert-manager v1.16.1 with self-signed ClusterIssuer and OTEL telemetry certs for BNK. Uses kubectl apply for CRD resources to avoid plan-time dependency on CRDs. CRDs are cleaned up on destroy to prevent stale webhook bootstrap deadlocks.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },

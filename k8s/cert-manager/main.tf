@@ -5,11 +5,20 @@
 # "For this setup, we recommend an open-source version of Cert Manager"
 # "F5 tested BIG-IP Next for Kubernetes with Jetstack Cert Manager v1.16.1"
 # Reference: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/cert-manager.html
+#
+# DESIGN: Uses null_resource + kubectl apply for cert-manager CRD resources
+# (ClusterIssuers, Certificates) instead of kubernetes_manifest. This avoids
+# the chicken-and-egg problem where kubernetes_manifest needs CRDs at plan
+# time, but CRDs are created by the helm_release in the same module.
+# On a fresh cluster (or after destroy), CRDs don't exist yet at plan time.
+#
+# CRD CLEANUP: Helm's default resource-policy is "keep" for CRDs, which
+# causes stale CRDs to persist across destroy/deploy cycles and break the
+# webhook bootstrap. We set crds.keep=false so helm uninstall cleans them.
 
 # =============================================================================
 # CERT-MANAGER NAMESPACE
 # =============================================================================
-# cert-manager requires its own namespace (cert-manager is the standard)
 
 resource "kubernetes_namespace_v1" "cert_manager" {
   count = var.create_namespace ? 1 : 0
@@ -43,22 +52,20 @@ resource "helm_release" "cert_manager" {
   values = [
     yamlencode({
       # Install CRDs - required for cert-manager to function
-      # Note: installCRDs is deprecated, use crds.enabled instead
       crds = {
         enabled = true
+        keep    = false # CRITICAL: Remove CRDs on helm uninstall to prevent
+        # stale CRDs breaking webhook bootstrap on next deploy
       }
 
       # Global settings
       global = {
-        # Leader election namespace
         leaderElection = {
           namespace = var.namespace
         }
       }
 
       # Startup API check - disabled to avoid timeout issues on slower clusters
-      # The startupapicheck job has a built-in 5min timeout that often fails
-      # cert-manager works fine without it
       startupapicheck = {
         enabled = false
       }
@@ -84,107 +91,122 @@ resource "helm_release" "cert_manager" {
 
   # Wait for resources to be ready
   wait          = true
-  wait_for_jobs = false # Don't wait for startupapicheck since it's disabled
+  wait_for_jobs = false
   timeout       = var.helm_timeout
 }
 
 # =============================================================================
-# SELF-SIGNED CLUSTER ISSUER
+# WAIT FOR CERT-MANAGER WEBHOOK TO BE READY
 # =============================================================================
-# Per F5 CloudDocs: Create self-signed CA and ClusterIssuer for BNK certificates
+# The webhook must be fully ready before we can create cert-manager CRD
+# resources (ClusterIssuers, Certificates). The webhook needs its TLS cert
+# from the cainjector, which takes 30-60s after helm install.
 
-resource "kubernetes_manifest" "selfsigned_issuer" {
-  count = var.create_cluster_issuer ? 1 : 0
-
+resource "null_resource" "wait_for_cert_manager" {
   depends_on = [helm_release.cert_manager]
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "ClusterIssuer"
-    metadata = {
-      name = "selfsigned-cluster-issuer"
-    }
-    spec = {
-      selfSigned = {}
-    }
-  }
-}
-
-# CA Certificate for signing other certificates
-resource "kubernetes_manifest" "ca_certificate" {
-  count = var.create_cluster_issuer ? 1 : 0
-
-  depends_on = [kubernetes_manifest.selfsigned_issuer]
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = var.ca_certificate_name
-      namespace = var.namespace
-    }
-    spec = {
-      isCA       = true
-      commonName = var.ca_certificate_name
-      secretName = var.ca_certificate_name
-      issuerRef = {
-        name  = "selfsigned-cluster-issuer"
-        kind  = "ClusterIssuer"
-        group = "cert-manager.io"
-      }
-    }
-  }
-}
-
-# CA ClusterIssuer that uses the CA certificate to sign other certs
-resource "kubernetes_manifest" "ca_cluster_issuer" {
-  count = var.create_cluster_issuer ? 1 : 0
-
-  depends_on = [kubernetes_manifest.ca_certificate]
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "ClusterIssuer"
-    metadata = {
-      name = var.cluster_issuer_name
-    }
-    spec = {
-      ca = {
-        secretName = var.ca_certificate_name
-      }
-    }
-  }
-}
-
-# =============================================================================
-# WAIT FOR CERT-MANAGER TO BE READY
-# =============================================================================
-
-resource "time_sleep" "wait_for_cert_manager" {
-  depends_on = [helm_release.cert_manager]
-
-  create_duration = "30s"
-}
-
-resource "null_resource" "verify_cert_manager" {
-  depends_on = [time_sleep.wait_for_cert_manager]
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Verifying Jetstack cert-manager Deployment ==="
-      
-      # Check cert-manager pods
-      kubectl get pods -n ${var.namespace} -l app.kubernetes.io/instance=${var.release_name}
-      
-      # Wait for cert-manager webhook to be ready
-      kubectl wait --for=condition=Available deployment/${var.release_name}-webhook -n ${var.namespace} --timeout=120s || echo "Webhook not yet available"
-      
+      echo "=== Waiting for cert-manager webhook to be ready ==="
+
+      # Wait for all cert-manager deployments to be available
+      kubectl wait --for=condition=Available deployment/${var.release_name} \
+        -n ${var.namespace} --timeout=120s
+
+      kubectl wait --for=condition=Available deployment/${var.release_name}-webhook \
+        -n ${var.namespace} --timeout=120s
+
+      kubectl wait --for=condition=Available deployment/${var.release_name}-cainjector \
+        -n ${var.namespace} --timeout=120s
+
       # Verify CRDs are installed
-      echo ""
       echo "=== Verifying cert-manager CRDs ==="
-      kubectl get crd | grep -E "cert-manager.io" || echo "cert-manager CRDs not found"
-      
-      echo "cert-manager deployment verification complete"
+      kubectl get crd | grep -E "cert-manager.io"
+
+      # Extra wait for webhook to be fully serving (cainjector needs to inject CA)
+      echo "Waiting 15s for webhook TLS bootstrap..."
+      sleep 15
+
+      echo "cert-manager is ready"
+    EOT
+  }
+}
+
+# =============================================================================
+# SELF-SIGNED CLUSTER ISSUER + CA
+# =============================================================================
+# Per F5 CloudDocs: Create self-signed CA and ClusterIssuer for BNK certs.
+#
+# Uses kubectl apply instead of kubernetes_manifest to avoid plan-time CRD
+# dependency. The depends_on ensures helm_release (which installs CRDs) runs
+# first.
+
+resource "null_resource" "cluster_issuers" {
+  count = var.create_cluster_issuer ? 1 : 0
+
+  depends_on = [null_resource.wait_for_cert_manager]
+
+  triggers = {
+    cluster_issuer_name = var.cluster_issuer_name
+    ca_certificate_name = var.ca_certificate_name
+    namespace           = var.namespace
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Creating ClusterIssuers and CA Certificate ==="
+      cat <<'YAML' | kubectl apply -f -
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: selfsigned-cluster-issuer
+      spec:
+        selfSigned: {}
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: ${var.ca_certificate_name}
+        namespace: ${var.namespace}
+      spec:
+        isCA: true
+        commonName: ${var.ca_certificate_name}
+        secretName: ${var.ca_certificate_name}
+        issuerRef:
+          name: selfsigned-cluster-issuer
+          kind: ClusterIssuer
+          group: cert-manager.io
+      YAML
+
+      # Wait for CA certificate to be issued before creating the CA issuer
+      echo "Waiting for CA certificate to be ready..."
+      kubectl wait --for=condition=Ready certificate/${var.ca_certificate_name} \
+        -n ${var.namespace} --timeout=120s
+
+      cat <<'YAML' | kubectl apply -f -
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: ${var.cluster_issuer_name}
+      spec:
+        ca:
+          secretName: ${var.ca_certificate_name}
+      YAML
+
+      # Verify
+      echo "=== Verifying ClusterIssuers ==="
+      kubectl get clusterissuers
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "=== Cleaning up ClusterIssuers and CA Certificate ==="
+      kubectl delete clusterissuer ${self.triggers.cluster_issuer_name} --ignore-not-found=true 2>/dev/null || true
+      kubectl delete certificate ${self.triggers.ca_certificate_name} -n ${self.triggers.namespace} --ignore-not-found=true 2>/dev/null || true
+      kubectl delete clusterissuer selfsigned-cluster-issuer --ignore-not-found=true 2>/dev/null || true
+      echo "ClusterIssuer cleanup complete"
     EOT
   }
 }
@@ -197,161 +219,116 @@ resource "null_resource" "verify_cert_manager" {
 # CWC certificates are created automatically as cert-manager Certificate CRDs:
 #
 #   Verified on live cluster (aws-sydney-bnk-demo-cluster, BNK 2.2 GA):
-#   - tls-spkcwc-grpc-svr-secret   (CWC gRPC server - replaces cwc-license-certs)
+#   - tls-spkcwc-grpc-svr-secret   (CWC gRPC server)
 #   - tls-cwc-amqp-clt-secret      (CWC AMQP client)
-#   - tls-csmqkview-grpc-svr-secret (QKView gRPC server - replaces qkview-server-certs)
-#   - tls-csmqkview-grpc-clt-secret (QKView gRPC client - replaces qkview-client-certs)
+#   - tls-csmqkview-grpc-svr-secret (QKView gRPC server)
+#   - tls-csmqkview-grpc-clt-secret (QKView gRPC client)
 #
 # These are all type kubernetes.io/tls, managed by cert-manager, created by FLO.
-# DO NOT create cwc-license-certs, qkview-server-certs, or qkview-client-certs —
-# those secret names are from the old manual approach and are NOT mounted by CWC.
+# DO NOT create cwc-license-certs, qkview-server-certs, or qkview-client-certs.
 
 # =============================================================================
 # OTEL CERTIFICATES (replaces static Helm-embedded cert from FLO)
 # =============================================================================
 # Per F5 CloudDocs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/otl-certs.html
 #
-# Verified on live cluster:
-# - FLO Helm deploys external-otelsvr-secret as a STATIC Opaque secret
-#   (managed-by: Helm, release: flo). This cert does NOT auto-rotate and
-#   will expire without warning.
-# - The OTEL collector pod mounts it at /external/otelsvr
-# - external-f5ingotelsvr-secret does NOT exist on the live cluster but
-#   F5 docs say it should be created.
-#
-# By creating cert-manager Certificate CRDs targeting these secret names,
-# we replace the static cert with a managed, auto-rotating one.
-# cert-manager will take ownership of the secret and keep it renewed.
-#
-# All spec fields validated against the live cert-manager CRD (v1.16.1):
-#   secretName, commonName, subject, emailAddresses, duration, renewBefore,
-#   issuerRef (name REQUIRED, kind/group optional), privateKey (algorithm
-#   enum: RSA/ECDSA/Ed25519, encoding enum: PKCS1/PKCS8, rotationPolicy
-#   enum: Never/Always, size: integer), revisionHistoryLimit, usages enum
-#   includes: server auth, client auth, digital signature, key encipherment
+# FLO Helm deploys external-otelsvr-secret as a STATIC Opaque secret that
+# does NOT auto-rotate. By creating cert-manager Certificate CRDs targeting
+# these secret names, we replace the static cert with managed, auto-rotating ones.
 
-resource "kubernetes_manifest" "otel_server_certificate" {
+resource "null_resource" "otel_certificates" {
   count = var.create_otel_certs && var.create_cluster_issuer ? 1 : 0
 
-  depends_on = [kubernetes_manifest.ca_cluster_issuer]
+  depends_on = [null_resource.cluster_issuers]
 
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = "external-otelsvr"
-      namespace = var.bnk_namespace
-    }
-    spec = {
-      secretName = "external-otelsvr-secret"
-      commonName = "f5net.com"
-      subject = {
-        countries           = ["US"]
-        provinces           = ["Washington"]
-        localities          = ["Seattle"]
-        organizations       = ["F5 Networks"]
-        organizationalUnits = ["PD"]
-      }
-      emailAddresses = ["clientcert@f5net.com"]
-      duration       = "8640h" # 360 days (per F5 docs)
-      renewBefore    = "720h"  # Renew 30 days before expiry
-      issuerRef = {
-        name  = var.cluster_issuer_name
-        kind  = "ClusterIssuer"
-        group = "cert-manager.io"
-      }
-      privateKey = {
-        rotationPolicy = "Always"
-        encoding       = "PKCS1"
-        algorithm      = "RSA"
-        size           = 4096
-      }
-      revisionHistoryLimit = 10
-    }
+  triggers = {
+    cluster_issuer_name = var.cluster_issuer_name
+    bnk_namespace       = var.bnk_namespace
   }
-}
-
-resource "kubernetes_manifest" "otel_f5ing_server_certificate" {
-  count = var.create_otel_certs && var.create_cluster_issuer ? 1 : 0
-
-  depends_on = [kubernetes_manifest.ca_cluster_issuer]
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = "external-f5ingotelsvr"
-      namespace = var.bnk_namespace
-    }
-    spec = {
-      secretName = "external-f5ingotelsvr-secret"
-      commonName = "f5net.com"
-      subject = {
-        countries           = ["US"]
-        provinces           = ["Washington"]
-        localities          = ["Seattle"]
-        organizations       = ["F5 Networks"]
-        organizationalUnits = ["PD"]
-      }
-      emailAddresses = ["clientcert@f5net.com"]
-      duration       = "8640h" # 360 days (per F5 docs)
-      renewBefore    = "720h"  # Renew 30 days before expiry
-      issuerRef = {
-        name  = var.cluster_issuer_name
-        kind  = "ClusterIssuer"
-        group = "cert-manager.io"
-      }
-      privateKey = {
-        rotationPolicy = "Always"
-        encoding       = "PKCS1"
-        algorithm      = "RSA"
-        size           = 4096
-      }
-      revisionHistoryLimit = 10
-    }
-  }
-}
-
-# =============================================================================
-# VERIFY OTEL CERTIFICATES
-# =============================================================================
-
-resource "null_resource" "verify_bnk_certificates" {
-  count = var.create_otel_certs && var.create_cluster_issuer ? 1 : 0
-
-  depends_on = [
-    kubernetes_manifest.otel_server_certificate,
-    kubernetes_manifest.otel_f5ing_server_certificate,
-  ]
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Verifying OTEL Managed Certificates ==="
-      
-      # Wait for cert-manager to issue the certificates
-      sleep 15
-      
-      echo ""
-      echo "=== Certificate resources in ${var.bnk_namespace} ==="
-      kubectl get certificates -n ${var.bnk_namespace} 2>/dev/null | grep -E "otelsvr|NAMESPACE" || echo "No OTEL certificates found"
-      
-      echo ""
-      echo "=== Certificate status ==="
-      for cert in external-otelsvr external-f5ingotelsvr; do
-        STATUS=$(kubectl get certificate "$cert" -n ${var.bnk_namespace} -o jsonpath='{.status.conditions[0].status}' 2>/dev/null)
-        REASON=$(kubectl get certificate "$cert" -n ${var.bnk_namespace} -o jsonpath='{.status.conditions[0].reason}' 2>/dev/null)
-        if [ "$STATUS" = "True" ]; then
-          echo "  OK: $cert is Ready"
-        elif [ -n "$STATUS" ]; then
-          echo "  WARN: $cert status=$STATUS reason=$REASON"
-        else
-          echo "  PENDING: $cert not yet processed"
-        fi
-      done
-      
+      echo "=== Creating OTEL Managed Certificates ==="
+      cat <<'YAML' | kubectl apply -f -
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: external-otelsvr
+        namespace: ${var.bnk_namespace}
+      spec:
+        secretName: external-otelsvr-secret
+        commonName: f5net.com
+        subject:
+          countries: ["US"]
+          provinces: ["Washington"]
+          localities: ["Seattle"]
+          organizations: ["F5 Networks"]
+          organizationalUnits: ["PD"]
+        emailAddresses: ["clientcert@f5net.com"]
+        duration: "8640h"
+        renewBefore: "720h"
+        issuerRef:
+          name: ${var.cluster_issuer_name}
+          kind: ClusterIssuer
+          group: cert-manager.io
+        privateKey:
+          rotationPolicy: Always
+          encoding: PKCS1
+          algorithm: RSA
+          size: 4096
+        revisionHistoryLimit: 10
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: external-f5ingotelsvr
+        namespace: ${var.bnk_namespace}
+      spec:
+        secretName: external-f5ingotelsvr-secret
+        commonName: f5net.com
+        subject:
+          countries: ["US"]
+          provinces: ["Washington"]
+          localities: ["Seattle"]
+          organizations: ["F5 Networks"]
+          organizationalUnits: ["PD"]
+        emailAddresses: ["clientcert@f5net.com"]
+        duration: "8640h"
+        renewBefore: "720h"
+        issuerRef:
+          name: ${var.cluster_issuer_name}
+          kind: ClusterIssuer
+          group: cert-manager.io
+        privateKey:
+          rotationPolicy: Always
+          encoding: PKCS1
+          algorithm: RSA
+          size: 4096
+        revisionHistoryLimit: 10
+      YAML
+
+      # Wait for certificates to be issued
+      echo "Waiting for OTEL certificates to be ready..."
+      kubectl wait --for=condition=Ready certificate/external-otelsvr \
+        -n ${var.bnk_namespace} --timeout=120s || echo "WARN: external-otelsvr not ready yet"
+      kubectl wait --for=condition=Ready certificate/external-f5ingotelsvr \
+        -n ${var.bnk_namespace} --timeout=120s || echo "WARN: external-f5ingotelsvr not ready yet"
+
+      echo "=== OTEL Certificate Status ==="
+      kubectl get certificates -n ${var.bnk_namespace}
       echo ""
       echo "OK: OTEL certs managed by cert-manager with auto-rotation"
       echo "    (CWC certs are auto-managed by FLO — no action needed)"
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "=== Cleaning up OTEL Certificates ==="
+      kubectl delete certificate external-otelsvr -n ${self.triggers.bnk_namespace} --ignore-not-found=true 2>/dev/null || true
+      kubectl delete certificate external-f5ingotelsvr -n ${self.triggers.bnk_namespace} --ignore-not-found=true 2>/dev/null || true
+      echo "OTEL certificate cleanup complete"
     EOT
   }
 }

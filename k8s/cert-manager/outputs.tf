@@ -22,9 +22,9 @@ output "chart_version" {
 }
 
 output "cert_manager_ready" {
-  description = "Indicates cert-manager deployment is complete"
+  description = "Indicates cert-manager deployment is complete and ClusterIssuers are created"
   value       = true
-  depends_on  = [null_resource.verify_cert_manager]
+  depends_on  = [null_resource.cluster_issuers]
 }
 
 # =============================================================================
@@ -35,11 +35,13 @@ output "cert_manager_ready" {
 output "cluster_issuer_name" {
   description = "Name of the CA ClusterIssuer for BNK certificates (use in FLO flo-values.yaml and CNEInstance)"
   value       = var.create_cluster_issuer ? var.cluster_issuer_name : ""
+  depends_on  = [null_resource.cluster_issuers]
 }
 
 output "ca_secret_name" {
   description = "Name of the CA certificate secret"
   value       = var.create_cluster_issuer ? var.ca_certificate_name : ""
+  depends_on  = [null_resource.cluster_issuers]
 }
 
 output "webhook_service_name" {
@@ -66,9 +68,5 @@ output "otel_f5ing_server_cert_secret_name" {
 output "bnk_certs_ready" {
   description = "Indicates OTEL certificates have been issued by cert-manager (CWC certs are auto-managed by FLO)"
   value       = true
-  depends_on = [
-    kubernetes_manifest.otel_server_certificate,
-    kubernetes_manifest.otel_f5ing_server_certificate,
-    null_resource.verify_bnk_certificates,
-  ]
+  depends_on  = [null_resource.otel_certificates]
 }
