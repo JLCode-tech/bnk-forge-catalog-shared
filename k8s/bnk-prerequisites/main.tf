@@ -13,14 +13,9 @@
 # =============================================================================
 # KUBECONFIG FOR KUBECTL (used by destroy-time cleanup)
 # =============================================================================
-
-data "aws_eks_cluster" "cluster" {
-  name = var.cluster_name
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = var.cluster_name
-}
+# NOTE: data.aws_eks_cluster.cluster and data.aws_eks_cluster_auth.cluster
+# are provided by BNK-Forge platform auto-injection (bnk_forge_providers.tf).
+# Do NOT declare them here — that causes duplicate resource errors.
 
 resource "local_file" "kubeconfig" {
   filename        = "${path.module}/work/kubeconfig"
@@ -70,12 +65,6 @@ locals {
     }
   })
 
-  # All namespaces that need FAR pull secrets
-  namespaces_with_secrets = {
-    operator = var.operator_namespace
-    utils    = var.utils_namespace
-    gateway  = var.gateway_namespace
-  }
 }
 
 # =============================================================================
@@ -96,6 +85,7 @@ locals {
 resource "null_resource" "bnk_cleanup" {
   triggers = {
     operator_namespace = var.operator_namespace
+    utils_namespace    = var.utils_namespace
     kubeconfig         = local_file.kubeconfig.filename
   }
 
@@ -136,8 +126,8 @@ resource "null_resource" "bnk_cleanup" {
         done
       done
 
-      # Step 3: Also check f5-utils namespace
-      F5_UTILS_NS="f5-utils"
+      # Step 3: Also check utils namespace
+      F5_UTILS_NS="${self.triggers.utils_namespace}"
       for crd in $F5_CRDS; do
         RESOURCES=$($KC get $crd -n $F5_UTILS_NS -o name 2>/dev/null)
         for res in $RESOURCES; do

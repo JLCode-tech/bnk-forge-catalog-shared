@@ -12,10 +12,50 @@
 # - TMM (via CNEInstance)
 
 # =============================================================================
+# KUBECONFIG FOR KUBECTL
+# =============================================================================
+# Generate a kubeconfig file from the platform-injected EKS data sources
+# so kubectl works in local-exec provisioners (celery-worker container).
+# data.aws_eks_cluster.cluster and data.aws_eks_cluster_auth.cluster are
+# provided by BNK-Forge auto-injection (bnk_forge_providers.tf).
+
+resource "local_file" "kubeconfig" {
+  filename        = "${path.module}/work/kubeconfig"
+  file_permission = "0600"
+  content = yamlencode({
+    apiVersion = "v1"
+    kind       = "Config"
+    clusters = [{
+      name = "cluster"
+      cluster = {
+        server                     = data.aws_eks_cluster.cluster.endpoint
+        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
+      }
+    }]
+    users = [{
+      name = "user"
+      user = {
+        token = data.aws_eks_cluster_auth.cluster.token
+      }
+    }]
+    contexts = [{
+      name = "default"
+      context = {
+        cluster = "cluster"
+        user    = "user"
+      }
+    }]
+    current-context = "default"
+  })
+}
+
+# =============================================================================
 # LOCAL VALUES
 # =============================================================================
 
 locals {
+  kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
+
   # TEEM URLs by environment (for connected licensing)
   teem_urls = {
     production = {
@@ -62,10 +102,11 @@ resource "null_resource" "adopt_flo_crds" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      KC="${local.kubectl}"
       echo "=== Adopting existing FLO CRDs for namespace ${var.flo_namespace} ==="
 
       # Find all CRDs owned by any previous FLO Helm release
-      CRDS=$(kubectl get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{end}' 2>/dev/null \
+      CRDS=$($KC get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{end}' 2>/dev/null \
         | grep -E '\tflo$' | awk '{print $1}')
 
       if [ -z "$CRDS" ]; then
@@ -75,7 +116,7 @@ resource "null_resource" "adopt_flo_crds" {
 
       ADOPTED=0
       for crd in $CRDS; do
-        kubectl annotate crd "$crd" \
+        $KC annotate crd "$crd" \
           meta.helm.sh/release-name=flo \
           meta.helm.sh/release-namespace=${var.flo_namespace} \
           --overwrite 2>/dev/null && ADOPTED=$((ADOPTED+1))
@@ -184,7 +225,7 @@ resource "null_resource" "apply_cpcl_key" {
       fi
 
       echo "Applying real CPCL key to ${var.flo_namespace} namespace"
-      kubectl apply -f "$CPCL_FILE" -n ${var.flo_namespace} 2>&1
+      ${local.kubectl} apply -f "$CPCL_FILE" -n ${var.flo_namespace} 2>&1
       rm -f "$CPCL_FILE"
       echo "CPCL key applied successfully"
     EOT
@@ -204,6 +245,7 @@ resource "null_resource" "cleanup_license_secrets" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      KC="${local.kubectl}"
       echo "=== Cleaning stale license secrets in ${var.flo_namespace} ==="
       NS="${var.flo_namespace}"
 
@@ -215,7 +257,7 @@ resource "null_resource" "cleanup_license_secrets" {
                     previousreportverifieddate productname statehistory \
                     statesofdecay switchlicensestatus telemetrystatus \
                     telemetryreports; do
-        kubectl delete secret -n "$NS" "$secret" 2>/dev/null && \
+        $KC delete secret -n "$NS" "$secret" 2>/dev/null && \
           echo "  cleaned: $secret" || true
       done
 
@@ -243,20 +285,21 @@ resource "null_resource" "verify_flo" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      KC="${local.kubectl}"
       echo "=== Verifying F5 Lifecycle Operator ==="
 
       # Check FLO pods
-      kubectl get pods -n ${var.flo_namespace} -l app=flo
+      $KC get pods -n ${var.flo_namespace} -l app=flo
 
       # Verify CRDs
       echo ""
       echo "=== CRDs installed by FLO ==="
-      kubectl get crd | grep -E "f5.com|gateway.networking.k8s.io" || echo "CRDs not yet available"
+      $KC get crd | grep -E "f5.com|gateway.networking.k8s.io" || echo "CRDs not yet available"
 
       # Check CPCL key
       echo ""
       echo "=== CPCL key ==="
-      CPCL_N=$(kubectl get configmap cpcl-key-cm -n ${var.flo_namespace} -o jsonpath='{.data.jwt\.key}' 2>/dev/null | grep -o '"n":"[^"]*"' | head -1 | cut -d'"' -f4)
+      CPCL_N=$($KC get configmap cpcl-key-cm -n ${var.flo_namespace} -o jsonpath='{.data.jwt\.key}' 2>/dev/null | grep -o '"n":"[^"]*"' | head -1 | cut -d'"' -f4)
       if [ -z "$CPCL_N" ] || [ "$CPCL_N" = "..." ]; then
         echo "WARNING: CPCL key has placeholder values"
       else
@@ -266,7 +309,7 @@ resource "null_resource" "verify_flo" {
       # Check license
       echo ""
       echo "=== License status ==="
-      STATUS=$(kubectl get secret licensestatus -n ${var.flo_namespace} -o jsonpath='{.data.licensestatus}' 2>/dev/null | base64 -d 2>/dev/null)
+      STATUS=$($KC get secret licensestatus -n ${var.flo_namespace} -o jsonpath='{.data.licensestatus}' 2>/dev/null | base64 -d 2>/dev/null)
       if echo "$STATUS" | grep -q '"IsActive":true'; then
         echo "License: ACTIVE"
       else

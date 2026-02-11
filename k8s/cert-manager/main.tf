@@ -17,6 +17,48 @@
 # webhook bootstrap. We set crds.keep=false so helm uninstall cleans them.
 
 # =============================================================================
+# KUBECONFIG FOR KUBECTL
+# =============================================================================
+# Generate a kubeconfig file from the platform-injected EKS data sources
+# so kubectl works in local-exec provisioners (celery-worker container).
+# data.aws_eks_cluster.cluster and data.aws_eks_cluster_auth.cluster are
+# provided by BNK-Forge auto-injection (bnk_forge_providers.tf).
+
+resource "local_file" "kubeconfig" {
+  filename        = "${path.module}/work/kubeconfig"
+  file_permission = "0600"
+  content = yamlencode({
+    apiVersion = "v1"
+    kind       = "Config"
+    clusters = [{
+      name = "cluster"
+      cluster = {
+        server                     = data.aws_eks_cluster.cluster.endpoint
+        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
+      }
+    }]
+    users = [{
+      name = "user"
+      user = {
+        token = data.aws_eks_cluster_auth.cluster.token
+      }
+    }]
+    contexts = [{
+      name = "default"
+      context = {
+        cluster = "cluster"
+        user    = "user"
+      }
+    }]
+    current-context = "default"
+  })
+}
+
+locals {
+  kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
+}
+
+# =============================================================================
 # CERT-MANAGER NAMESPACE
 # =============================================================================
 
@@ -110,18 +152,18 @@ resource "null_resource" "wait_for_cert_manager" {
       echo "=== Waiting for cert-manager webhook to be ready ==="
 
       # Wait for all cert-manager deployments to be available
-      kubectl wait --for=condition=Available deployment/${var.release_name} \
+      ${local.kubectl} wait --for=condition=Available deployment/${var.release_name} \
         -n ${var.namespace} --timeout=120s
 
-      kubectl wait --for=condition=Available deployment/${var.release_name}-webhook \
+      ${local.kubectl} wait --for=condition=Available deployment/${var.release_name}-webhook \
         -n ${var.namespace} --timeout=120s
 
-      kubectl wait --for=condition=Available deployment/${var.release_name}-cainjector \
+      ${local.kubectl} wait --for=condition=Available deployment/${var.release_name}-cainjector \
         -n ${var.namespace} --timeout=120s
 
       # Verify CRDs are installed
       echo "=== Verifying cert-manager CRDs ==="
-      kubectl get crd | grep -E "cert-manager.io"
+      ${local.kubectl} get crd | grep -E "cert-manager.io"
 
       # Extra wait for webhook to be fully serving (cainjector needs to inject CA)
       echo "Waiting 15s for webhook TLS bootstrap..."
@@ -150,12 +192,14 @@ resource "null_resource" "cluster_issuers" {
     cluster_issuer_name = var.cluster_issuer_name
     ca_certificate_name = var.ca_certificate_name
     namespace           = var.namespace
+    kubeconfig          = local_file.kubeconfig.filename
   }
 
   provisioner "local-exec" {
     command = <<-EOT
+      KC="${local.kubectl}"
       echo "=== Creating ClusterIssuers and CA Certificate ==="
-      cat <<'YAML' | kubectl apply -f -
+      cat <<'YAML' | $KC apply -f -
       apiVersion: cert-manager.io/v1
       kind: ClusterIssuer
       metadata:
@@ -180,10 +224,10 @@ resource "null_resource" "cluster_issuers" {
 
       # Wait for CA certificate to be issued before creating the CA issuer
       echo "Waiting for CA certificate to be ready..."
-      kubectl wait --for=condition=Ready certificate/${var.ca_certificate_name} \
+      $KC wait --for=condition=Ready certificate/${var.ca_certificate_name} \
         -n ${var.namespace} --timeout=120s
 
-      cat <<'YAML' | kubectl apply -f -
+      cat <<'YAML' | $KC apply -f -
       apiVersion: cert-manager.io/v1
       kind: ClusterIssuer
       metadata:
@@ -195,17 +239,18 @@ resource "null_resource" "cluster_issuers" {
 
       # Verify
       echo "=== Verifying ClusterIssuers ==="
-      kubectl get clusterissuers
+      $KC get clusterissuers
     EOT
   }
 
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
+      KC="kubectl --kubeconfig ${self.triggers.kubeconfig}"
       echo "=== Cleaning up ClusterIssuers and CA Certificate ==="
-      kubectl delete clusterissuer ${self.triggers.cluster_issuer_name} --ignore-not-found=true 2>/dev/null || true
-      kubectl delete certificate ${self.triggers.ca_certificate_name} -n ${self.triggers.namespace} --ignore-not-found=true 2>/dev/null || true
-      kubectl delete clusterissuer selfsigned-cluster-issuer --ignore-not-found=true 2>/dev/null || true
+      $KC delete clusterissuer ${self.triggers.cluster_issuer_name} --ignore-not-found=true 2>/dev/null || true
+      $KC delete certificate ${self.triggers.ca_certificate_name} -n ${self.triggers.namespace} --ignore-not-found=true 2>/dev/null || true
+      $KC delete clusterissuer selfsigned-cluster-issuer --ignore-not-found=true 2>/dev/null || true
       echo "ClusterIssuer cleanup complete"
     EOT
   }
@@ -244,12 +289,14 @@ resource "null_resource" "otel_certificates" {
   triggers = {
     cluster_issuer_name = var.cluster_issuer_name
     bnk_namespace       = var.bnk_namespace
+    kubeconfig          = local_file.kubeconfig.filename
   }
 
   provisioner "local-exec" {
     command = <<-EOT
+      KC="${local.kubectl}"
       echo "=== Creating OTEL Managed Certificates ==="
-      cat <<'YAML' | kubectl apply -f -
+      cat <<'YAML' | $KC apply -f -
       apiVersion: cert-manager.io/v1
       kind: Certificate
       metadata:
@@ -309,13 +356,13 @@ resource "null_resource" "otel_certificates" {
 
       # Wait for certificates to be issued
       echo "Waiting for OTEL certificates to be ready..."
-      kubectl wait --for=condition=Ready certificate/external-otelsvr \
+      $KC wait --for=condition=Ready certificate/external-otelsvr \
         -n ${var.bnk_namespace} --timeout=120s || echo "WARN: external-otelsvr not ready yet"
-      kubectl wait --for=condition=Ready certificate/external-f5ingotelsvr \
+      $KC wait --for=condition=Ready certificate/external-f5ingotelsvr \
         -n ${var.bnk_namespace} --timeout=120s || echo "WARN: external-f5ingotelsvr not ready yet"
 
       echo "=== OTEL Certificate Status ==="
-      kubectl get certificates -n ${var.bnk_namespace}
+      $KC get certificates -n ${var.bnk_namespace}
       echo ""
       echo "OK: OTEL certs managed by cert-manager with auto-rotation"
       echo "    (CWC certs are auto-managed by FLO — no action needed)"
@@ -325,9 +372,10 @@ resource "null_resource" "otel_certificates" {
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
+      KC="kubectl --kubeconfig ${self.triggers.kubeconfig}"
       echo "=== Cleaning up OTEL Certificates ==="
-      kubectl delete certificate external-otelsvr -n ${self.triggers.bnk_namespace} --ignore-not-found=true 2>/dev/null || true
-      kubectl delete certificate external-f5ingotelsvr -n ${self.triggers.bnk_namespace} --ignore-not-found=true 2>/dev/null || true
+      $KC delete certificate external-otelsvr -n ${self.triggers.bnk_namespace} --ignore-not-found=true 2>/dev/null || true
+      $KC delete certificate external-f5ingotelsvr -n ${self.triggers.bnk_namespace} --ignore-not-found=true 2>/dev/null || true
       echo "OTEL certificate cleanup complete"
     EOT
   }

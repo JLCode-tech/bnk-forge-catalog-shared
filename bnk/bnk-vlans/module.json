@@ -1,10 +1,76 @@
 {
-  "name": "bnk-vlans",
-  "path": "bnk/bnk-vlans",
-  "description": "F5SPKVlan CRs for BNK TMM data-plane self IPs. Self IPs must match NAD IPAM IPs from network-setup module.",
-  "category": "bnk",
-  "version": "1.0.0",
-  "provider": "kubernetes",
-  "dependencies": ["bnk/cneinstance", "k8s/network-setup"],
-  "tags": ["bnk", "vlan", "network", "tmm"]
+  "module": {
+    "name": "BNK VLANs",
+    "path": "bnk/bnk-vlans",
+    "version": "1.0.0",
+    "layer": "bnk-network",
+    "category": "bnk",
+    "description": "F5SPKVlan CRs for BNK TMM data-plane self IPs. Self IPs must match NAD IPAM IPs from network-setup module.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/cneinstance",
+        "reason": "CNEInstance must be running before VLAN CRs can be applied"
+      },
+      {
+        "module": "k8s/network-setup",
+        "reason": "NAD self IPs must be created first for VLAN IP alignment"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
+        "source": "auto"
+      },
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace where BNK components are deployed",
+        "default": "f5-operator",
+        "source": "module",
+        "from_module": "k8s/bnk-prerequisites",
+        "from_output": "operator_namespace"
+      },
+      {
+        "name": "cneinstance_ready",
+        "type": "boolean",
+        "description": "Gate from CNEInstance module",
+        "source": "module",
+        "from_module": "bnk/cneinstance",
+        "from_output": "instance_ready",
+        "default": true
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "vlans_ready",
+        "type": "boolean",
+        "description": "Flag indicating VLAN CRs have been applied",
+        "used_by": ["bnk/bnk-gatewayclass"],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes", "aws"],
+    "optional": ["local", "null"]
+  },
+  "deployment": {
+    "order": 57,
+    "estimated_time": "1 minute",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
 }

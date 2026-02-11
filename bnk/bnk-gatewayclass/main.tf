@@ -1,4 +1,4 @@
-# bnk-forge-modules/bnk/bnk-gatewayclass/main.tf
+# bnk/bnk-gatewayclass/main.tf
 # GatewayClass for F5 BIG-IP Next for Kubernetes (BNK 2.2 GA)
 #
 # Per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-gateway-api-gatewayclass.html
@@ -10,10 +10,50 @@
 # Example: f5.com/f5-bnk-f5-cne-controller
 
 # =============================================================================
+# KUBECONFIG FOR KUBECTL
+# =============================================================================
+# Generate a kubeconfig file from the platform-injected EKS data sources
+# so kubectl works in local-exec provisioners (celery-worker container).
+# data.aws_eks_cluster.cluster and data.aws_eks_cluster_auth.cluster are
+# provided by BNK-Forge auto-injection (bnk_forge_providers.tf).
+
+resource "local_file" "kubeconfig" {
+  filename        = "${path.module}/work/kubeconfig"
+  file_permission = "0600"
+  content = yamlencode({
+    apiVersion = "v1"
+    kind       = "Config"
+    clusters = [{
+      name = "cluster"
+      cluster = {
+        server                     = data.aws_eks_cluster.cluster.endpoint
+        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
+      }
+    }]
+    users = [{
+      name = "user"
+      user = {
+        token = data.aws_eks_cluster_auth.cluster.token
+      }
+    }]
+    contexts = [{
+      name = "default"
+      context = {
+        cluster = "cluster"
+        user    = "user"
+      }
+    }]
+    current-context = "default"
+  })
+}
+
+# =============================================================================
 # LOCALS
 # =============================================================================
 
 locals {
+  kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
+
   # Per F5 docs: controllerName = f5.com/<namespace>-f5-cne-controller
   # Example: if flo_namespace = "f5-bnk" → "f5.com/f5-bnk-f5-cne-controller"
   controller_name = var.controller_name != "" ? var.controller_name : "f5.com/${var.flo_namespace}-f5-cne-controller"
@@ -22,10 +62,12 @@ locals {
 # =============================================================================
 # GATEWAY CLASS
 # =============================================================================
+# NOTE: depends_on on variables is a no-op in Terraform. The platform enforces
+# module ordering via stack sequential dependencies, so ordering is guaranteed
+# by the time this module runs. FLO will have already installed the GatewayClass
+# CRD before this module's init/plan/apply.
 
 resource "kubernetes_manifest" "bnk_gatewayclass" {
-  depends_on = [var.flo_ready]
-
   manifest = {
     apiVersion = "gateway.networking.k8s.io/v1"
     kind       = "GatewayClass"
@@ -62,13 +104,14 @@ resource "null_resource" "verify_gatewayclass" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      KC="${local.kubectl}"
       echo "=== Verifying GatewayClass ==="
 
       # Check GatewayClass exists and show status
-      kubectl get gatewayclass ${var.gatewayclass_name} -o wide || echo "GatewayClass not found"
+      $KC get gatewayclass ${var.gatewayclass_name} -o wide || echo "GatewayClass not found"
 
       # Wait for controller to accept the GatewayClass
-      kubectl wait --for=condition=Accepted gatewayclass/${var.gatewayclass_name} --timeout=120s || echo "WARNING: GatewayClass not yet accepted by controller"
+      $KC wait --for=condition=Accepted gatewayclass/${var.gatewayclass_name} --timeout=120s || echo "WARNING: GatewayClass not yet accepted by controller"
 
       echo "GatewayClass verification complete"
     EOT

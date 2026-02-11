@@ -131,7 +131,7 @@
     ]
   },
   "providers": {
-    "required": [],
+    "required": ["kubernetes", "aws"],
     "optional": ["local", "null", "time"]
   },
   "deployment": {

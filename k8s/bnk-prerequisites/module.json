@@ -122,8 +122,8 @@
     ]
   },
   "providers": {
-    "required": ["kubernetes"],
-    "optional": ["local", "external"]
+    "required": ["kubernetes", "aws"],
+    "optional": ["local", "external", "null"]
   },
   "deployment": {
     "order": 30,

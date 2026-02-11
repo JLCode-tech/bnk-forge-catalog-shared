@@ -90,8 +90,8 @@
     ]
   },
   "providers": {
-    "required": ["kubernetes"],
-    "optional": ["null", "time"]
+    "required": ["kubernetes", "aws"],
+    "optional": ["null", "time", "local"]
   },
   "deployment": {
     "order": 60,

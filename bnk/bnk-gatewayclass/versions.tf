@@ -1,6 +1,6 @@
-# infrastructure-modules/spk-2.1/bnk-gatewayclass/versions.tf
-# Provider configuration is injected by BNK-Forge platform
-# This module is cloud-agnostic - works with any Kubernetes cluster
+# bnk/bnk-gatewayclass/versions.tf
+# Provider configuration is injected by BNK-Forge platform (bnk_forge_providers.tf)
+# aws is required so the platform injects EKS data sources for kubeconfig generation
 
 terraform {
   required_version = ">= 1.3.0"
@@ -9,6 +9,16 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.20"
+    }
+
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0"
+    }
+
+    local = {
+      source  = "hashicorp/local"
+      version = ">= 2.4.0"
     }
 
     time = {

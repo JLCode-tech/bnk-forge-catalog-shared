@@ -126,8 +126,8 @@
     ]
   },
   "providers": {
-    "required": ["kubernetes", "helm"],
-    "optional": ["null", "time"]
+    "required": ["kubernetes", "helm", "aws"],
+    "optional": ["null", "time", "local"]
   },
   "deployment": {
     "order": 50,
