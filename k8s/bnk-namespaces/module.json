@@ -80,14 +80,14 @@
         "name": "bnk_namespace",
         "type": "string",
         "description": "Name of the BNK data plane namespace (TMM pods)",
-        "used_by": ["bnk/far-setup", "k8s/network-setup", "k8s/cert-manager"],
+        "used_by": ["bnk/far-setup"],
         "sensitive": false
       },
       {
         "name": "operator_namespace",
         "type": "string",
         "description": "Name of the BNK operator namespace (FLO, CNE, CWC)",
-        "used_by": ["bnk/flo", "bnk/cneinstance", "bnk/bnk-gatewayclass"],
+        "used_by": ["bnk/far-setup", "k8s/network-setup", "k8s/cert-manager", "bnk/flo", "bnk/cneinstance", "bnk/bnk-gatewayclass"],
         "sensitive": false
       },
       {

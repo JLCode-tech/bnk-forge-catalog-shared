@@ -14,3 +14,13 @@ output "namespace" {
   description = "Namespace where NADs are deployed"
   value       = var.namespace
 }
+
+output "nads_ready" {
+  description = "Flag indicating NADs are created and ready"
+  value       = true
+
+  depends_on = [
+    kubernetes_manifest.external_nad,
+    kubernetes_manifest.internal_nad
+  ]
+}

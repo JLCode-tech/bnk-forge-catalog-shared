@@ -23,11 +23,11 @@
       {
         "name": "namespace",
         "type": "string",
-        "description": "Namespace for NADs (typically f5-bnk)",
+        "description": "Namespace for NADs (must match CNEInstance namespace — f5-operator)",
         "source": "module",
         "from_module": "k8s/bnk-namespaces",
-        "from_output": "bnk_namespace",
-        "default": "f5-bnk"
+        "from_output": "operator_namespace",
+        "default": "f5-operator"
       },
       {
         "name": "external_subnet_cidrs",

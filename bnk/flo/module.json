@@ -42,11 +42,12 @@
       {
         "name": "flo_namespace",
         "type": "string",
-        "description": "Namespace for FLO deployment",
+        "description": "Namespace for FLO deployment (control plane — f5-operator)",
         "source": "module",
         "from_module": "bnk/far-setup",
-        "from_output": "bnk_namespace",
-        "example": "f5-bnk"
+        "from_output": "operator_namespace",
+        "default": "f5-operator",
+        "example": "f5-operator"
       },
       {
         "name": "flo_version",

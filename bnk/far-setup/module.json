@@ -13,7 +13,7 @@
     "required": [
       {
         "module": "k8s/bnk-namespaces",
-        "outputs_used": ["bnk_namespace", "utils_namespace"]
+        "outputs_used": ["bnk_namespace", "operator_namespace", "utils_namespace"]
       }
     ],
     "optional": []
@@ -61,6 +61,15 @@
         "from_output": "bnk_namespace"
       },
       {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Namespace for BNK control plane / FLO (should match bnk-namespaces output)",
+        "default": "f5-operator",
+        "source": "module",
+        "from_module": "k8s/bnk-namespaces",
+        "from_output": "operator_namespace"
+      },
+      {
         "name": "utils_namespace",
         "type": "string",
         "description": "Namespace for utility components (should match bnk-namespaces output)",
@@ -90,7 +99,14 @@
       {
         "name": "bnk_namespace",
         "type": "string",
-        "description": "Namespace for BNK components",
+        "description": "Namespace for BNK data plane components",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Namespace for BNK control plane (FLO + all BNK components via CNEInstance)",
         "used_by": ["bnk/flo"],
         "sensitive": false
       },

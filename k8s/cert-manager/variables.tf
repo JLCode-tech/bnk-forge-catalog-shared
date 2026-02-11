@@ -112,9 +112,9 @@ variable "helm_timeout" {
 # with fully managed, auto-rotating certificates.
 
 variable "bnk_namespace" {
-  description = "Namespace where BNK components are deployed (CWC and OTEL certs are created here)"
+  description = "Namespace where BNK components are deployed (OTEL certs are created here — must match CNEInstance namespace)"
   type        = string
-  default     = "f5-bnk"
+  default     = "f5-operator"
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.bnk_namespace))
