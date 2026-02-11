@@ -76,7 +76,7 @@ resource "kubernetes_manifest" "allowed_ports" {
     }
 
     spec = {
-      ports = [80, 443, 8080]
+      ports = ["80", "443", "8080"]
     }
   }
 }
@@ -108,20 +108,16 @@ resource "kubernetes_manifest" "fw_policy" {
     }
 
     spec = {
-      rules = [
+      rule = [
         {
           name       = "allow-web"
           action     = "accept"
           ipProtocol = "tcp"
           source = {
-            addressListRefs = [
-              { name = "demo-allowed-sources" }
-            ]
+            addressLists = ["demo-allowed-sources"]
           }
           destination = {
-            portListRefs = [
-              { name = "demo-allowed-ports" }
-            ]
+            portLists = ["demo-allowed-ports"]
           }
           logging = true
         },
@@ -130,9 +126,7 @@ resource "kubernetes_manifest" "fw_policy" {
           action     = "drop"
           ipProtocol = "any"
           source = {
-            addressListRefs = [
-              { name = "demo-blocked-sources" }
-            ]
+            addressLists = ["demo-blocked-sources"]
           }
           logging = true
         },
