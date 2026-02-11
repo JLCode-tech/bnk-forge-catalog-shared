@@ -9,7 +9,7 @@ resource "kubernetes_manifest" "allowed_sources" {
   depends_on = [var.gateway_ready]
 
   manifest = {
-    apiVersion = "k8s.f5.com/v1"
+    apiVersion = "k8s.f5net.com/v1"
     kind       = "F5BigCneAddresslist"
 
     metadata = {
@@ -33,7 +33,7 @@ resource "kubernetes_manifest" "blocked_sources" {
   depends_on = [var.gateway_ready]
 
   manifest = {
-    apiVersion = "k8s.f5.com/v1"
+    apiVersion = "k8s.f5net.com/v1"
     kind       = "F5BigCneAddresslist"
 
     metadata = {
@@ -61,7 +61,7 @@ resource "kubernetes_manifest" "allowed_ports" {
   depends_on = [var.gateway_ready]
 
   manifest = {
-    apiVersion = "k8s.f5.com/v1"
+    apiVersion = "k8s.f5net.com/v1"
     kind       = "F5BigCnePortlist"
 
     metadata = {
@@ -93,7 +93,7 @@ resource "kubernetes_manifest" "fw_policy" {
   ]
 
   manifest = {
-    apiVersion = "k8s.f5.com/v1"
+    apiVersion = "k8s.f5net.com/v1"
     kind       = "F5BigFwPolicy"
 
     metadata = {
@@ -179,7 +179,7 @@ resource "kubernetes_manifest" "secpolicy" {
       ]
       extensionRefs = [
         {
-          group = "k8s.f5.com"
+          group = "k8s.f5net.com"
           kind  = "F5BigFwPolicy"
           name  = "demo-fw-policy"
         }
