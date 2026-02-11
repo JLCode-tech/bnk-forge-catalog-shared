@@ -51,7 +51,7 @@ locals {
     # ==========================================================================
     cat > /opt/bnk-demo/scripts/standard-traffic.sh << 'SCRIPT'
     #!/bin/bash
-    VIP="${vip_address}"
+    VIP="${var.vip_address}"
     PORT="80"
     echo "=== BNK Demo: Standard HTTP Traffic ==="
     echo "Target: $VIP:$PORT"
@@ -83,7 +83,7 @@ locals {
     # ==========================================================================
     cat > /opt/bnk-demo/scripts/smart-traffic.sh << 'SCRIPT'
     #!/bin/bash
-    VIP="${vip_address}"
+    VIP="${var.vip_address}"
     PORT="8080"
     echo "=== BNK Demo: Smart LLM Traffic ==="
     echo "Target: $VIP:$PORT (Smart listener with iRule routing)"
@@ -121,7 +121,7 @@ locals {
     # ==========================================================================
     cat > /opt/bnk-demo/scripts/load-test.sh << 'SCRIPT'
     #!/bin/bash
-    VIP="${vip_address}"
+    VIP="${var.vip_address}"
     DURATION=$${1:-10}
     CONCURRENCY=$${2:-5}
 
@@ -141,7 +141,7 @@ locals {
     # ==========================================================================
     cat > /opt/bnk-demo/scripts/check-connectivity.sh << 'SCRIPT'
     #!/bin/bash
-    VIP="${vip_address}"
+    VIP="${var.vip_address}"
     echo "=== BNK Demo: Connectivity Check ==="
     echo ""
 
@@ -161,8 +161,8 @@ locals {
     [ "$STATUS" = "000" ] && echo "   FAIL: No response" || echo "   PASS"
 
     echo ""
-    echo "4. TMM external self-IP (${tmm_external_ip}):"
-    ping -c 2 -W 2 ${tmm_external_ip} 2>/dev/null && echo "   PASS" || echo "   FAIL (expected if ICMP blocked)"
+    echo "4. TMM external self-IP (${var.tmm_external_ip}):"
+    ping -c 2 -W 2 ${var.tmm_external_ip} 2>/dev/null && echo "   PASS" || echo "   FAIL (expected if ICMP blocked)"
 
     echo ""
     echo "Connectivity check complete."
@@ -181,7 +181,7 @@ locals {
     echo "========================================="
     echo "  BNK Demo Traffic Generator"
     echo "========================================="
-    echo "  VIP: ${vip_address}"
+    echo "  VIP: ${var.vip_address}"
     echo "  Commands: standard, smart, loadtest, check"
     echo "  Scripts:  /opt/bnk-demo/scripts/"
     echo "========================================="
