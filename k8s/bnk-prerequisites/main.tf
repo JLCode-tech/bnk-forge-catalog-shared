@@ -11,10 +11,53 @@
 # It is injected as a project secret (highest priority in variable resolution).
 
 # =============================================================================
+# KUBECONFIG FOR KUBECTL (used by destroy-time cleanup)
+# =============================================================================
+
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = var.cluster_name
+}
+
+resource "local_file" "kubeconfig" {
+  filename        = "${path.module}/work/kubeconfig"
+  file_permission = "0600"
+  content = yamlencode({
+    apiVersion = "v1"
+    kind       = "Config"
+    clusters = [{
+      name = "cluster"
+      cluster = {
+        server                     = data.aws_eks_cluster.cluster.endpoint
+        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
+      }
+    }]
+    users = [{
+      name = "user"
+      user = {
+        token = data.aws_eks_cluster_auth.cluster.token
+      }
+    }]
+    contexts = [{
+      name = "default"
+      context = {
+        cluster = "cluster"
+        user    = "user"
+      }
+    }]
+    current-context = "default"
+  })
+}
+
+# =============================================================================
 # LOCALS
 # =============================================================================
 
 locals {
+  kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
   # Docker auth for FAR: _json_key_base64:<base64 key content>
   docker_auth = base64encode("_json_key_base64:${var.cne_pull_secret}")
 
@@ -33,6 +76,85 @@ locals {
     utils    = var.utils_namespace
     gateway  = var.gateway_namespace
   }
+}
+
+# =============================================================================
+# DESTROY-TIME CLEANUP
+# =============================================================================
+# BNK installs webhooks and CRD instances with finalizers. On destroy:
+# 1. Delete F5 validating/mutating webhooks (they block resource deletion)
+# 2. Strip finalizers from all F5 CRD instances (they block namespace deletion)
+# 3. Strip finalizers from F5SPKVlan CRs (handletmmconfig_inconsistency)
+# 4. Force-finalize namespace if still stuck
+#
+# Without this, namespace deletion hangs indefinitely because:
+# - Webhook f5validate.f5net.com tries to call a service that's already deleted
+# - CNEInstance has k8s.f5.com/CNEInstanceFinalizer
+# - FLO component CRs have k8s.f5net.com/uninstall finalizer
+# - VLAN CRs have handletmmconfig_inconsistency finalizer
+
+resource "null_resource" "bnk_cleanup" {
+  triggers = {
+    operator_namespace = var.operator_namespace
+    kubeconfig         = local_file.kubeconfig.filename
+  }
+
+  # Create: no-op
+  provisioner "local-exec" {
+    command = "echo 'BNK cleanup resource created (runs on destroy only)'"
+  }
+
+  # Destroy: clean up webhooks, finalizers, and stuck namespaces
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      KUBECONFIG="${self.triggers.kubeconfig}"
+      NS="${self.triggers.operator_namespace}"
+      KC="kubectl --kubeconfig $KUBECONFIG"
+
+      echo "=== BNK Pre-Destroy Cleanup ==="
+
+      # Step 1: Delete F5 webhooks
+      echo "Step 1: Removing F5 webhooks..."
+      for wh in $($KC get validatingwebhookconfiguration -o name 2>/dev/null | grep f5); do
+        echo "  Deleting $wh"
+        $KC delete $wh --timeout=10s 2>/dev/null || true
+      done
+      for wh in $($KC get mutatingwebhookconfiguration -o name 2>/dev/null | grep f5); do
+        echo "  Deleting $wh"
+        $KC delete $wh --timeout=10s 2>/dev/null || true
+      done
+
+      # Step 2: Strip finalizers from all F5 CRD instances in namespace
+      echo "Step 2: Stripping finalizers from F5 CRD instances..."
+      F5_CRDS=$($KC get crd -o name 2>/dev/null | grep -E 'k8s\.f5\.(com|net\.com)' | sed 's|customresourcedefinition.apiextensions.k8s.io/||')
+      for crd in $F5_CRDS; do
+        RESOURCES=$($KC get $crd -n $NS -o name 2>/dev/null)
+        for res in $RESOURCES; do
+          echo "  Patching $res"
+          $KC patch $res -n $NS --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
+        done
+      done
+
+      # Step 3: Also check f5-utils namespace
+      F5_UTILS_NS="f5-utils"
+      for crd in $F5_CRDS; do
+        RESOURCES=$($KC get $crd -n $F5_UTILS_NS -o name 2>/dev/null)
+        for res in $RESOURCES; do
+          echo "  Patching $res (in $F5_UTILS_NS)"
+          $KC patch $res -n $F5_UTILS_NS --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null || true
+        done
+      done
+
+      echo "=== BNK cleanup complete ==="
+    EOT
+  }
+
+  depends_on = [
+    kubernetes_namespace_v1.operator,
+    kubernetes_namespace_v1.utils,
+    kubernetes_namespace_v1.gateway
+  ]
 }
 
 # =============================================================================
