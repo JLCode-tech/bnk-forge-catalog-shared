@@ -12,10 +12,48 @@
 # - No Python or AWS CLI needed — kubectl uses injected kubeconfig
 
 # =============================================================================
+# KUBECONFIG FOR KUBECTL
+# =============================================================================
+# Generate a kubeconfig file from the EKS provider data so kubectl works
+# in local-exec provisioners.
+
+resource "local_file" "kubeconfig" {
+  filename        = "${path.module}/work/kubeconfig"
+  file_permission = "0600"
+  content = yamlencode({
+    apiVersion = "v1"
+    kind       = "Config"
+    clusters = [{
+      name = "cluster"
+      cluster = {
+        server                     = data.aws_eks_cluster.cluster.endpoint
+        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
+      }
+    }]
+    users = [{
+      name = "user"
+      user = {
+        token = data.aws_eks_cluster_auth.cluster.token
+      }
+    }]
+    contexts = [{
+      name = "default"
+      context = {
+        cluster = "cluster"
+        user    = "user"
+      }
+    }]
+    current-context = "default"
+  })
+}
+
+# =============================================================================
 # LOCAL VALUES
 # =============================================================================
 
 locals {
+  kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
+
   # Build the CNEInstance YAML manifest
   cneinstance_manifest = {
     apiVersion = "k8s.f5.com/v1"
@@ -72,6 +110,7 @@ resource "null_resource" "cneinstance" {
     manifest_hash = sha256(yamlencode(local.cneinstance_manifest))
     name          = var.instance_name
     namespace     = var.instance_namespace
+    kubeconfig    = local_file.kubeconfig.filename
   }
 
   provisioner "local-exec" {
@@ -79,12 +118,12 @@ resource "null_resource" "cneinstance" {
       echo "=== Creating/Updating CNEInstance ${var.instance_name} ==="
 
       # Apply the manifest (creates or updates)
-      kubectl apply -f ${local_file.cneinstance_manifest.filename} 2>&1
+      ${local.kubectl} apply -f ${local_file.cneinstance_manifest.filename} 2>&1
 
       if [ $? -ne 0 ]; then
         echo "ERROR: Failed to apply CNEInstance manifest"
         echo "Checking if CRD exists..."
-        kubectl get crd cneinstances.k8s.f5.com 2>/dev/null || echo "CRD not found — FLO may not be ready"
+        ${local.kubectl} get crd cneinstances.k8s.f5.com 2>/dev/null || echo "CRD not found — FLO may not be ready"
         exit 1
       fi
 
@@ -97,7 +136,7 @@ resource "null_resource" "cneinstance" {
     when    = destroy
     command = <<-EOT
       echo "=== Deleting CNEInstance ${self.triggers.name} ==="
-      kubectl delete cneinstance ${self.triggers.name} \
+      kubectl --kubeconfig ${self.triggers.kubeconfig} delete cneinstance ${self.triggers.name} \
         -n ${self.triggers.namespace} \
         --timeout=120s 2>/dev/null || \
       echo "CNEInstance ${self.triggers.name} already deleted or not found"
@@ -128,11 +167,11 @@ resource "null_resource" "wait_for_available" {
 
       while [ $ELAPSED -lt $TIMEOUT ]; do
         # Get the Available condition
-        STATUS=$(kubectl get cneinstance ${var.instance_name} \
+        STATUS=$(${local.kubectl} get cneinstance ${var.instance_name} \
           -n ${var.instance_namespace} \
           -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)
 
-        REASON=$(kubectl get cneinstance ${var.instance_name} \
+        REASON=$(${local.kubectl} get cneinstance ${var.instance_name} \
           -n ${var.instance_namespace} \
           -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null)
 
@@ -153,7 +192,7 @@ resource "null_resource" "wait_for_available" {
         echo "  kubectl logs -n ${var.instance_namespace} -l app=flo --tail=50"
         echo ""
         echo "Current CNEInstance status:"
-        kubectl get cneinstance ${var.instance_name} -n ${var.instance_namespace} -o yaml 2>/dev/null | grep -A5 "conditions:" || true
+        ${local.kubectl} get cneinstance ${var.instance_name} -n ${var.instance_namespace} -o yaml 2>/dev/null | grep -A5 "conditions:" || true
         # Don't fail — the instance may still be deploying
       fi
     EOT
@@ -171,20 +210,22 @@ resource "null_resource" "verify_pods" {
     command = <<-EOT
       echo "=== Verifying BNK Pods ==="
 
+      KUBECTL="${local.kubectl}"
+
       echo ""
       echo "--- Pods in ${var.instance_namespace} ---"
-      kubectl get pods -n ${var.instance_namespace} -o wide 2>/dev/null
+      $KUBECTL get pods -n ${var.instance_namespace} -o wide 2>/dev/null
 
       echo ""
       echo "--- CNEInstance Status ---"
-      kubectl get cneinstance ${var.instance_name} -n ${var.instance_namespace} 2>/dev/null
+      $KUBECTL get cneinstance ${var.instance_name} -n ${var.instance_namespace} 2>/dev/null
 
       echo ""
       echo "--- Component Summary ---"
       # Count running pods
-      TOTAL=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | wc -l)
-      RUNNING=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "Running" || true)
-      COMPLETED=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "Completed" || true)
+      TOTAL=$($KUBECTL get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | wc -l)
+      RUNNING=$($KUBECTL get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "Running" || true)
+      COMPLETED=$($KUBECTL get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "Completed" || true)
 
       echo "Total pods: $TOTAL"
       echo "Running: $RUNNING"
@@ -194,7 +235,7 @@ resource "null_resource" "verify_pods" {
       echo ""
       echo "--- Key Components ---"
       for component in flo cne-controller tmm cwc dssm observer otel rabbit fluentd; do
-        COUNT=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "$component" || true)
+        COUNT=$($KUBECTL get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "$component" || true)
         if [ "$COUNT" -gt 0 ]; then
           echo "  OK: $component ($COUNT pods)"
         else
