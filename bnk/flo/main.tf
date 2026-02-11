@@ -1,12 +1,22 @@
-# infrastructure-modules/spk-2.1/flo/main.tf
+# bnk/flo/main.tf
 # F5 Lifecycle Operator (FLO) Helm deployment
+#
+# Deploys FLO using helm_release (no shell-outs to AWS CLI).
+# Platform already injects kubernetes/helm provider config.
+#
+# FLO manages the entire BNK control plane:
+# - CRDs (GatewayClass, Gateway, HTTPRoute, etc.)
+# - CWC (Cluster-Wide Controller)
+# - DSSM (Distributed Session State Manager)
+# - Observer, Fluentd, OTEL, RabbitMQ
+# - TMM (via CNEInstance)
 
 # =============================================================================
 # LOCAL VALUES
 # =============================================================================
 
-# TEEM URLs by environment (for licensing)
 locals {
+  # TEEM URLs by environment (for connected licensing)
   teem_urls = {
     production = {
       cert_url           = "https://product.apis.f5.com/ee/v1"
@@ -36,29 +46,6 @@ locals {
 }
 
 # =============================================================================
-# NAMESPACE REFERENCES
-# =============================================================================
-# Note: The FLO namespace (f5-operator) is created by the bnk-namespaces module.
-# We use data sources to reference existing namespaces instead of creating them.
-
-data "kubernetes_namespace_v1" "flo" {
-  metadata {
-    name = var.flo_namespace
-  }
-}
-
-# IPAM namespace - lookup only. Created by bnk-namespaces module (f5-utils).
-# Previously this was a resource that would fail on redeploy when the namespace
-# already existed. Using a data source avoids the conflict.
-data "kubernetes_namespace_v1" "ipam" {
-  count = var.enable_ipam_operator && var.ipam_namespace != var.flo_namespace ? 1 : 0
-
-  metadata {
-    name = var.ipam_namespace
-  }
-}
-
-# =============================================================================
 # ADOPT EXISTING CRDs — Fix for destroy/redeploy cycle
 # =============================================================================
 # Helm never deletes CRDs on uninstall (by design, to protect user data).
@@ -66,24 +53,16 @@ data "kubernetes_namespace_v1" "ipam" {
 # ownership annotations pointing to the old release/namespace.
 #
 # This pre-install step re-labels any existing FLO CRDs so Helm can adopt them.
-# Safe to run when no CRDs exist (kubectl annotate --overwrite is idempotent).
+# No AWS CLI needed — kubectl uses the same auth as the kubernetes provider.
 
 resource "null_resource" "adopt_flo_crds" {
-  # Re-run whenever the target namespace changes
   triggers = {
     flo_namespace = var.flo_namespace
-    cluster_name  = var.cluster_name
   }
 
   provisioner "local-exec" {
     command = <<-EOT
       echo "=== Adopting existing FLO CRDs for namespace ${var.flo_namespace} ==="
-
-      # Configure kubectl to talk to the cluster (same auth as terraform providers)
-      if [ -n "${var.cluster_name}" ]; then
-        aws eks update-kubeconfig --name "${var.cluster_name}" --kubeconfig /tmp/kubeconfig-adopt-$$ 2>/dev/null
-        export KUBECONFIG="/tmp/kubeconfig-adopt-$$"
-      fi
 
       # Find all CRDs owned by any previous FLO Helm release
       CRDS=$(kubectl get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.meta\.helm\.sh/release-name}{"\n"}{end}' 2>/dev/null \
@@ -91,7 +70,6 @@ resource "null_resource" "adopt_flo_crds" {
 
       if [ -z "$CRDS" ]; then
         echo "No existing FLO CRDs found — clean install"
-        rm -f /tmp/kubeconfig-adopt-$$ 2>/dev/null
         exit 0
       fi
 
@@ -103,8 +81,7 @@ resource "null_resource" "adopt_flo_crds" {
           --overwrite 2>/dev/null && ADOPTED=$((ADOPTED+1))
       done
 
-      rm -f /tmp/kubeconfig-adopt-$$ 2>/dev/null
-      echo "✓ Adopted $ADOPTED FLO CRDs for namespace ${var.flo_namespace}"
+      echo "Adopted $ADOPTED FLO CRDs for namespace ${var.flo_namespace}"
     EOT
   }
 }
@@ -114,15 +91,10 @@ resource "null_resource" "adopt_flo_crds" {
 # =============================================================================
 
 resource "helm_release" "flo" {
-  depends_on = [
-    data.kubernetes_namespace_v1.flo,
-    null_resource.adopt_flo_crds,
-    var.cert_manager_ready,
-    var.far_setup_complete
-  ]
+  depends_on = [null_resource.adopt_flo_crds]
 
   name       = "flo"
-  repository = var.flo_chart_repository
+  repository = "oci://repo.f5.com/charts"
   chart      = "f5-lifecycle-operator"
   version    = var.flo_version
   namespace  = var.flo_namespace
@@ -132,8 +104,7 @@ resource "helm_release" "flo" {
 
   values = [
     yamlencode({
-      # Global configuration - includes cert-manager ClusterIssuer
-      # Per F5 BNK 2.2 GA docs: global.certmgr.clusterIssuer must be set
+      # Global configuration
       global = {
         imagePullSecrets = [
           { name = var.far_secret_name }
@@ -145,7 +116,7 @@ resource "helm_release" "flo" {
 
       # Image configuration
       image = {
-        repository = var.image_registry
+        repository = "repo.f5.com/images"
         pullPolicy = "IfNotPresent"
       }
 
@@ -163,46 +134,15 @@ resource "helm_release" "flo" {
       # Licensing configuration
       license = local.license_config
 
-      # IPAM operator configuration
+      # IPAM operator
       ipam = {
-        enabled   = var.enable_ipam_operator
-        namespace = var.ipam_namespace
+        enabled   = true
+        namespace = "f5-utils"
       }
 
-      # Resource requests and limits
-      resources = {
-        requests = {
-          cpu    = var.flo_cpu_request
-          memory = var.flo_memory_request
-        }
-        limits = {
-          cpu    = var.flo_cpu_limit
-          memory = var.flo_memory_limit
-        }
-      }
-
-      # Node placement
-      nodeSelector = var.node_selector
-      tolerations  = var.tolerations
-
-      # Security context
-      securityContext = {
-        runAsNonRoot = true
-        runAsUser    = 1000
-        fsGroup      = 1000
-      }
-
-      # Operator settings
-      operator = {
-        watchNamespace = "" # Empty means watch all namespaces
-        leaderElection = {
-          enabled = true
-        }
-      }
-
-      # CRD management (FLO automatically installs CRDs)
+      # CRD management
       crds = {
-        install = true # FLO installs BnkGatewayClass and other CRDs
+        install = true
       }
     })
   ]
@@ -212,11 +152,7 @@ resource "helm_release" "flo" {
 # CPCL KEY — Download and apply the real F5 JWT verification key
 # =============================================================================
 # The FLO Helm chart deploys a placeholder cpcl-key-cm ConfigMap with "..."
-# values for the RSA key material. CWC needs the REAL key to verify JWT
-# license tokens. We download it from F5 CloudDocs and overwrite the placeholder.
-#
-# This MUST happen after FLO Helm install (which creates the ConfigMap) but
-# before CWC attempts JWT verification (which happens on CWC pod startup).
+# values. CWC needs the REAL key to verify JWT license tokens.
 
 resource "null_resource" "apply_cpcl_key" {
   depends_on = [helm_release.flo]
@@ -225,51 +161,43 @@ resource "null_resource" "apply_cpcl_key" {
     command = <<-EOT
       echo "=== Downloading real CPCL key from F5 CloudDocs ==="
 
-      # Download the real CPCL key (contains RSA public keys for JWT verification)
       CPCL_URL="https://clouddocs.f5.com/service-proxy/latest/cpcl-key.yaml"
       CPCL_FILE="/tmp/cpcl-key-$$.yaml"
 
       if ! curl -sL --fail --connect-timeout 30 --max-time 60 "$CPCL_URL" -o "$CPCL_FILE"; then
-        echo "WARNING: Failed to download CPCL key from $CPCL_URL"
-        echo "License activation may fail. You can manually apply the key later:"
-        echo "  kubectl apply -f <cpcl-key.yaml> -n ${var.flo_namespace}"
-        exit 0  # Don't fail the deployment — key can be applied later
+        echo "WARNING: Failed to download CPCL key. License activation may fail."
+        exit 0
       fi
 
-      # Validate the downloaded file has real key data (not HTML error page)
+      # Validate not HTML
       if grep -q "<!DOCTYPE html>" "$CPCL_FILE" 2>/dev/null; then
-        echo "WARNING: Got HTML instead of YAML from F5 CloudDocs. CPCL key not applied."
+        echo "WARNING: Got HTML instead of YAML. CPCL key not applied."
         rm -f "$CPCL_FILE"
         exit 0
       fi
 
-      # Validate it has actual RSA key material (not placeholders)
+      # Validate has RSA key material
       if ! grep -q '"n":' "$CPCL_FILE" 2>/dev/null; then
-        echo "WARNING: CPCL key file missing RSA 'n' field. Skipping."
+        echo "WARNING: CPCL key missing RSA material. Skipping."
         rm -f "$CPCL_FILE"
         exit 0
       fi
 
-      echo "=== Applying real CPCL key to ${var.flo_namespace} namespace ==="
+      echo "Applying real CPCL key to ${var.flo_namespace} namespace"
       kubectl apply -f "$CPCL_FILE" -n ${var.flo_namespace} 2>&1
-
       rm -f "$CPCL_FILE"
-      echo "✓ Real CPCL key applied successfully"
+      echo "CPCL key applied successfully"
     EOT
   }
 }
 
 # =============================================================================
-# LICENSE SECRET CLEANUP — Clear stale license state for fresh activation
+# LICENSE SECRET CLEANUP — Clear stale license state
 # =============================================================================
-# If redeploying FLO with a new JWT token, old license secrets from a previous
-# activation attempt must be cleaned up. CWC checks these on startup and may
-# skip activation if it sees old state.
 
 resource "null_resource" "cleanup_license_secrets" {
   depends_on = [null_resource.apply_cpcl_key]
 
-  # Re-run cleanup whenever jwt_token changes
   triggers = {
     jwt_hash = sha256(var.jwt_token)
   }
@@ -291,13 +219,13 @@ resource "null_resource" "cleanup_license_secrets" {
           echo "  cleaned: $secret" || true
       done
 
-      echo "✓ License secrets cleanup complete"
+      echo "License secrets cleanup complete"
     EOT
   }
 }
 
 # =============================================================================
-# WAIT FOR FLO TO BE READY
+# VERIFY FLO IS READY
 # =============================================================================
 
 resource "time_sleep" "wait_for_flo" {
@@ -307,56 +235,46 @@ resource "time_sleep" "wait_for_flo" {
     null_resource.cleanup_license_secrets
   ]
 
-  create_duration = "30s" # Wait for FLO operator to become ready
+  create_duration = "30s"
 }
 
-# Verify FLO deployment and license activation
 resource "null_resource" "verify_flo" {
   depends_on = [time_sleep.wait_for_flo]
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Verifying F5 Lifecycle Operator Deployment ==="
+      echo "=== Verifying F5 Lifecycle Operator ==="
 
       # Check FLO pods
       kubectl get pods -n ${var.flo_namespace} -l app=flo
 
-      # Check IPAM pods (if enabled)
-      if [ "${var.enable_ipam_operator}" = "true" ]; then
-        kubectl get pods -n ${var.ipam_namespace} -l app=ipam-operator
-      fi
-
-      # Verify CRDs installed by FLO
+      # Verify CRDs
       echo ""
-      echo "=== Verifying CRDs installed by FLO ==="
-      kubectl get crd | grep -E "gatewayclass|gateway" || echo "Gateway CRDs not yet available"
+      echo "=== CRDs installed by FLO ==="
+      kubectl get crd | grep -E "f5.com|gateway.networking.k8s.io" || echo "CRDs not yet available"
 
-      # Verify CPCL key has real data (not placeholders)
+      # Check CPCL key
       echo ""
-      echo "=== Verifying CPCL key ==="
+      echo "=== CPCL key ==="
       CPCL_N=$(kubectl get configmap cpcl-key-cm -n ${var.flo_namespace} -o jsonpath='{.data.jwt\.key}' 2>/dev/null | grep -o '"n":"[^"]*"' | head -1 | cut -d'"' -f4)
       if [ -z "$CPCL_N" ] || [ "$CPCL_N" = "..." ]; then
-        echo "WARNING: CPCL key still has placeholder values! License activation will fail."
-        echo "Run: kubectl apply -f <cpcl-key.yaml> -n ${var.flo_namespace}"
+        echo "WARNING: CPCL key has placeholder values"
       else
-        echo "✓ CPCL key has real RSA key material (n field length: $${#CPCL_N})"
+        echo "OK: CPCL key has real RSA material"
       fi
 
-      # Check CWC license status
+      # Check license
       echo ""
-      echo "=== Checking license status ==="
+      echo "=== License status ==="
       STATUS=$(kubectl get secret licensestatus -n ${var.flo_namespace} -o jsonpath='{.data.licensestatus}' 2>/dev/null | base64 -d 2>/dev/null)
       if echo "$STATUS" | grep -q '"IsActive":true'; then
-        echo "✓ License is ACTIVE"
-        echo "$STATUS" | grep -o '"EntitlementType":"[^"]*"' || true
-        echo "$STATUS" | grep -o '"LicenseExpiryDate":"[^"]*"' || true
+        echo "License: ACTIVE"
       else
-        echo "⚠ License not yet active. CWC may still be initializing."
-        echo "Check: kubectl logs -n ${var.flo_namespace} -l app=cwc -c f5-spk-cwc --tail=20"
+        echo "License: not yet active (CWC may still be initializing)"
       fi
 
       echo ""
-      echo "✓ FLO deployment verification complete"
+      echo "FLO verification complete"
     EOT
   }
 }

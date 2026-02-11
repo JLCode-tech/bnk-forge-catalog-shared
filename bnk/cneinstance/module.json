@@ -1,11 +1,11 @@
 {
   "module": {
-    "name": "CNE Instance",
+    "name": "CNEInstance",
     "path": "bnk/cneinstance",
-    "version": "1.0.0",
-    "layer": "bnk-system",
-    "category": "system",
-    "description": "Creates CNEInstance - the CNE controller that handles Gateway API CRs. Required for BNK 2.2 Gateway API mode.",
+    "version": "2.0.0",
+    "layer": "application",
+    "category": "bnk",
+    "description": "Creates CNEInstance custom resource which triggers FLO to deploy all BNK components (TMM, CWC, DSSM, Observer, OTEL, RabbitMQ, etc.). Waits for Available condition and verifies pods are running.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -13,7 +13,15 @@
     "required": [
       {
         "module": "bnk/flo",
-        "reason": "FLO provides CNEInstance CRD"
+        "reason": "FLO installs CRDs and manages CNEInstance lifecycle"
+      },
+      {
+        "module": "k8s/network-setup",
+        "reason": "NADs must exist before CNEInstance references them"
+      },
+      {
+        "module": "k8s/cert-manager",
+        "reason": "ClusterIssuer must exist for certificate management"
       }
     ],
     "optional": []
@@ -21,25 +29,60 @@
   "inputs": {
     "required": [
       {
-        "name": "instance_name",
-        "type": "string",
-        "description": "Name for the CNE instance",
-        "source": "user",
-        "default": "cne-instance"
-      },
-      {
         "name": "instance_namespace",
         "type": "string",
-        "description": "Namespace for CNE instance (same as FLO control plane namespace)",
+        "description": "Namespace for CNEInstance",
         "source": "module",
         "from_module": "bnk/flo",
         "from_output": "flo_namespace",
         "default": "f5-operator"
       },
       {
+        "name": "manifest_version",
+        "type": "string",
+        "description": "BNK manifest version",
+        "source": "module",
+        "from_module": "k8s/bnk-prerequisites",
+        "from_output": "manifest_version"
+      },
+      {
+        "name": "far_secret_name",
+        "type": "string",
+        "description": "FAR image pull secret name",
+        "source": "module",
+        "from_module": "k8s/bnk-prerequisites",
+        "from_output": "far_secret_name",
+        "default": "far-secret"
+      },
+      {
+        "name": "external_nad_name",
+        "type": "string",
+        "description": "External NAD name",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "external_nad_name"
+      },
+      {
+        "name": "internal_nad_name",
+        "type": "string",
+        "description": "Internal NAD name",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "internal_nad_name"
+      },
+      {
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "ClusterIssuer name",
+        "source": "module",
+        "from_module": "k8s/cert-manager",
+        "from_output": "cluster_issuer_name",
+        "default": "bnk-ca-cluster-issuer"
+      },
+      {
         "name": "flo_ready",
         "type": "boolean",
-        "description": "Dependency flag ensuring FLO is ready",
+        "description": "Gate from FLO module",
         "source": "module",
         "from_module": "bnk/flo",
         "from_output": "flo_ready"
@@ -51,20 +94,20 @@
         "type": "string",
         "description": "Name of the Kubernetes cluster",
         "default": "",
+        "source": "auto"
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name of the CNEInstance resource",
+        "default": "bnk-instance",
         "source": "user"
       },
       {
-        "name": "instance_config",
-        "type": "object",
-        "description": "CNE instance configuration",
-        "default": {"instance_type": "standard", "replicas": 1},
-        "source": "user"
-      },
-      {
-        "name": "resource_limits",
-        "type": "object",
-        "description": "Resource limits for CNE instance",
-        "default": {},
+        "name": "deployment_size",
+        "type": "string",
+        "description": "Deployment size: Small, Medium, Large, Max",
+        "default": "Small",
         "source": "user"
       }
     ]
@@ -74,26 +117,26 @@
       {
         "name": "instance_ready",
         "type": "boolean",
-        "description": "Flag indicating CNE instance is ready",
+        "description": "Gate output indicating CNEInstance is deployed and verified",
         "used_by": ["bnk/bnk-gatewayclass"],
         "sensitive": false
       },
       {
-        "name": "instance_name",
+        "name": "instance_namespace",
         "type": "string",
-        "description": "Name of the CNE instance",
-        "used_by": [],
+        "description": "Namespace of the CNEInstance",
+        "used_by": ["bnk/bnk-gatewayclass"],
         "sensitive": false
       }
     ]
   },
   "providers": {
-    "required": ["kubernetes"],
-    "optional": []
+    "required": [],
+    "optional": ["local", "null", "time"]
   },
   "deployment": {
     "order": 55,
-    "estimated_time": "2 minutes",
+    "estimated_time": "8 minutes",
     "requires_user_input": false,
     "sensitive_inputs": []
   }

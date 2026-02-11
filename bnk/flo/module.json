@@ -2,185 +2,137 @@
   "module": {
     "name": "F5 Lifecycle Operator (FLO)",
     "path": "bnk/flo",
-    "version": "1.0.0",
-    "layer": "bnk-platform",
-    "category": "platform",
-    "description": "Deploys F5 Lifecycle Operator to manage BNK components and CRDs. Core component required for all BNK Gateway API deployments.",
+    "version": "2.0.0",
+    "layer": "application",
+    "category": "bnk",
+    "description": "Deploys F5 Lifecycle Operator via Helm. FLO manages the entire BNK control plane including CWC, DSSM, Observer, OTEL, RabbitMQ, and TMM (via CNEInstance). Includes CPCL key download and license activation.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
   "dependencies": {
     "required": [
       {
-        "module": "bnk/far-setup",
-        "reason": "Provides F5 registry authentication and component versions"
+        "module": "k8s/bnk-prerequisites",
+        "reason": "Needs namespaces, FAR secrets, and FLO version from manifest"
       },
       {
-        "module": "infra/aws/eks",
-        "reason": "Provides Kubernetes cluster for FLO deployment"
+        "module": "k8s/cert-manager",
+        "reason": "FLO requires ClusterIssuer for certificate management"
       }
     ],
-    "optional": [
-      {
-        "module": "k8s/cert-manager",
-        "reason": "Provides certificate management for FLO webhooks",
-        "provides": "Automated certificate management for CRD conversion webhooks"
-      }
-    ]
+    "optional": []
   },
   "inputs": {
     "required": [
       {
-        "name": "cluster_name",
-        "type": "string",
-        "description": "Name of the Kubernetes cluster (used for resource naming and identification)",
-        "source": "module",
-        "from_module": "infra/aws/eks",
-        "from_output": "cluster_name",
-        "example": "my-eks-cluster"
-      },
-      {
         "name": "flo_namespace",
         "type": "string",
-        "description": "Namespace for FLO deployment (control plane — f5-operator)",
+        "description": "Namespace for FLO deployment",
         "source": "module",
-        "from_module": "bnk/far-setup",
+        "from_module": "k8s/bnk-prerequisites",
         "from_output": "operator_namespace",
-        "default": "f5-operator",
-        "example": "f5-operator"
+        "default": "f5-operator"
       },
       {
         "name": "flo_version",
         "type": "string",
         "description": "FLO Helm chart version",
         "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "flo_version",
-        "example": "2.1.0"
+        "from_module": "k8s/bnk-prerequisites",
+        "from_output": "flo_version"
       },
       {
         "name": "far_secret_name",
         "type": "string",
-        "description": "Name of the FAR registry secret",
+        "description": "FAR image pull secret name",
         "source": "module",
-        "from_module": "bnk/far-setup",
+        "from_module": "k8s/bnk-prerequisites",
         "from_output": "far_secret_name",
-        "example": "far-secret"
-      },
-      {
-        "name": "license_mode",
-        "type": "string",
-        "description": "FLO licensing mode (connected or disconnected)",
-        "source": "user",
-        "example": "connected"
-      }
-    ],
-    "optional": [
-      {
-        "name": "enable_ipam_operator",
-        "type": "boolean",
-        "description": "Enable F5 IPAM operator for automatic IP assignment to Gateways",
-        "default": false,
-        "source": "user"
-      },
-      {
-        "name": "jwt_token",
-        "type": "string",
-        "description": "F5 license JWT token (required for connected mode)",
-        "default": "",
-        "source": "user",
-        "sensitive": true
-      },
-      {
-        "name": "cert_manager_ready",
-        "type": "boolean",
-        "description": "Dependency flag for cert-manager",
-        "default": true,
-        "source": "module",
-        "from_module": "k8s/cert-manager",
-        "from_output": "cert_manager_ready"
-      },
-      {
-        "name": "far_setup_complete",
-        "type": "boolean",
-        "description": "Dependency flag indicating FAR setup is complete",
-        "default": true,
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "setup_complete"
+        "default": "far-secret"
       },
       {
         "name": "cluster_issuer_name",
         "type": "string",
-        "description": "Name of the ClusterIssuer for FLO certificate generation (from cert-manager)",
-        "default": "bnk-ca-cluster-issuer",
+        "description": "ClusterIssuer name for certificate management",
         "source": "module",
         "from_module": "k8s/cert-manager",
-        "from_output": "cluster_issuer_name"
+        "from_output": "cluster_issuer_name",
+        "default": "bnk-ca-cluster-issuer"
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "JWT token for F5 licensing",
+        "source": "project_secret",
+        "sensitive": true
+      }
+    ],
+    "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster",
+        "default": "",
+        "source": "auto"
+      },
+      {
+        "name": "license_mode",
+        "type": "string",
+        "description": "License mode: connected or f5licenseproxy",
+        "default": "connected",
+        "source": "user"
+      },
+      {
+        "name": "license_environment",
+        "type": "string",
+        "description": "Licensing environment: production or test",
+        "default": "production",
+        "source": "user"
+      },
+      {
+        "name": "cert_manager_ready",
+        "type": "boolean",
+        "description": "Dependency gate from cert-manager",
+        "source": "module",
+        "from_module": "k8s/cert-manager",
+        "from_output": "cert_manager_ready",
+        "default": true
       }
     ]
   },
   "outputs": {
     "key_outputs": [
       {
-        "name": "flo_ready",
-        "type": "boolean",
-        "description": "Flag indicating FLO is ready for dependent modules",
-        "used_by": [
-          "bnk/bnk-gatewayclass",
-          "bnk/gateway",
-          "bnk/routes",
-          "bnk/bnk-secpolicy",
-          "bnk/bnk-netpolicy"
-        ],
-        "sensitive": false
-      },
-      {
         "name": "flo_namespace",
         "type": "string",
         "description": "Namespace where FLO is deployed",
-        "used_by": ["bnk/bnk-gatewayclass"],
+        "used_by": ["bnk/cneinstance", "bnk/bnk-gatewayclass"],
+        "sensitive": false
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Gate output indicating FLO is ready",
+        "used_by": ["bnk/cneinstance"],
         "sensitive": false
       },
       {
         "name": "crds_installed",
         "type": "boolean",
-        "description": "Flag indicating Gateway API CRDs are installed by FLO",
-        "used_by": ["bnk/bnk-gatewayclass", "bnk/gateway", "bnk/routes"],
-        "sensitive": false
-      },
-      {
-        "name": "license_mode",
-        "type": "string",
-        "description": "Configured licensing mode",
-        "used_by": [],
-        "sensitive": false
-      },
-      {
-        "name": "ipam_namespace",
-        "type": "string",
-        "description": "Namespace where IPAM operator is deployed (if enabled)",
-        "used_by": ["bnk/gateway"],
+        "description": "Gate output indicating CRDs are installed",
+        "used_by": ["bnk/cneinstance"],
         "sensitive": false
       }
     ]
   },
   "providers": {
     "required": ["kubernetes", "helm"],
-    "optional": ["time", "null"]
-  },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local"
-    }
+    "optional": ["null", "time"]
   },
   "deployment": {
     "order": 50,
-    "estimated_time": "3 minutes",
-    "requires_user_input": true,
+    "estimated_time": "5 minutes",
+    "requires_user_input": false,
     "sensitive_inputs": ["jwt_token"]
   }
 }

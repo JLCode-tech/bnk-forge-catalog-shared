@@ -1,44 +1,51 @@
-# infrastructure-modules/spk-2.1/flo/variables.tf
+# bnk/flo/variables.tf
 # F5 Lifecycle Operator Module Variables
-# This module is cloud-agnostic - works with any Kubernetes cluster
 
 # =============================================================================
-# CLUSTER CONFIGURATION
+# CLUSTER / NAMESPACE
 # =============================================================================
 
 variable "cluster_name" {
-  description = "Name of the Kubernetes cluster (used for resource naming and identification)"
+  description = "Name of the Kubernetes cluster (auto-wired)"
   type        = string
+  default     = ""
 }
 
 variable "flo_namespace" {
-  description = "Kubernetes namespace for F5 Lifecycle Operator (control plane)"
+  description = "Namespace for FLO (wired from prerequisites.operator_namespace)"
   type        = string
   default     = "f5-operator"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.flo_namespace))
-    error_message = "Namespace must be valid Kubernetes namespace name (lowercase alphanumeric and hyphens)"
-  }
 }
 
-variable "far_secret_name" {
-  description = "Name of the FAR pull secret (from far-setup outputs)"
-  type        = string
-}
+# =============================================================================
+# FLO VERSION AND DEPENDENCIES (wired from prerequisites)
+# =============================================================================
 
 variable "flo_version" {
-  description = "Version of F5 Lifecycle Operator Helm chart"
+  description = "FLO Helm chart version (wired from prerequisites.flo_version)"
   type        = string
   default     = "v1.198.4-0.1.36"
 }
 
+variable "far_secret_name" {
+  description = "Name of the FAR pull secret (wired from prerequisites.far_secret_name)"
+  type        = string
+  default     = "far-secret"
+}
+
 # =============================================================================
-# LICENSING CONFIGURATION
+# LICENSING
 # =============================================================================
 
+variable "jwt_token" {
+  description = "JWT token for F5 licensing (injected as project secret)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "license_mode" {
-  description = "License operation mode: connected or f5licenseproxy"
+  description = "License mode: connected or f5licenseproxy"
   type        = string
   default     = "connected"
 
@@ -59,133 +66,24 @@ variable "license_environment" {
   }
 }
 
-variable "jwt_token" {
-  description = "JWT token for F5 licensing (required for connected mode)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
 variable "f5_license_proxy_url" {
-  description = "F5 License Proxy URL (required if license_mode is f5licenseproxy)"
+  description = "F5 License Proxy URL (for f5licenseproxy mode)"
   type        = string
   default     = ""
 }
 
 # =============================================================================
-# REGISTRY AND IMAGE CONFIGURATION
-# =============================================================================
-
-variable "image_registry" {
-  description = "F5 image registry for FLO components"
-  type        = string
-  default     = "repo.f5.com/images"
-}
-
-variable "flo_chart_repository" {
-  description = "Helm chart repository for FLO"
-  type        = string
-  default     = "oci://repo.f5.com/charts"
-}
-
-# =============================================================================
-# IPAM OPERATOR CONFIGURATION
-# =============================================================================
-
-variable "enable_ipam_operator" {
-  description = "Enable IPAM operator deployment (deployed automatically with FLO)"
-  type        = bool
-  default     = true
-}
-
-variable "ipam_namespace" {
-  description = "Namespace for IPAM operator resources"
-  type        = string
-  default     = "f5-utils"
-}
-
-# =============================================================================
-# RESOURCE CONFIGURATION
-# =============================================================================
-
-variable "flo_cpu_request" {
-  description = "CPU request for FLO pods"
-  type        = string
-  default     = "100m"
-}
-
-variable "flo_memory_request" {
-  description = "Memory request for FLO pods"
-  type        = string
-  default     = "128Mi"
-}
-
-variable "flo_cpu_limit" {
-  description = "CPU limit for FLO pods"
-  type        = string
-  default     = "500m"
-}
-
-variable "flo_memory_limit" {
-  description = "Memory limit for FLO pods"
-  type        = string
-  default     = "512Mi"
-}
-
-# =============================================================================
-# NODE PLACEMENT
-# =============================================================================
-
-variable "node_selector" {
-  description = "Node selector for FLO pod placement"
-  type        = map(string)
-  default     = {}
-}
-
-variable "tolerations" {
-  description = "Tolerations for FLO pod placement"
-  type        = list(any)
-  default     = []
-}
-
-# =============================================================================
-# CERTIFICATE CONFIGURATION
+# CERTIFICATE CONFIGURATION (wired from cert-manager)
 # =============================================================================
 
 variable "cluster_issuer_name" {
-  description = "Name of the ClusterIssuer for FLO certificate generation (from cert-manager). Per F5 BNK 2.2: set global.certmgr.clusterIssuer in flo-values.yaml"
+  description = "ClusterIssuer name (wired from cert-manager.cluster_issuer_name)"
   type        = string
   default     = "bnk-ca-cluster-issuer"
 }
 
-# =============================================================================
-# DEPENDENCY INPUTS
-# =============================================================================
-
 variable "cert_manager_ready" {
-  description = "Dependency flag indicating cert-manager is ready"
+  description = "Dependency gate from cert-manager module"
   type        = bool
-  default     = true # Default to true - cert-manager is optional
-}
-
-variable "far_setup_complete" {
-  description = "Dependency flag indicating FAR setup is complete"
-  type        = bool
-  default     = true # Default to true - wired from far-setup outputs when available
-}
-
-# =============================================================================
-# TAGS AND LABELS
-# =============================================================================
-
-variable "common_tags" {
-  description = "Common tags to apply to all resources"
-  type        = map(string)
-  default     = {}
-}
-
-variable "common_labels" {
-  description = "Common labels to apply to all Kubernetes resources"
-  type        = map(string)
-  default     = {}
+  default     = true
 }

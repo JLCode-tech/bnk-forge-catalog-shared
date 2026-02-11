@@ -8,6 +8,7 @@
 variable "cluster_name" {
   description = "Name of the Kubernetes cluster"
   type        = string
+  default     = ""
 }
 
 variable "gatewayclass_name" {
@@ -49,6 +50,13 @@ variable "description" {
 variable "flo_ready" {
   description = "Dependency flag indicating FLO is ready and CRDs are installed"
   type        = bool
+  default     = true
+}
+
+variable "instance_ready" {
+  description = "Gate from cneinstance module — ensures BNK components are deployed"
+  type        = bool
+  default     = true
 }
 
 # =============================================================================

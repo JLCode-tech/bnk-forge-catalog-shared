@@ -1,43 +1,28 @@
-# infrastructure-modules/bnk/cneinstance/outputs.tf
-# CNEInstance Module Outputs - BNK GA 2.2
+# bnk/cneinstance/outputs.tf
 
 output "instance_name" {
-  description = "Name of the CNEInstance resource"
+  description = "Name of the CNEInstance"
   value       = var.instance_name
 }
 
 output "instance_namespace" {
-  description = "Namespace where CNEInstance is deployed"
+  description = "Namespace of the CNEInstance"
   value       = var.instance_namespace
 }
 
 output "instance_ready" {
-  description = "Flag indicating CNEInstance deployment has been initiated"
+  description = "Gate output — true when CNEInstance is applied and verified"
   value       = true
-  depends_on  = [null_resource.verify_instance]
+
+  depends_on = [null_resource.verify_pods]
 }
 
 output "manifest_version" {
-  description = "BNK manifest version deployed"
+  description = "BNK manifest version"
   value       = var.manifest_version
 }
 
 output "deployment_size" {
-  description = "Deployment size configured"
+  description = "Deployment size"
   value       = var.deployment_size
-}
-
-output "product_type" {
-  description = "Product type (BNK or CNF)"
-  value       = var.product_type
-}
-
-output "gateway_api_enabled" {
-  description = "Whether Gateway API is enabled"
-  value       = var.gateway_api_enabled
-}
-
-output "network_attachments" {
-  description = "Network attachment definitions used"
-  value       = [var.external_nad_name, var.internal_nad_name]
 }

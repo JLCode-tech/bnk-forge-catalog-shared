@@ -128,19 +128,4 @@ variable "create_otel_certs" {
   default     = true
 }
 
-# =============================================================================
-# LEGACY VARIABLES (for backward compatibility)
-# =============================================================================
-# These are kept for backward compatibility but no longer used with Jetstack
 
-variable "far_secret_name" {
-  description = "DEPRECATED: FAR registry secret (not needed for Jetstack cert-manager)"
-  type        = string
-  default     = ""
-}
-
-variable "image_registry" {
-  description = "DEPRECATED: Image registry (Jetstack uses default quay.io registry)"
-  type        = string
-  default     = ""
-}

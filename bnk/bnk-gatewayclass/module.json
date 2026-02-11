@@ -2,18 +2,18 @@
   "module": {
     "name": "BNK GatewayClass",
     "path": "bnk/bnk-gatewayclass",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "layer": "bnk-gateway",
     "category": "gateway",
-    "description": "Creates standard Kubernetes GatewayClass (gateway.networking.k8s.io/v1) for BNK 2.2 with auto-constructed controllerName.",
+    "description": "Creates standard Kubernetes GatewayClass (gateway.networking.k8s.io/v1) for BNK 2.2 with auto-constructed controllerName. Waits for CNEInstance to be ready before creating GatewayClass.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
   "dependencies": {
     "required": [
       {
-        "module": "bnk/flo",
-        "reason": "FLO provides the Gateway API controller"
+        "module": "bnk/cneinstance",
+        "reason": "CNEInstance must be Available before GatewayClass can be accepted"
       }
     ],
     "optional": []
@@ -21,29 +21,21 @@
   "inputs": {
     "required": [
       {
-        "name": "gatewayclass_name",
-        "type": "string",
-        "description": "Name for the GatewayClass resource",
-        "source": "user",
-        "example": "bnk-gatewayclass",
-        "default": "bnk-gatewayclass"
-      },
-      {
         "name": "flo_namespace",
         "type": "string",
-        "description": "Namespace where FLO is deployed (control plane namespace)",
+        "description": "Namespace where FLO is deployed (used for controllerName)",
         "source": "module",
         "from_module": "bnk/flo",
         "from_output": "flo_namespace",
         "default": "f5-operator"
       },
       {
-        "name": "flo_ready",
+        "name": "instance_ready",
         "type": "boolean",
-        "description": "Dependency flag ensuring FLO is ready",
+        "description": "Gate from CNEInstance module",
         "source": "module",
-        "from_module": "bnk/flo",
-        "from_output": "flo_ready"
+        "from_module": "bnk/cneinstance",
+        "from_output": "instance_ready"
       }
     ],
     "optional": [
@@ -52,14 +44,30 @@
         "type": "string",
         "description": "Name of the Kubernetes cluster",
         "default": "",
+        "source": "auto"
+      },
+      {
+        "name": "gatewayclass_name",
+        "type": "string",
+        "description": "Name for the GatewayClass resource",
+        "default": "bnk-gatewayclass",
         "source": "user"
       },
       {
         "name": "controller_name",
         "type": "string",
-        "description": "Controller name for GatewayClass",
+        "description": "Controller name override (auto-constructed if empty)",
         "default": "",
         "source": "user"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Gate from FLO module",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready",
+        "default": true
       }
     ]
   },
@@ -75,7 +83,7 @@
       {
         "name": "gatewayclass_ready",
         "type": "boolean",
-        "description": "Flag indicating GatewayClass is ready",
+        "description": "Flag indicating GatewayClass is accepted",
         "used_by": ["bnk/gateway"],
         "sensitive": false
       }
@@ -83,7 +91,7 @@
   },
   "providers": {
     "required": ["kubernetes"],
-    "optional": []
+    "optional": ["null", "time"]
   },
   "deployment": {
     "order": 60,

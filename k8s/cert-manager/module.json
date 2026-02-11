@@ -10,13 +10,13 @@
     "supported_platforms": ["any"]
   },
   "dependencies": {
-    "required": [],
-    "optional": [
+    "required": [
       {
-        "module": "k8s/bnk-namespaces",
-        "reason": "BNK namespace must exist before OTEL certs can be created there"
+        "module": "k8s/bnk-prerequisites",
+        "reason": "Operator namespace must exist before OTEL certs can be created there"
       }
-    ]
+    ],
+    "optional": []
   },
   "inputs": {
     "required": [],
@@ -69,7 +69,7 @@
         "description": "Namespace where BNK components are deployed (OTEL certs created here — must match CNEInstance namespace)",
         "default": "f5-operator",
         "source": "module",
-        "from_module": "k8s/bnk-namespaces",
+        "from_module": "k8s/bnk-prerequisites",
         "from_output": "operator_namespace"
       },
       {

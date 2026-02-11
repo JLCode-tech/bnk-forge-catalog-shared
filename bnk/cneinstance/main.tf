@@ -1,286 +1,209 @@
-# infrastructure-modules/bnk/cneinstance/main.tf
-# CNEInstance - BIG-IP Next for Kubernetes GA 2.2
-# Creates CNEInstance custom resource using Python kubernetes client
+# bnk/cneinstance/main.tf
+# CNEInstance — BIG-IP Next for Kubernetes GA 2.2
+#
+# Creates the CNEInstance custom resource which tells FLO to deploy
+# ALL BNK components (TMM, CWC, DSSM, Observer, OTEL, RabbitMQ, etc.)
+# into the instance namespace.
+#
+# Uses kubectl apply (not kubernetes_manifest) because:
+# - The CNEInstance CRD is installed by FLO, not available at plan time
+# - kubernetes_manifest requires CRD at plan time
+# - kubectl is available in the celery-worker container
+# - No Python or AWS CLI needed — kubectl uses injected kubeconfig
 
 # =============================================================================
 # LOCAL VALUES
 # =============================================================================
 
 locals {
-  labels = merge(var.common_labels, {
-    "app.kubernetes.io/name"       = var.instance_name
-    "app.kubernetes.io/component"  = "cne-instance"
-    "app.kubernetes.io/managed-by" = "terraform"
-    "app.kubernetes.io/version"    = var.manifest_version
-  })
-
-  # Build the CNEInstance manifest for BNK GA 2.2
+  # Build the CNEInstance YAML manifest
   cneinstance_manifest = {
     apiVersion = "k8s.f5.com/v1"
     kind       = "CNEInstance"
     metadata = {
-      name        = var.instance_name
-      namespace   = var.instance_namespace
-      labels      = local.labels
-      annotations = var.annotations
+      name      = var.instance_name
+      namespace = var.instance_namespace
+      labels = {
+        "app.kubernetes.io/name"       = var.instance_name
+        "app.kubernetes.io/component"  = "cne-instance"
+        "app.kubernetes.io/managed-by" = "terraform"
+        "app.kubernetes.io/version"    = var.manifest_version
+      }
     }
-    spec = merge(
-      {
-        # Required fields
-        manifestVersion = var.manifest_version
-        deploymentSize  = var.deployment_size
+    spec = {
+      manifestVersion = var.manifest_version
+      deploymentSize  = var.deployment_size
 
-        # Product configuration
-        product = {
-          type       = var.product_type
-          gatewayAPI = var.gateway_api_enabled
-        }
-
-        # Registry configuration
-        registry = {
-          uri              = var.registry_uri
-          imagePullPolicy  = var.image_pull_policy
-          imagePullSecrets = [{ name = var.far_secret_name }]
-        }
-
-        # Network attachments (from network-setup module outputs)
-        networkAttachments = [var.external_nad_name, var.internal_nad_name]
-
-        # Certificate configuration
-        certificate = var.cluster_issuer_name != "" ? {
-          clusterIssuer = var.cluster_issuer_name
-        } : {}
-      },
-      # Advanced configuration
-      var.demo_mode ? {
-        advanced = {
-          demoMode = {
-            enabled = true
-          }
-        }
-      } : {},
-      var.advanced_config.maintenance_mode ? {
-        advanced = merge(
-          try(var.advanced_config.maintenance_mode, false) ? {
-            maintenanceMode = {
-              enabled = true
-            }
-          } : {}
-        )
-      } : {}
-    )
-  }
-
-  # Kubeconfig for Python to use (from injected provider data sources)
-  kubeconfig = {
-    apiVersion = "v1"
-    kind       = "Config"
-    clusters = [{
-      name = var.cluster_name
-      cluster = {
-        server                     = data.aws_eks_cluster.cluster.endpoint
-        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
+      product = {
+        type       = "BNK"
+        gatewayAPI = true
       }
-    }]
-    users = [{
-      name = "terraform"
-      user = {
-        token = data.aws_eks_cluster_auth.cluster.token
+
+      registry = {
+        uri              = "repo.f5.com"
+        imagePullPolicy  = "IfNotPresent"
+        imagePullSecrets = [{ name = var.far_secret_name }]
       }
-    }]
-    contexts = [{
-      name = "default"
-      context = {
-        cluster = var.cluster_name
-        user    = "terraform"
+
+      networkAttachments = [var.external_nad_name, var.internal_nad_name]
+
+      certificate = {
+        clusterIssuer = var.cluster_issuer_name
       }
-    }]
-    current-context = "default"
+    }
   }
 }
 
 # =============================================================================
-# CNE INSTANCE - Using Python kubernetes client
+# WRITE MANIFEST TO FILE
+# =============================================================================
+
+resource "local_file" "cneinstance_manifest" {
+  filename = "${path.module}/work/cneinstance.yaml"
+  content  = yamlencode(local.cneinstance_manifest)
+}
+
+# =============================================================================
+# CREATE / UPDATE CNEInstance
 # =============================================================================
 
 resource "null_resource" "cneinstance" {
-  depends_on = [var.flo_ready]
-
   triggers = {
-    manifest_hash = sha256(jsonencode(local.cneinstance_manifest))
-    manifest_json = jsonencode(local.cneinstance_manifest)
+    manifest_hash = sha256(yamlencode(local.cneinstance_manifest))
     name          = var.instance_name
     namespace     = var.instance_namespace
-    cluster_name  = var.cluster_name
   }
 
   provisioner "local-exec" {
     command = <<-EOT
-python3 << 'PYEOF'
-import json
-import os
-import tempfile
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
+      echo "=== Creating/Updating CNEInstance ${var.instance_name} ==="
 
-manifest = json.loads('''${jsonencode(local.cneinstance_manifest)}''')
-kubeconfig = json.loads('''${jsonencode(local.kubeconfig)}''')
+      # Apply the manifest (creates or updates)
+      kubectl apply -f ${local_file.cneinstance_manifest.filename} 2>&1
 
-# Write temporary kubeconfig
-with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-    import yaml
-    yaml.dump(kubeconfig, f)
-    kubeconfig_path = f.name
+      if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to apply CNEInstance manifest"
+        echo "Checking if CRD exists..."
+        kubectl get crd cneinstances.k8s.f5.com 2>/dev/null || echo "CRD not found — FLO may not be ready"
+        exit 1
+      fi
 
-try:
-    config.load_kube_config(config_file=kubeconfig_path)
-    api = client.CustomObjectsApi()
-
-    group = "k8s.f5.com"
-    version = "v1"
-    plural = "cneinstances"
-    namespace = manifest["metadata"]["namespace"]
-    name = manifest["metadata"]["name"]
-
-    try:
-        existing = api.get_namespaced_custom_object(group, version, namespace, plural, name)
-        manifest["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
-        result = api.replace_namespaced_custom_object(group, version, namespace, plural, name, manifest)
-        print(f"Updated CNEInstance {name} in namespace {namespace}")
-    except ApiException as e:
-        if e.status == 404:
-            result = api.create_namespaced_custom_object(group, version, namespace, plural, manifest)
-            print(f"Created CNEInstance {name} in namespace {namespace}")
-        else:
-            raise
-finally:
-    os.unlink(kubeconfig_path)
-PYEOF
+      echo "CNEInstance ${var.instance_name} applied successfully"
     EOT
   }
 
+  # Destroy: delete the CNEInstance CR
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-python3 << 'PYEOF'
-import os
-import tempfile
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
+      echo "=== Deleting CNEInstance ${self.triggers.name} ==="
+      kubectl delete cneinstance ${self.triggers.name} \
+        -n ${self.triggers.namespace} \
+        --timeout=120s 2>/dev/null || \
+      echo "CNEInstance ${self.triggers.name} already deleted or not found"
+    EOT
+  }
 
-# For destroy, we need to re-generate kubeconfig from EKS
-import subprocess
-import json
-
-namespace = "${self.triggers.namespace}"
-name = "${self.triggers.name}"
-cluster_name = "${self.triggers.cluster_name}"
-
-# Get cluster info via AWS CLI
-result = subprocess.run(
-    ["aws", "eks", "describe-cluster", "--name", cluster_name, "--output", "json"],
-    capture_output=True, text=True
-)
-if result.returncode != 0:
-    print(f"Warning: Could not get cluster info: {result.stderr}")
-    print(f"CNEInstance {name} may need manual cleanup")
-    exit(0)
-
-cluster_info = json.loads(result.stdout)["cluster"]
-
-# Get token
-token_result = subprocess.run(
-    ["aws", "eks", "get-token", "--cluster-name", cluster_name, "--output", "json"],
-    capture_output=True, text=True
-)
-if token_result.returncode != 0:
-    print(f"Warning: Could not get token: {token_result.stderr}")
-    exit(0)
-
-token = json.loads(token_result.stdout)["status"]["token"]
-
-kubeconfig = {
-    "apiVersion": "v1",
-    "kind": "Config",
-    "clusters": [{
-        "name": cluster_name,
-        "cluster": {
-            "server": cluster_info["endpoint"],
-            "certificate-authority-data": cluster_info["certificateAuthority"]["data"]
-        }
-    }],
-    "users": [{"name": "terraform", "user": {"token": token}}],
-    "contexts": [{"name": "default", "context": {"cluster": cluster_name, "user": "terraform"}}],
-    "current-context": "default"
+  depends_on = [local_file.cneinstance_manifest]
 }
 
-with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-    import yaml
-    yaml.dump(kubeconfig, f)
-    kubeconfig_path = f.name
+# =============================================================================
+# WAIT FOR CNEInstance TO BECOME AVAILABLE
+# =============================================================================
+# FLO sees the CNEInstance CR and starts deploying components.
+# This takes several minutes. We wait for Available=True condition.
 
-try:
-    config.load_kube_config(config_file=kubeconfig_path)
-    api = client.CustomObjectsApi()
-    api.delete_namespaced_custom_object("k8s.f5.com", "v1", namespace, "cneinstances", name)
-    print(f"Deleted CNEInstance {name} from namespace {namespace}")
-except ApiException as e:
-    if e.status == 404:
-        print(f"CNEInstance {name} not found - already deleted")
-    else:
-        raise
-finally:
-    os.unlink(kubeconfig_path)
-PYEOF
+resource "null_resource" "wait_for_available" {
+  depends_on = [null_resource.cneinstance]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Waiting for CNEInstance ${var.instance_name} to become Available ==="
+      echo "This typically takes 3-8 minutes as FLO deploys all BNK components..."
+
+      # Wait up to 10 minutes for Available condition
+      TIMEOUT=600
+      INTERVAL=15
+      ELAPSED=0
+
+      while [ $ELAPSED -lt $TIMEOUT ]; do
+        # Get the Available condition
+        STATUS=$(kubectl get cneinstance ${var.instance_name} \
+          -n ${var.instance_namespace} \
+          -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)
+
+        REASON=$(kubectl get cneinstance ${var.instance_name} \
+          -n ${var.instance_namespace} \
+          -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null)
+
+        if [ "$STATUS" = "True" ]; then
+          echo "CNEInstance ${var.instance_name} is Available!"
+          break
+        fi
+
+        echo "  Status: $STATUS, Reason: $REASON (${ELAPSED}s elapsed)"
+        sleep $INTERVAL
+        ELAPSED=$((ELAPSED + INTERVAL))
+      done
+
+      if [ "$STATUS" != "True" ]; then
+        echo ""
+        echo "WARNING: CNEInstance not yet Available after ${TIMEOUT}s"
+        echo "This may be normal for first deployment. Check FLO logs:"
+        echo "  kubectl logs -n ${var.instance_namespace} -l app=flo --tail=50"
+        echo ""
+        echo "Current CNEInstance status:"
+        kubectl get cneinstance ${var.instance_name} -n ${var.instance_namespace} -o yaml 2>/dev/null | grep -A5 "conditions:" || true
+        # Don't fail — the instance may still be deploying
+      fi
     EOT
   }
 }
 
 # =============================================================================
-# VERIFICATION
+# VERIFY PODS ARE RUNNING
 # =============================================================================
 
-resource "time_sleep" "wait_for_instance" {
-  depends_on = [null_resource.cneinstance]
-
-  create_duration = "30s"
-}
-
-resource "null_resource" "verify_instance" {
-  depends_on = [time_sleep.wait_for_instance]
-
-  triggers = {
-    always_run = timestamp()
-  }
+resource "null_resource" "verify_pods" {
+  depends_on = [null_resource.wait_for_available]
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Verifying CNEInstance ${var.instance_name} ==="
-python3 << 'PYEOF'
-import json
-import os
-import tempfile
-from kubernetes import client, config
-import yaml
+      echo "=== Verifying BNK Pods ==="
 
-kubeconfig = json.loads('''${jsonencode(local.kubeconfig)}''')
+      echo ""
+      echo "--- Pods in ${var.instance_namespace} ---"
+      kubectl get pods -n ${var.instance_namespace} -o wide 2>/dev/null
 
-with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-    yaml.dump(kubeconfig, f)
-    kubeconfig_path = f.name
+      echo ""
+      echo "--- CNEInstance Status ---"
+      kubectl get cneinstance ${var.instance_name} -n ${var.instance_namespace} 2>/dev/null
 
-try:
-    config.load_kube_config(config_file=kubeconfig_path)
-    api = client.CustomObjectsApi()
-    result = api.get_namespaced_custom_object('k8s.f5.com', 'v1', '${var.instance_namespace}', 'cneinstances', '${var.instance_name}')
-    print(f"CNEInstance {result['metadata']['name']} found in namespace {result['metadata']['namespace']}")
-    status = result.get('status', {})
-    print(f"Phase: {status.get('phase', 'Unknown')}")
-    print(f"Ready: {status.get('ready', 'Unknown')}")
-finally:
-    os.unlink(kubeconfig_path)
-PYEOF
-      echo "✓ CNEInstance verification complete"
+      echo ""
+      echo "--- Component Summary ---"
+      # Count running pods
+      TOTAL=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | wc -l)
+      RUNNING=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "Running" || true)
+      COMPLETED=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "Completed" || true)
+
+      echo "Total pods: $TOTAL"
+      echo "Running: $RUNNING"
+      echo "Completed: $COMPLETED"
+
+      # Check for key components
+      echo ""
+      echo "--- Key Components ---"
+      for component in flo cne-controller tmm cwc dssm observer otel rabbit fluentd; do
+        COUNT=$(kubectl get pods -n ${var.instance_namespace} --no-headers 2>/dev/null | grep -c "$component" || true)
+        if [ "$COUNT" -gt 0 ]; then
+          echo "  OK: $component ($COUNT pods)"
+        else
+          echo "  MISSING: $component"
+        fi
+      done
+
+      echo ""
+      echo "CNEInstance verification complete"
     EOT
   }
 }
