@@ -141,14 +141,14 @@ resource "null_resource" "wait_for_available" {
           break
         fi
 
-        echo "  Status: $STATUS, Reason: $REASON (${ELAPSED}s elapsed)"
+        echo "  Status: $STATUS, Reason: $REASON ($${ELAPSED}s elapsed)"
         sleep $INTERVAL
         ELAPSED=$((ELAPSED + INTERVAL))
       done
 
       if [ "$STATUS" != "True" ]; then
         echo ""
-        echo "WARNING: CNEInstance not yet Available after ${TIMEOUT}s"
+        echo "WARNING: CNEInstance not yet Available after $${TIMEOUT}s"
         echo "This may be normal for first deployment. Check FLO logs:"
         echo "  kubectl logs -n ${var.instance_namespace} -l app=flo --tail=50"
         echo ""
