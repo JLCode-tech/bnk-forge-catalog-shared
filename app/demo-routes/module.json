@@ -1,0 +1,69 @@
+{
+  "module": {
+    "name": "Demo Routes",
+    "path": "demo-routes",
+    "version": "1.0.0",
+    "layer": "app-gateway",
+    "category": "routing",
+    "description": "Creates HTTPRoutes demonstrating path-based routing, header-based canary, weighted backends, and multi-listener configuration.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      { "module": "app/demo-gateway", "reason": "Routes must attach to an existing Gateway" }
+    ],
+    "optional": [
+      { "module": "app/demo-apps", "reason": "Backend services should be deployed for routes to function" }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "gateway_name",
+        "type": "string",
+        "description": "Name of the BNK Gateway",
+        "source": "module",
+        "from_module": "app/demo-gateway",
+        "from_output": "gateway_name"
+      },
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace of the BNK Gateway",
+        "source": "module",
+        "from_module": "app/demo-gateway",
+        "from_output": "gateway_namespace"
+      },
+      {
+        "name": "gateway_ready",
+        "type": "boolean",
+        "description": "Flag indicating Gateway is ready",
+        "source": "module",
+        "from_module": "app/demo-gateway",
+        "from_output": "gateway_ready"
+      }
+    ],
+    "optional": [
+      { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
+      { "name": "app_namespace", "type": "string", "source": "user", "default": "demo-apps" },
+      { "name": "enable_canary_routing", "type": "boolean", "source": "user", "default": true },
+      { "name": "canary_weight", "type": "number", "source": "user", "default": 20 },
+      { "name": "enable_ai_route", "type": "boolean", "source": "user", "default": true }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      { "name": "route_names", "type": "list(string)" },
+      { "name": "routes_created", "type": "number" },
+      { "name": "routes_ready", "type": "boolean", "used_by": ["app/demo-traffic"] }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"]
+  },
+  "deployment": {
+    "order": 94,
+    "estimated_time": "30 seconds"
+  }
+}

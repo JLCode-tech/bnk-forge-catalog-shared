@@ -1,0 +1,78 @@
+{
+  "module": {
+    "name": "Demo iRules & Network Policy",
+    "path": "demo-irules",
+    "version": "1.0.0",
+    "layer": "app-policy",
+    "category": "policy",
+    "description": "Creates request-logging iRule with HSL to Fluent Bit, HSL publisher, and BNKNetPolicy attachments per Gateway listener.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      { "module": "app/demo-gateway", "reason": "Network policies attach to the Gateway" }
+    ],
+    "optional": [
+      { "module": "app/demo-observability", "reason": "Fluent Bit should be deployed to receive HSL logs" }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "gateway_name",
+        "type": "string",
+        "description": "Name of the BNK Gateway",
+        "source": "module",
+        "from_module": "app/demo-gateway",
+        "from_output": "gateway_name"
+      },
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace of the BNK Gateway",
+        "source": "module",
+        "from_module": "app/demo-gateway",
+        "from_output": "gateway_namespace"
+      },
+      {
+        "name": "gateway_ready",
+        "type": "boolean",
+        "description": "Flag indicating Gateway is ready",
+        "source": "module",
+        "from_module": "app/demo-gateway",
+        "from_output": "gateway_ready"
+      }
+    ],
+    "optional": [
+      { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
+      { "name": "observability_namespace", "type": "string", "source": "user", "default": "observability" },
+      { "name": "fluentbit_hsl_port", "type": "number", "source": "user", "default": 5514 },
+      { "name": "enable_https_listener", "type": "boolean", "source": "user", "default": true },
+      { "name": "enable_smart_listener", "type": "boolean", "source": "user", "default": true },
+      {
+        "name": "observability_ready",
+        "type": "boolean",
+        "source": "module",
+        "from_module": "app/demo-observability",
+        "from_output": "observability_ready",
+        "default": true
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      { "name": "irule_name", "type": "string" },
+      { "name": "hsl_publisher_name", "type": "string" },
+      { "name": "netpolicy_names", "type": "list(string)" },
+      { "name": "irules_ready", "type": "boolean" }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"]
+  },
+  "deployment": {
+    "order": 96,
+    "estimated_time": "30 seconds"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "module": {
+    "name": "Demo Gateway",
+    "path": "demo-gateway",
+    "version": "1.0.0",
+    "layer": "app-gateway",
+    "category": "gateway",
+    "description": "Creates BNK Gateway with HTTP (:80), HTTPS (:443), and Smart (:8080) listeners attached to the existing BNK GatewayClass.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      { "module": "app/demo-namespace", "reason": "Gateway namespace must exist" }
+    ],
+    "optional": [
+      { "module": "bnk/bnk-gatewayclass", "reason": "GatewayClass from BNK stack provides gatewayclass_name (auto-wired)" },
+      { "module": "k8s/cert-manager", "reason": "cert-manager provides cluster_issuer_name for TLS certs (auto-wired)" }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace for the Gateway",
+        "source": "module",
+        "from_module": "app/demo-namespace",
+        "from_output": "gateway_namespace"
+      },
+      {
+        "name": "namespaces_ready",
+        "type": "boolean",
+        "description": "Flag indicating namespaces are ready",
+        "source": "module",
+        "from_module": "app/demo-namespace",
+        "from_output": "namespaces_ready"
+      }
+    ],
+    "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)",
+        "source": "auto",
+        "from_module": "infra/aws/eks",
+        "from_output": "cluster_name",
+        "default": ""
+      },
+      { "name": "gateway_name", "type": "string", "source": "user", "default": "demo-gw" },
+      {
+        "name": "gatewayclass_name",
+        "type": "string",
+        "description": "GatewayClass name (auto-wired from bnk/bnk-gatewayclass)",
+        "source": "auto",
+        "from_module": "bnk/bnk-gatewayclass",
+        "from_output": "gatewayclass_name",
+        "default": "bnk-gatewayclass"
+      },
+      { "name": "enable_https_listener", "type": "boolean", "source": "user", "default": true },
+      { "name": "enable_smart_listener", "type": "boolean", "source": "user", "default": true },
+      {
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "cert-manager ClusterIssuer name (auto-wired from k8s/cert-manager)",
+        "source": "auto",
+        "from_module": "k8s/cert-manager",
+        "from_output": "cluster_issuer_name",
+        "default": "bnk-ca-cluster-issuer"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      { "name": "gateway_name", "type": "string", "used_by": ["app/demo-routes", "app/demo-security", "app/demo-irules", "app/demo-traffic"] },
+      { "name": "gateway_namespace", "type": "string", "used_by": ["app/demo-routes", "app/demo-security", "app/demo-irules", "app/demo-traffic"] },
+      { "name": "gateway_ready", "type": "boolean", "used_by": ["app/demo-routes", "app/demo-security", "app/demo-irules"] },
+      { "name": "listeners", "type": "list(string)" }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"]
+  },
+  "deployment": {
+    "order": 93,
+    "estimated_time": "2 minutes"
+  }
+}
