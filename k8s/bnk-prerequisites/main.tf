@@ -146,6 +146,20 @@ resource "null_resource" "bnk_cleanup" {
         done
       done
 
+      # Step 4: Delete all F5 CRDs (cluster-scoped)
+      # FLO's crd-installer expects to create these fresh. Stale CRDs from a
+      # previous deploy cause conflicts and failed reconciliation.
+      echo "Step 4: Deleting F5 CRDs..."
+      for crd in $F5_CRDS; do
+        echo "  Deleting CRD $crd"
+        $KC delete crd $crd --timeout=30s 2>/dev/null || true
+      done
+      # Also catch any with fic.f5.com (IPAM CRDs)
+      for crd in $($KC get crd -o name 2>/dev/null | grep 'fic\.f5\.com' | sed 's|customresourcedefinition.apiextensions.k8s.io/||'); do
+        echo "  Deleting CRD $crd"
+        $KC delete crd $crd --timeout=30s 2>/dev/null || true
+      done
+
       echo "=== BNK cleanup complete ==="
     EOT
   }
