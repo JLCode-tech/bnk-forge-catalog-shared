@@ -3,16 +3,14 @@
 output "route_names" {
   description = "List of created HTTPRoute names"
   value = compact([
-    "web-route",
-    "api-route",
-    "health-route",
-    var.enable_ai_route ? "ai-route" : "",
+    "demo-standard-route",
+    var.enable_smart_route ? "demo-smart-route" : "",
   ])
 }
 
 output "routes_created" {
   description = "Number of routes created"
-  value       = 3 + (var.enable_ai_route ? 1 : 0)
+  value       = 1 + (var.enable_smart_route ? 1 : 0)
 }
 
 output "routes_ready" {

@@ -155,7 +155,7 @@ resource "kubernetes_manifest" "secpolicy" {
   depends_on = [kubernetes_manifest.fw_policy]
 
   manifest = {
-    apiVersion = "gateway.f5.com/v1alpha1"
+    apiVersion = "gateway.k8s.f5net.com/v1alpha1"
     kind       = "BNKSecPolicy"
 
     metadata = {

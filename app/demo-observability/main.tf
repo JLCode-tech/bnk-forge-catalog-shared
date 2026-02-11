@@ -201,9 +201,9 @@ resource "kubernetes_config_map_v1" "fluentbit_config" {
           Match        *
           Host         loki
           Port         3100
-          labels       job=hsl,app=bnk,mode=demo
+          labels       job=hsl,app=bnk,mode=genai
           line_format  json
-          label_keys   source,method,path,status,virtual_server
+          label_keys   source,model,endpoint,status,virtual_server
     CONF
   }
 }

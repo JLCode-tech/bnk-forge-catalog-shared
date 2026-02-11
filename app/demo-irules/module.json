@@ -2,19 +2,19 @@
   "module": {
     "name": "Demo iRules & Network Policy",
     "path": "demo-irules",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "layer": "app-policy",
     "category": "policy",
-    "description": "Creates request-logging iRule with HSL to Fluent Bit, HSL publisher, and BNKNetPolicy attachments per Gateway listener.",
+    "description": "Token counting HSL iRule (proven Lanner TCL) + SmartLLM routing iRule with prompt classification, weighted complexity scoring, and per-user token quota. BNKNetPolicies bind iRules to Gateway listeners (max 1 per listener, merged).",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
   "dependencies": {
     "required": [
-      { "module": "app/demo-gateway", "reason": "Network policies attach to the Gateway" }
+      { "module": "app/demo-gateway", "reason": "Network policies attach to the Gateway listeners" }
     ],
     "optional": [
-      { "module": "app/demo-observability", "reason": "Fluent Bit should be deployed to receive HSL logs" }
+      { "module": "app/demo-observability", "reason": "Fluent Bit should be deployed to receive HSL token logs" }
     ]
   },
   "inputs": {
@@ -30,7 +30,7 @@
       {
         "name": "gateway_namespace",
         "type": "string",
-        "description": "Namespace of the BNK Gateway",
+        "description": "Namespace of the BNK Gateway (iRules must be in same ns)",
         "source": "module",
         "from_module": "app/demo-gateway",
         "from_output": "gateway_namespace"
@@ -45,14 +45,19 @@
       }
     ],
     "optional": [
-      { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
-      { "name": "observability_namespace", "type": "string", "source": "user", "default": "observability" },
-      { "name": "fluentbit_hsl_port", "type": "number", "source": "user", "default": 5514 },
-      { "name": "enable_https_listener", "type": "boolean", "source": "user", "default": true },
-      { "name": "enable_smart_listener", "type": "boolean", "source": "user", "default": true },
+      { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
+      { "name": "fluentbit_hsl_endpoint", "type": "string", "description": "Fluent Bit HSL UDP endpoint (host:port)", "source": "user", "default": "fluentbit-hsl-udp.observability.svc.cluster.local:5514" },
+      { "name": "enable_smart_listener", "type": "boolean", "description": "Enable SmartLLM iRule + combined BNKNetPolicy", "source": "user", "default": true },
+      { "name": "classifier_host", "type": "string", "description": "Prompt classifier service hostname", "source": "user", "default": "prompt-classifier.demo-apps.svc.cluster.local" },
+      { "name": "classifier_port", "type": "number", "description": "Prompt classifier service port", "source": "user", "default": 80 },
+      { "name": "complex_model_name", "type": "string", "description": "LiteLLM model name for complex prompts", "source": "user", "default": "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0" },
+      { "name": "simple_model_name", "type": "string", "description": "LiteLLM model name for simple prompts", "source": "user", "default": "bedrock/amazon.nova-micro-v1:0" },
+      { "name": "complexity_threshold", "type": "number", "description": "Weighted complexity threshold (0.0-1.0)", "source": "user", "default": 0.5 },
+      { "name": "token_quota_limit", "type": "number", "description": "Per-user token quota limit", "source": "user", "default": 1000 },
       {
         "name": "observability_ready",
         "type": "boolean",
+        "description": "Flag indicating observability stack is ready",
         "source": "module",
         "from_module": "app/demo-observability",
         "from_output": "observability_ready",
@@ -62,8 +67,8 @@
   },
   "outputs": {
     "key_outputs": [
-      { "name": "irule_name", "type": "string" },
-      { "name": "hsl_publisher_name", "type": "string" },
+      { "name": "token_counting_irule_name", "type": "string" },
+      { "name": "smartllm_routing_irule_name", "type": "string" },
       { "name": "netpolicy_names", "type": "list(string)" },
       { "name": "irules_ready", "type": "boolean" }
     ]

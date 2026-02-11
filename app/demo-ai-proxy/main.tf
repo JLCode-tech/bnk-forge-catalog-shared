@@ -442,7 +442,7 @@ resource "kubernetes_manifest" "ai_route" {
       parentRefs = [
         {
           name        = var.gateway_name
-          sectionName = "smart"
+          sectionName = "smart-http"
         }
       ]
       rules = [

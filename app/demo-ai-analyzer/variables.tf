@@ -15,7 +15,7 @@ variable "gateway_name" {
 variable "gateway_namespace" {
   description = "Namespace of the BNK Gateway (F5BigAnalyzer and iRules deploy here)"
   type        = string
-  default     = "demo-gw"
+  default     = "bnk-gw"
 }
 
 variable "app_namespace" {

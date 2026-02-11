@@ -15,13 +15,13 @@ variable "gateway_name" {
 variable "gateway_namespace" {
   description = "Namespace of the BNK Gateway"
   type        = string
-  default     = "demo-gw"
+  default     = "bnk-gw"
 }
 
 variable "allowed_source_ranges" {
   description = "CIDR ranges allowed through the firewall"
   type        = list(string)
-  default     = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+  default     = ["10.0.10.0/24", "10.0.20.0/24", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 }
 
 variable "blocked_source_ranges" {

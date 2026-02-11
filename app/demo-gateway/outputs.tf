@@ -10,6 +10,11 @@ output "gateway_namespace" {
   value       = kubernetes_manifest.gateway.manifest.metadata.namespace
 }
 
+output "gateway_vip" {
+  description = "VIP address assigned to the Gateway"
+  value       = var.gateway_vip
+}
+
 output "gateway_ready" {
   description = "Flag indicating Gateway is ready for routes and policies"
   value       = true

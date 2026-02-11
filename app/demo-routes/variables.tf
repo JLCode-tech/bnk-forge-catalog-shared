@@ -13,36 +13,31 @@ variable "gateway_name" {
 }
 
 variable "gateway_namespace" {
-  description = "Namespace of the BNK Gateway"
+  description = "Namespace of the BNK Gateway (routes are created here)"
   type        = string
-  default     = "demo-gw"
+  default     = "bnk-gw"
 }
 
 variable "app_namespace" {
-  description = "Namespace where demo applications are deployed"
+  description = "Namespace where backend applications are deployed"
   type        = string
   default     = "demo-apps"
 }
 
-variable "enable_canary_routing" {
-  description = "Enable header-based canary routing to backend service"
-  type        = bool
-  default     = true
+variable "backend_service_name" {
+  description = "Name of the backend Kubernetes Service to route traffic to"
+  type        = string
+  default     = "litellm-proxy"
 }
 
-variable "canary_weight" {
-  description = "Percentage of traffic to route to canary backend (0-100)"
+variable "backend_service_port" {
+  description = "Port of the backend Kubernetes Service"
   type        = number
-  default     = 20
-
-  validation {
-    condition     = var.canary_weight >= 0 && var.canary_weight <= 100
-    error_message = "Canary weight must be between 0 and 100."
-  }
+  default     = 4000
 }
 
-variable "enable_ai_route" {
-  description = "Enable AI chat route on the smart listener (port 8080)"
+variable "enable_smart_route" {
+  description = "Enable smart-http route on port 8080 (requires smart listener on Gateway)"
   type        = bool
   default     = true
 }

@@ -2,10 +2,10 @@
   "module": {
     "name": "Demo Routes",
     "path": "demo-routes",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "layer": "app-gateway",
     "category": "routing",
-    "description": "Creates HTTPRoutes demonstrating path-based routing, header-based canary, weighted backends, and multi-listener configuration.",
+    "description": "Creates HTTPRoutes for standard (:80) and smart (:8080) listeners routing to LiteLLM proxy backend. Matches Lanner PoC pattern.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -14,7 +14,7 @@
       { "module": "app/demo-gateway", "reason": "Routes must attach to an existing Gateway" }
     ],
     "optional": [
-      { "module": "app/demo-apps", "reason": "Backend services should be deployed for routes to function" }
+      { "module": "app/demo-ai-proxy", "reason": "LiteLLM proxy provides the backend service" }
     ]
   },
   "inputs": {
@@ -45,11 +45,11 @@
       }
     ],
     "optional": [
-      { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
+      { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
       { "name": "app_namespace", "type": "string", "source": "user", "default": "demo-apps" },
-      { "name": "enable_canary_routing", "type": "boolean", "source": "user", "default": true },
-      { "name": "canary_weight", "type": "number", "source": "user", "default": 20 },
-      { "name": "enable_ai_route", "type": "boolean", "source": "user", "default": true }
+      { "name": "backend_service_name", "type": "string", "description": "Backend service name (LiteLLM proxy)", "source": "user", "default": "litellm-proxy" },
+      { "name": "backend_service_port", "type": "number", "description": "Backend service port", "source": "user", "default": 4000 },
+      { "name": "enable_smart_route", "type": "boolean", "source": "user", "default": true }
     ]
   },
   "outputs": {

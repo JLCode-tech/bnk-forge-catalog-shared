@@ -15,7 +15,7 @@ variable "gateway_name" {
 variable "gateway_namespace" {
   description = "Namespace of the BNK Gateway"
   type        = string
-  default     = "demo-gw"
+  default     = "bnk-gw"
 }
 
 variable "app_namespace" {

@@ -18,9 +18,9 @@ variable "gateway_name" {
 }
 
 variable "gateway_namespace" {
-  description = "Namespace for the Gateway resource"
+  description = "Namespace for the Gateway resource (must match demo-namespace gateway_namespace)"
   type        = string
-  default     = "demo-gw"
+  default     = "bnk-gw"
 }
 
 variable "gatewayclass_name" {
@@ -29,22 +29,27 @@ variable "gatewayclass_name" {
   default     = "bnk-gatewayclass"
 }
 
-variable "enable_https_listener" {
-  description = "Enable HTTPS listener on port 443 with TLS termination"
-  type        = bool
-  default     = true
+variable "gateway_vip" {
+  description = "Static VIP address for the Gateway. Must be within the F5BnkGateway CIDR range. Leave empty for dynamic allocation."
+  type        = string
+  default     = "10.0.10.100"
+
+  validation {
+    condition     = var.gateway_vip == "" || can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$", var.gateway_vip))
+    error_message = "The gateway_vip must be a valid IPv4 address or an empty string."
+  }
+}
+
+variable "bnkgateway_name" {
+  description = "Name of the F5BnkGateway resource for IPAM validation. Leave empty to skip IPAM integration."
+  type        = string
+  default     = "demo-bnkgateway"
 }
 
 variable "enable_smart_listener" {
-  description = "Enable Smart listener on port 8080 for AI/special routing"
+  description = "Enable Smart listener on port 8080 for AI/SmartLLM routing"
   type        = bool
   default     = true
-}
-
-variable "cluster_issuer_name" {
-  description = "cert-manager ClusterIssuer name for TLS certificates"
-  type        = string
-  default     = "bnk-ca-cluster-issuer"
 }
 
 # Dependency input

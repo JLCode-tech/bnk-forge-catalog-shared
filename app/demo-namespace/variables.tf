@@ -20,7 +20,7 @@ variable "app_namespace" {
 variable "gateway_namespace" {
   description = "Namespace for BNK Gateway and routing resources"
   type        = string
-  default     = "demo-gw"
+  default     = "bnk-gw"
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.gateway_namespace))

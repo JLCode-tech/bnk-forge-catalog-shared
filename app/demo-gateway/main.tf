@@ -1,15 +1,27 @@
 # bnk-forge-modules/app/demo-gateway/main.tf
-# Demo BNK Gateway with multiple listeners
+# BNK Gateway with static VIP and dual listeners (standard + smart)
+#
+# Validated against F5 BNK 2.2 docs (2026-02-12):
+# - Gateway CR: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-gateway-api-gateway.html
+# - F5BnkGateway IPAM: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-bnkgateway.html
+# - Lanner PoC: lanner-bnk-poc/app/use-cases/uc1-llmaas/gateways/llmaas-gw.yaml
 
 # =============================================================================
 # LOCALS
 # =============================================================================
 
 locals {
-  # Build listeners list dynamically based on enabled features
+  common_labels = {
+    "app.kubernetes.io/name"       = var.gateway_name
+    "app.kubernetes.io/component"  = "gateway"
+    "app.kubernetes.io/part-of"    = "bnk-demo"
+    "app.kubernetes.io/managed-by" = "opentofu"
+  }
+
+  # Build listeners list: standard-http always, smart-http optional
   base_listeners = [
     {
-      name     = "http"
+      name     = "standard-http"
       protocol = "HTTP"
       port     = 80
       allowedRoutes = {
@@ -20,31 +32,9 @@ locals {
     }
   ]
 
-  https_listener = var.enable_https_listener ? [
-    {
-      name     = "https"
-      protocol = "HTTPS"
-      port     = 443
-      tls = {
-        mode = "Terminate"
-        certificateRefs = [
-          {
-            name = "demo-gw-tls"
-            kind = "Secret"
-          }
-        ]
-      }
-      allowedRoutes = {
-        namespaces = {
-          from = "All"
-        }
-      }
-    }
-  ] : []
-
   smart_listener = var.enable_smart_listener ? [
     {
-      name     = "smart"
+      name     = "smart-http"
       protocol = "HTTP"
       port     = 8080
       allowedRoutes = {
@@ -55,47 +45,24 @@ locals {
     }
   ] : []
 
-  all_listeners = concat(local.base_listeners, local.https_listener, local.smart_listener)
-}
+  all_listeners = concat(local.base_listeners, local.smart_listener)
 
-# =============================================================================
-# SELF-SIGNED TLS CERTIFICATE (if HTTPS enabled and cert-manager available)
-# =============================================================================
-
-resource "kubernetes_manifest" "tls_certificate" {
-  count = var.enable_https_listener ? 1 : 0
-
-  depends_on = [var.namespaces_ready]
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-
-    metadata = {
-      name      = "demo-gw-tls"
-      namespace = var.gateway_namespace
-      labels = {
-        "app.kubernetes.io/name"       = "demo-gw-tls"
-        "app.kubernetes.io/part-of"    = "bnk-demo"
-        "app.kubernetes.io/managed-by" = "opentofu"
-      }
+  # Build Gateway spec dynamically based on whether VIP and parametersRef are set
+  gateway_addresses = var.gateway_vip != "" ? [
+    {
+      type  = "IPAddress"
+      value = var.gateway_vip
     }
+  ] : []
 
-    spec = {
-      secretName = "demo-gw-tls"
-      issuerRef = {
-        name = var.cluster_issuer_name
-        kind = "ClusterIssuer"
-      }
-      dnsNames = [
-        "demo-gw.${var.gateway_namespace}.svc.cluster.local",
-        "demo.bnk.local",
-        "*.demo.bnk.local"
-      ]
-      duration    = "2160h"
-      renewBefore = "360h"
+  # parametersRef links to the F5BnkGateway for IPAM validation
+  gateway_infrastructure = var.bnkgateway_name != "" ? {
+    parametersRef = {
+      group = "k8s.f5net.com"
+      kind  = "F5BnkGateway"
+      name  = var.bnkgateway_name
     }
-  }
+  } : null
 }
 
 # =============================================================================
@@ -105,26 +72,28 @@ resource "kubernetes_manifest" "tls_certificate" {
 resource "kubernetes_manifest" "gateway" {
   depends_on = [var.namespaces_ready]
 
-  manifest = {
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "Gateway"
+  manifest = merge(
+    {
+      apiVersion = "gateway.networking.k8s.io/v1"
+      kind       = "Gateway"
 
-    metadata = {
-      name      = var.gateway_name
-      namespace = var.gateway_namespace
-      labels = {
-        "app.kubernetes.io/name"       = var.gateway_name
-        "app.kubernetes.io/component"  = "gateway"
-        "app.kubernetes.io/part-of"    = "bnk-demo"
-        "app.kubernetes.io/managed-by" = "opentofu"
+      metadata = {
+        name      = var.gateway_name
+        namespace = var.gateway_namespace
+        labels    = local.common_labels
       }
+    },
+    {
+      spec = merge(
+        {
+          gatewayClassName = var.gatewayclass_name
+          listeners        = local.all_listeners
+        },
+        length(local.gateway_addresses) > 0 ? { addresses = local.gateway_addresses } : {},
+        local.gateway_infrastructure != null ? { infrastructure = local.gateway_infrastructure } : {}
+      )
     }
-
-    spec = {
-      gatewayClassName = var.gatewayclass_name
-      listeners        = local.all_listeners
-    }
-  }
+  )
 }
 
 # =============================================================================
@@ -142,10 +111,20 @@ resource "null_resource" "verify_gateway" {
   provisioner "local-exec" {
     command = <<-EOT
       echo "=== Verifying Demo Gateway ${var.gateway_name} ==="
-      kubectl get gateway ${var.gateway_name} -n ${var.gateway_namespace} || echo "Gateway not found yet"
-      kubectl wait --for=condition=Programmed gateway/${var.gateway_name} -n ${var.gateway_namespace} --timeout=120s || echo "Gateway not yet programmed — TMM may need time to allocate"
+      kubectl get gateway ${var.gateway_name} -n ${var.gateway_namespace} -o wide || echo "Gateway not found yet"
+      echo ""
+      echo "=== Waiting for Programmed condition ==="
+      kubectl wait --for=condition=Programmed gateway/${var.gateway_name} -n ${var.gateway_namespace} --timeout=120s || echo "Gateway not yet programmed — TMM may need time"
+      echo ""
       echo "=== Gateway Status ==="
-      kubectl get gateway ${var.gateway_name} -n ${var.gateway_namespace} -o jsonpath='{.status}' | python3 -m json.tool 2>/dev/null || echo "No status available yet"
+      kubectl get gateway ${var.gateway_name} -n ${var.gateway_namespace} -o jsonpath='{.status}' | python3 -m json.tool 2>/dev/null || echo "No status yet"
+      echo ""
+      echo "=== VIP Address ==="
+      kubectl get gateway ${var.gateway_name} -n ${var.gateway_namespace} -o jsonpath='{.status.addresses[*].value}' || echo "No VIP assigned yet"
+      echo ""
+      echo "=== Listener Status ==="
+      kubectl get gateway ${var.gateway_name} -n ${var.gateway_namespace} -o jsonpath='{.status.listeners[*].name}' || echo "No listeners ready yet"
+      echo ""
       echo "Gateway verification complete"
     EOT
   }
