@@ -1,0 +1,10 @@
+{
+  "name": "bnk-vlans",
+  "path": "bnk/bnk-vlans",
+  "description": "F5SPKVlan CRs for BNK TMM data-plane self IPs. Self IPs must match NAD IPAM IPs from network-setup module.",
+  "category": "bnk",
+  "version": "1.0.0",
+  "provider": "kubernetes",
+  "dependencies": ["bnk/cneinstance", "k8s/network-setup"],
+  "tags": ["bnk", "vlan", "network", "tmm"]
+}

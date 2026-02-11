@@ -85,6 +85,106 @@ variable "deployment_size" {
   }
 }
 
+variable "whole_cluster" {
+  description = "Watch all namespaces for Gateway/Route CRs. With dpu=false, creates a Deployment."
+  type        = bool
+  default     = true
+}
+
+variable "dpu_enabled" {
+  description = "Enable DPU (BlueField) mode. Must be explicitly false for AWS/standard k8s."
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
+# FEATURE TOGGLES
+# These MUST be explicitly set. Empty {} in CRD causes FLO to generate a
+# minimal TMM template missing volume mounts and sidecars.
+# =============================================================================
+
+variable "dynamic_routing_enabled" {
+  description = "Enable dynamic routing (adds tmrouted container to TMM pod)"
+  type        = bool
+  default     = true
+}
+
+variable "firewall_acl_enabled" {
+  description = "Enable firewall ACL (adds blobd sidecar + AFM deployment)"
+  type        = bool
+  default     = true
+}
+
+variable "pseudo_cni_enabled" {
+  description = "Enable pseudoCNI / CSRC DaemonSet"
+  type        = bool
+  default     = true
+}
+
+variable "core_collection_enabled" {
+  description = "Enable core dump collection (DaemonSet per node, uses CPU/PV resources)"
+  type        = bool
+  default     = false
+}
+
+variable "telemetry_logging_enabled" {
+  description = "Enable logging subsystem (fluentbit sidecars)"
+  type        = bool
+  default     = true
+}
+
+variable "telemetry_metrics_enabled" {
+  description = "Enable metrics subsystem (observer, OTEL collector, toda-tmstats)"
+  type        = bool
+  default     = true
+}
+
+# =============================================================================
+# ENV DISCOVERY
+# Disabled by default: checks for OVN annotations (k8s.ovn.org/node-primary-ifaddr)
+# which don't exist on AWS VPC CNI, causing false failures on all nodes.
+# =============================================================================
+
+variable "env_discovery_enabled" {
+  description = "Enable environment discovery (validates SR-IOV, hugepages, node labels)"
+  type        = bool
+  default     = false
+}
+
+variable "env_discovery_stop_on_fail" {
+  description = "Halt deployment if envDiscovery finds issues"
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
+# TMM ENVIRONMENT VARIABLES
+# =============================================================================
+
+variable "tmm_default_mtu" {
+  description = "MTU for TMM interfaces (should match your network, e.g. 9000 for jumbo frames)"
+  type        = number
+  default     = 9000
+}
+
+variable "tmm_ignore_gateways" {
+  description = "Prevent TMM from using eth0 default gateway (required for SR-IOV setups)"
+  type        = bool
+  default     = true
+}
+
+variable "tmm_extra_env" {
+  description = "Additional environment variables for TMM container"
+  type        = list(object({ name = string, value = string }))
+  default     = []
+}
+
+variable "controller_extra_env" {
+  description = "Additional environment variables for CNE controller"
+  type        = list(object({ name = string, value = string }))
+  default     = []
+}
+
 # =============================================================================
 # DEPENDENCY GATES
 # =============================================================================

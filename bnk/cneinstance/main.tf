@@ -54,7 +54,28 @@ resource "local_file" "kubeconfig" {
 locals {
   kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
 
+  # TMM environment variables — these MUST be set explicitly.
+  # FLO does NOT set these from CNEInstance defaults.
+  tmm_env = concat(
+    [
+      { name = "TMM_DEFAULT_MTU", value = tostring(var.tmm_default_mtu) },
+      { name = "TMM_IGNORE_GATEWAYS", value = var.tmm_ignore_gateways ? "TRUE" : "FALSE" },
+    ],
+    var.tmm_extra_env
+  )
+
+  # Controller environment variables
+  controller_env = concat(
+    [
+      { name = "TMM_DEFAULT_MTU", value = tostring(var.tmm_default_mtu) },
+    ],
+    var.controller_extra_env
+  )
+
   # Build the CNEInstance YAML manifest
+  # All feature toggles MUST be set explicitly with enabled: true/false.
+  # Empty objects {} cause FLO to generate a minimal TMM template missing
+  # volume mounts (/var/download), sidecars, and gRPC config setup.
   cneinstance_manifest = {
     apiVersion = "k8s.f5.com/v1"
     kind       = "CNEInstance"
@@ -87,6 +108,63 @@ locals {
 
       certificate = {
         clusterIssuer = var.cluster_issuer_name
+      }
+
+      # --- Deployment mode ---
+      # wholeCluster=true + dpu=false → standard Deployment (1 TMM per labeled node)
+      # Without wholeCluster, TMM uses TMMReplicas count instead
+      wholeCluster = var.whole_cluster
+
+      dpu = {
+        enabled = var.dpu_enabled
+      }
+
+      # --- Feature toggles ---
+      # These MUST be explicitly set. Empty {} objects cause FLO to generate
+      # a minimal TMM template missing /var/download volume mounts, sidecars,
+      # and proper gRPC config server setup → TMM readiness gates stay False.
+      dynamicRouting = {
+        enabled = var.dynamic_routing_enabled
+      }
+
+      firewallACL = {
+        enabled = var.firewall_acl_enabled
+      }
+
+      pseudoCNI = {
+        enabled = var.pseudo_cni_enabled
+      }
+
+      coreCollection = {
+        enabled = var.core_collection_enabled
+      }
+
+      telemetry = {
+        loggingSubsystem = {
+          enabled = var.telemetry_logging_enabled
+        }
+        metricSubsystem = {
+          enabled = var.telemetry_metrics_enabled
+        }
+      }
+
+      # --- Advanced settings ---
+      advanced = {
+        # envDiscovery validates SR-IOV VFs, hugepages, node labels, etc.
+        # Disabled by default: it checks for OVN annotations (k8s.ovn.org/node-primary-ifaddr)
+        # which don't exist on AWS VPC CNI clusters, causing false failures.
+        envDiscovery = {
+          enabled    = var.env_discovery_enabled
+          stopOnFail = var.env_discovery_stop_on_fail
+        }
+
+        cneController = {
+          env = local.controller_env
+        }
+
+        tmm = {
+          env = local.tmm_env
+        }
       }
     }
   }
