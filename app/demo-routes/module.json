@@ -5,7 +5,7 @@
     "version": "2.0.0",
     "layer": "app-gateway",
     "category": "routing",
-    "description": "Creates HTTPRoutes for standard (:80) and smart (:8080) listeners routing to LiteLLM proxy backend. Matches Lanner PoC pattern.",
+    "description": "Creates HTTPRoutes: standard (:80) → demo-web, smart (:8080) → litellm-proxy. Standard route always works; smart route requires AI proxy.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -47,8 +47,10 @@
     "optional": [
       { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
       { "name": "app_namespace", "type": "string", "source": "user", "default": "demo-apps" },
-      { "name": "backend_service_name", "type": "string", "description": "Backend service name (LiteLLM proxy)", "source": "user", "default": "litellm-proxy" },
-      { "name": "backend_service_port", "type": "number", "description": "Backend service port", "source": "user", "default": 4000 },
+      { "name": "backend_service_name", "type": "string", "description": "Backend service for standard route (demo-web always deployed)", "source": "user", "default": "demo-web" },
+      { "name": "backend_service_port", "type": "number", "description": "Backend service port for standard route", "source": "user", "default": 80 },
+      { "name": "smart_backend_service_name", "type": "string", "description": "Backend service for smart route (LiteLLM AI proxy)", "source": "user", "default": "litellm-proxy" },
+      { "name": "smart_backend_service_port", "type": "number", "description": "Backend service port for smart route", "source": "user", "default": 4000 },
       { "name": "enable_smart_route", "type": "boolean", "source": "user", "default": true }
     ]
   },

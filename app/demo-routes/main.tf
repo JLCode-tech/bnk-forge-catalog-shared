@@ -15,7 +15,7 @@ locals {
 }
 
 # =============================================================================
-# STANDARD ROUTE — :80 → litellm-proxy:4000 (direct, no iRule classification)
+# STANDARD ROUTE — :80 → demo-web:80 (always-available backend)
 # =============================================================================
 
 resource "kubernetes_manifest" "standard_route" {
@@ -65,7 +65,7 @@ resource "kubernetes_manifest" "standard_route" {
 }
 
 # =============================================================================
-# SMART ROUTE — :8080 → litellm-proxy:4000 (with SmartLLM iRule classification)
+# SMART ROUTE — :8080 → litellm-proxy:4000 (AI path with SmartLLM iRule classification)
 # =============================================================================
 
 resource "kubernetes_manifest" "smart_route" {
@@ -103,9 +103,9 @@ resource "kubernetes_manifest" "smart_route" {
           ]
           backendRefs = [
             {
-              name      = var.backend_service_name
+              name      = var.smart_backend_service_name
               namespace = var.app_namespace
-              port      = var.backend_service_port
+              port      = var.smart_backend_service_port
               weight    = 1
             }
           ]

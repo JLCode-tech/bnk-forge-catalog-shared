@@ -6,22 +6,22 @@ variable "cluster_name" {
   default     = ""
 }
 
-variable "gateway_name" {
-  description = "Name of the BNK Gateway to send traffic to"
-  type        = string
-  default     = "demo-gw"
-}
-
-variable "gateway_namespace" {
-  description = "Namespace of the BNK Gateway"
-  type        = string
-  default     = "bnk-gw"
-}
-
 variable "app_namespace" {
-  description = "Namespace for traffic generator CronJobs"
+  description = "Namespace for traffic generator CronJobs and backend services"
   type        = string
   default     = "demo-apps"
+}
+
+variable "backend_service_name" {
+  description = "Name of the backend K8s Service to target (demo-web is always deployed)"
+  type        = string
+  default     = "demo-web"
+}
+
+variable "backend_service_port" {
+  description = "Port of the backend K8s Service"
+  type        = number
+  default     = 80
 }
 
 variable "enable_web_traffic" {

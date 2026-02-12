@@ -47,22 +47,14 @@ locals {
 
   all_listeners = concat(local.base_listeners, local.smart_listener)
 
-  # Build Gateway spec dynamically based on whether VIP and parametersRef are set
+  # Build Gateway spec — static VIP address only (no IPAM/F5BnkGateway needed)
+  # Matches F5 internal AWS guide pattern: just addresses + gatewayClassName
   gateway_addresses = var.gateway_vip != "" ? [
     {
       type  = "IPAddress"
       value = var.gateway_vip
     }
   ] : []
-
-  # parametersRef links to the F5BnkGateway for IPAM validation
-  gateway_infrastructure = var.bnkgateway_name != "" ? {
-    parametersRef = {
-      group = "k8s.f5net.com"
-      kind  = "F5BnkGateway"
-      name  = var.bnkgateway_name
-    }
-  } : null
 }
 
 # =============================================================================
@@ -89,8 +81,7 @@ resource "kubernetes_manifest" "gateway" {
           gatewayClassName = var.gatewayclass_name
           listeners        = local.all_listeners
         },
-        length(local.gateway_addresses) > 0 ? { addresses = local.gateway_addresses } : {},
-        local.gateway_infrastructure != null ? { infrastructure = local.gateway_infrastructure } : {}
+        length(local.gateway_addresses) > 0 ? { addresses = local.gateway_addresses } : {}
       )
     }
   )

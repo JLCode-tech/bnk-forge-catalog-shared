@@ -35,51 +35,10 @@ variable "enable_smart_listener" {
   default     = true
 }
 
-variable "classifier_host" {
-  description = "Hostname of the prompt classifier service for sideband calls"
-  type        = string
-  default     = "prompt-classifier.demo-apps.svc.cluster.local"
-}
-
-variable "classifier_port" {
-  description = "Port of the prompt classifier service"
-  type        = number
-  default     = 80
-}
-
-variable "complex_model_name" {
-  description = "LiteLLM model name for complex/reasoning prompts (routed via Bedrock)"
-  type        = string
-  default     = "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
-}
-
-variable "simple_model_name" {
-  description = "LiteLLM model name for simple/fast prompts (routed via Bedrock)"
-  type        = string
-  default     = "bedrock/amazon.nova-micro-v1:0"
-}
-
-variable "complexity_threshold" {
-  description = "Weighted complexity score threshold (0.0-1.0). Above = complex model, below = simple."
-  type        = number
-  default     = 0.5
-
-  validation {
-    condition     = var.complexity_threshold >= 0 && var.complexity_threshold <= 1
-    error_message = "Complexity threshold must be between 0.0 and 1.0."
-  }
-}
-
-variable "token_quota_limit" {
-  description = "Per-user token quota limit. Users exceeding this are forced to simple model."
-  type        = number
-  default     = 1000
-
-  validation {
-    condition     = var.token_quota_limit >= 100
-    error_message = "Token quota limit must be at least 100."
-  }
-}
+# NOTE: SmartLLM classifier/routing variables removed — the current iRules are
+# simplified stubs that insert headers. When full SmartLLM routing is implemented,
+# re-add: classifier_host, classifier_port, complex_model_name, simple_model_name,
+# complexity_threshold, token_quota_limit.
 
 # --- Dependency inputs ---
 

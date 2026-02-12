@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "layer": "app-workload",
     "category": "traffic",
-    "description": "Deploys CronJob-based traffic generators that continuously send requests through the BNK Gateway. Turn on the demo and watch the BNK page light up.",
+    "description": "Deploys CronJob-based health checks that target backend services directly via ClusterIP. For real traffic testing through BNK Gateway, use the jumphost (curl http://VIP).",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -31,9 +31,9 @@
     ],
     "optional": [
       { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
-      { "name": "gateway_name", "type": "string", "source": "user", "default": "demo-gw" },
-      { "name": "gateway_namespace", "type": "string", "source": "user", "default": "demo-gw" },
       { "name": "app_namespace", "type": "string", "source": "user", "default": "demo-apps" },
+      { "name": "backend_service_name", "type": "string", "description": "Backend service to health-check (demo-web always deployed)", "source": "user", "default": "demo-web" },
+      { "name": "backend_service_port", "type": "number", "description": "Backend service port", "source": "user", "default": 80 },
       { "name": "enable_web_traffic", "type": "boolean", "source": "user", "default": true },
       { "name": "enable_api_traffic", "type": "boolean", "source": "user", "default": true },
       { "name": "enable_canary_traffic", "type": "boolean", "source": "user", "default": true },

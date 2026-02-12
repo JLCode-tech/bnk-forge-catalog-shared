@@ -469,48 +469,16 @@ resource "kubernetes_manifest" "token_counting_irule" {
 }
 
 # =============================================================================
-# BNK NET POLICY — Attach token counting iRule to smart listener
+# BNK NET POLICY — REMOVED
 # =============================================================================
-
-resource "kubernetes_manifest" "token_irule_netpolicy" {
-  count = var.enable_token_irule ? 1 : 0
-
-  depends_on = [kubernetes_manifest.token_counting_irule]
-
-  manifest = {
-    apiVersion = "gateway.k8s.f5net.com/v1alpha1"
-    kind       = "BNKNetPolicy"
-
-    metadata = {
-      name      = "demo-ai-token-netpolicy"
-      namespace = var.gateway_namespace
-      labels = {
-        "app.kubernetes.io/name"       = "demo-ai-token-netpolicy"
-        "app.kubernetes.io/component"  = "ai-analyzer"
-        "app.kubernetes.io/part-of"    = "bnk-demo"
-        "app.kubernetes.io/managed-by" = "opentofu"
-      }
-    }
-
-    spec = {
-      extensionRefs = [
-        {
-          group = "k8s.f5net.com"
-          kind  = "F5BigCneIrule"
-          name  = "demo-ai-token-counter"
-        }
-      ]
-      targetRefs = [
-        {
-          group       = "gateway.networking.k8s.io"
-          kind        = "Gateway"
-          name        = var.gateway_name
-          sectionName = "smart"
-        }
-      ]
-    }
-  }
-}
+# The BNKNetPolicy for the smart-http listener is created by demo-irules module
+# (smart-combined-netpolicy). F5 BNK enforces MAX 1 BNKNetPolicy per listener.
+#
+# If you want to attach the AI token counter iRule to the smart listener, add it
+# to the demo-irules module's smart-combined-netpolicy extensionRefs instead.
+#
+# The token counting iRule CR (demo-ai-token-counter) is still created above —
+# it just needs to be referenced from demo-irules' BNKNetPolicy to be active.
 
 # =============================================================================
 # VERIFICATION
@@ -527,6 +495,9 @@ resource "null_resource" "verify_analyzer" {
       echo "=== Verifying AI Analyzer ==="
       kubectl get f5biganalyzer -n ${var.gateway_namespace} 2>/dev/null || echo "F5BigAnalyzer CRD may not be registered (requires intelligentLB=true in CNEInstance)"
       kubectl get configmap bedrock-analyzer-scripts -n ${var.gateway_namespace} -o jsonpath='{.metadata.labels}' 2>/dev/null || echo "Analyzer script ConfigMap not found"
+      echo "=== Checking for token counter iRule ==="
+      kubectl get f5bigcneirule demo-ai-token-counter -n ${var.gateway_namespace} 2>/dev/null || echo "Token counter iRule not found"
+      echo "NOTE: Token counter iRule must be added to demo-irules smart-combined-netpolicy to be active"
       echo "=== Checking for Analyzer pod ==="
       kubectl get pods -n f5-operator -l app.kubernetes.io/name=f5-analyzer 2>/dev/null || echo "Analyzer pod not running (requires intelligentLB=true in CNEInstance)"
       echo "AI Analyzer verification complete"

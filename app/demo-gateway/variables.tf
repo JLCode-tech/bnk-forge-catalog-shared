@@ -30,7 +30,7 @@ variable "gatewayclass_name" {
 }
 
 variable "gateway_vip" {
-  description = "Static VIP address for the Gateway. Must be within the F5BnkGateway CIDR range. Leave empty for dynamic allocation."
+  description = "Static VIP address for the Gateway on the external data-plane subnet. Must be registered as a secondary IP on the TMM ENI."
   type        = string
   default     = "10.0.10.100"
 
@@ -40,10 +40,13 @@ variable "gateway_vip" {
   }
 }
 
+# NOTE: F5BnkGateway/IPAM is NOT needed for static VIP deployments.
+# The F5 internal AWS guide uses simple Gateway with addresses: [VIP] only.
+# Keeping this variable for future use if dynamic IPAM is needed.
 variable "bnkgateway_name" {
-  description = "Name of the F5BnkGateway resource for IPAM validation. Leave empty to skip IPAM integration."
+  description = "DEPRECATED: F5BnkGateway is not needed for static VIP. Leave empty."
   type        = string
-  default     = "demo-bnkgateway"
+  default     = ""
 }
 
 variable "enable_smart_listener" {

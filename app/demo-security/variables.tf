@@ -30,22 +30,9 @@ variable "blocked_source_ranges" {
   default     = ["198.51.100.0/24"]
 }
 
-variable "enable_rate_limiting" {
-  description = "Enable rate limiting on the security policy"
-  type        = bool
-  default     = true
-}
-
-variable "rate_limit_rps" {
-  description = "Requests per second rate limit"
-  type        = number
-  default     = 100
-
-  validation {
-    condition     = var.rate_limit_rps >= 1 && var.rate_limit_rps <= 10000
-    error_message = "Rate limit must be between 1 and 10000 requests per second."
-  }
-}
+# NOTE: Rate limiting variables removed — BNK 2.2 rate limiting may require
+# different CRDs than initially assumed. Re-add when rate limiting is validated
+# against the F5 docs.
 
 # Dependency input
 variable "gateway_ready" {

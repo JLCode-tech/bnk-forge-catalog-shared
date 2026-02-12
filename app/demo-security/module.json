@@ -45,9 +45,7 @@
     "optional": [
       { "name": "cluster_name", "type": "string", "description": "Kubernetes cluster name (auto-wired from infra/aws/eks)", "source": "auto", "from_module": "infra/aws/eks", "from_output": "cluster_name", "default": "" },
       { "name": "allowed_source_ranges", "type": "list(string)", "source": "user", "default": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"] },
-      { "name": "blocked_source_ranges", "type": "list(string)", "source": "user", "default": ["198.51.100.0/24"] },
-      { "name": "enable_rate_limiting", "type": "boolean", "source": "user", "default": true },
-      { "name": "rate_limit_rps", "type": "number", "source": "user", "default": 100 }
+      { "name": "blocked_source_ranges", "type": "list(string)", "source": "user", "default": ["198.51.100.0/24"] }
     ]
   },
   "outputs": {

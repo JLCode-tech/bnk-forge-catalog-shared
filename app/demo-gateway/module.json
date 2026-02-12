@@ -5,7 +5,7 @@
     "version": "2.0.0",
     "layer": "app-gateway",
     "category": "gateway",
-    "description": "Creates BNK Gateway with static VIP (IPAM-validated), standard-http (:80) and smart-http (:8080) listeners. References existing F5BnkGateway for IPAM. Validated against F5 BNK 2.2 docs.",
+    "description": "Creates BNK Gateway with static VIP, standard-http (:80) and smart-http (:8080) listeners. No IPAM needed — matches F5 internal AWS guide pattern.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -59,16 +59,9 @@
       {
         "name": "gateway_vip",
         "type": "string",
-        "description": "Static VIP for the Gateway (must be within F5BnkGateway CIDR range)",
+        "description": "Static VIP for the Gateway (must be registered as secondary IP on TMM ENI)",
         "source": "user",
         "default": "10.0.10.100"
-      },
-      {
-        "name": "bnkgateway_name",
-        "type": "string",
-        "description": "Name of the F5BnkGateway resource for IPAM validation",
-        "source": "user",
-        "default": "demo-bnkgateway"
       },
       { "name": "enable_smart_listener", "type": "boolean", "source": "user", "default": true }
     ]

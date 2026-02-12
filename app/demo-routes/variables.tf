@@ -25,13 +25,25 @@ variable "app_namespace" {
 }
 
 variable "backend_service_name" {
-  description = "Name of the backend Kubernetes Service to route traffic to"
+  description = "Name of the backend Kubernetes Service for the standard route (demo-web is always deployed by demo-apps)"
+  type        = string
+  default     = "demo-web"
+}
+
+variable "backend_service_port" {
+  description = "Port of the backend Kubernetes Service for the standard route"
+  type        = number
+  default     = 80
+}
+
+variable "smart_backend_service_name" {
+  description = "Name of the backend Kubernetes Service for the smart route (LiteLLM AI proxy)"
   type        = string
   default     = "litellm-proxy"
 }
 
-variable "backend_service_port" {
-  description = "Port of the backend Kubernetes Service"
+variable "smart_backend_service_port" {
+  description = "Port of the backend Kubernetes Service for the smart route"
   type        = number
   default     = 4000
 }

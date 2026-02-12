@@ -1,11 +1,18 @@
 # bnk-forge-modules/app/demo-traffic/main.tf
-# Traffic Generators — CronJobs that send requests through BNK Gateway
+# Traffic Generators — CronJobs that send requests to backend services directly
 #
-# Each CronJob runs a curl loop that generates a specific traffic pattern.
-# Users can suspend/resume/delete CronJobs from the K8s page to control the demo.
+# IMPORTANT: These CronJobs target backend services (demo-web, demo-api) via K8s
+# ClusterIP, NOT the BNK Gateway VIP. BNK Gateways don't create K8s Services,
+# and cluster pods can't reach the data-plane VIP without egress config.
+#
+# For real external→VIP→TMM→backend testing, use the existing jumphost:
+#   ssh to jumphost → curl http://10.0.10.100 (Gateway VIP on external subnet)
+#
+# These CronJobs serve as internal health checks to verify backend pods are alive.
 
 locals {
-  gateway_url = "http://${var.gateway_name}.${var.gateway_namespace}.svc.cluster.local"
+  # Target backend services directly via ClusterIP (bypasses BNK Gateway)
+  backend_url = "http://${var.backend_service_name}.${var.app_namespace}.svc.cluster.local:${var.backend_service_port}"
   common_labels = {
     "app.kubernetes.io/component"  = "traffic-generator"
     "app.kubernetes.io/part-of"    = "bnk-demo"
@@ -32,12 +39,12 @@ resource "kubernetes_config_map_v1" "traffic_scripts" {
     # Web traffic — GET / every interval
     "web-traffic.sh" = <<-SCRIPT
       #!/bin/sh
-      echo "Starting web traffic generator → ${local.gateway_url}/"
+      echo "Starting web traffic generator → ${local.backend_url}/"
       end=$(($(date +%s) + 50))
       while [ $(date +%s) -lt $end ]; do
         curl -s -o /dev/null -w "Web: %%{http_code} %%{time_total}s\n" \
           -H "User-Agent: BNK-Demo-WebTraffic/1.0" \
-          "${local.gateway_url}/"
+          "${local.backend_url}/"
         sleep ${var.traffic_interval_seconds}
       done
       echo "Web traffic batch complete"
@@ -46,7 +53,7 @@ resource "kubernetes_config_map_v1" "traffic_scripts" {
     # API traffic — GET and POST to /api/*
     "api-traffic.sh" = <<-SCRIPT
       #!/bin/sh
-      echo "Starting API traffic generator → ${local.gateway_url}/api/"
+      echo "Starting API traffic generator → ${local.backend_url}/api/"
       end=$(($(date +%s) + 50))
       i=0
       while [ $(date +%s) -lt $end ]; do
@@ -54,14 +61,14 @@ resource "kubernetes_config_map_v1" "traffic_scripts" {
         if [ $((i % 2)) -eq 0 ]; then
           curl -s -o /dev/null -w "API GET: %%{http_code} %%{time_total}s\n" \
             -H "User-Agent: BNK-Demo-APITraffic/1.0" \
-            "${local.gateway_url}/api/echo?request=$i"
+            "${local.backend_url}/api/echo?request=$i"
         else
           curl -s -o /dev/null -w "API POST: %%{http_code} %%{time_total}s\n" \
             -X POST \
             -H "Content-Type: application/json" \
             -H "User-Agent: BNK-Demo-APITraffic/1.0" \
             -d "{\"message\":\"demo request $i\",\"timestamp\":\"$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)\"}" \
-            "${local.gateway_url}/api/data"
+            "${local.backend_url}/api/data"
         fi
         sleep ${var.traffic_interval_seconds}
       done
@@ -71,13 +78,13 @@ resource "kubernetes_config_map_v1" "traffic_scripts" {
     # Canary traffic — GET with X-Canary header
     "canary-traffic.sh" = <<-SCRIPT
       #!/bin/sh
-      echo "Starting canary traffic generator → ${local.gateway_url}/api/echo"
+      echo "Starting canary traffic generator → ${local.backend_url}/api/echo"
       end=$(($(date +%s) + 50))
       while [ $(date +%s) -lt $end ]; do
         curl -s -o /dev/null -w "Canary: %%{http_code} %%{time_total}s\n" \
           -H "X-Canary: true" \
           -H "User-Agent: BNK-Demo-CanaryTraffic/1.0" \
-          "${local.gateway_url}/api/echo?canary=true"
+          "${local.backend_url}/api/echo?canary=true"
         sleep ${var.traffic_interval_seconds}
       done
       echo "Canary traffic batch complete"
@@ -86,12 +93,12 @@ resource "kubernetes_config_map_v1" "traffic_scripts" {
     # Health traffic — GET /health
     "health-traffic.sh" = <<-SCRIPT
       #!/bin/sh
-      echo "Starting health check traffic → ${local.gateway_url}/health"
+      echo "Starting health check traffic → ${local.backend_url}/health"
       end=$(($(date +%s) + 50))
       while [ $(date +%s) -lt $end ]; do
         curl -s -o /dev/null -w "Health: %%{http_code} %%{time_total}s\n" \
           -H "User-Agent: BNK-Demo-HealthCheck/1.0" \
-          "${local.gateway_url}/health"
+          "${local.backend_url}/health"
         sleep 60
       done
       echo "Health check batch complete"
@@ -100,13 +107,13 @@ resource "kubernetes_config_map_v1" "traffic_scripts" {
     # Blocked traffic — GET with X-Forwarded-For from blocked range
     "blocked-traffic.sh" = <<-SCRIPT
       #!/bin/sh
-      echo "Starting blocked source traffic → ${local.gateway_url}/"
+      echo "Starting blocked source traffic → ${local.backend_url}/"
       end=$(($(date +%s) + 50))
       while [ $(date +%s) -lt $end ]; do
         curl -s -o /dev/null -w "Blocked: %%{http_code} %%{time_total}s\n" \
           -H "X-Forwarded-For: 198.51.100.1" \
           -H "User-Agent: BNK-Demo-BlockedTraffic/1.0" \
-          "${local.gateway_url}/api/echo?source=blocked"
+          "${local.backend_url}/api/echo?source=blocked"
         sleep 60
       done
       echo "Blocked traffic batch complete"
