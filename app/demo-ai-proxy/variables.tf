@@ -62,7 +62,7 @@ variable "litellm_replicas" {
 variable "litellm_image" {
   description = "LiteLLM container image"
   type        = string
-  default     = "ghcr.io/berriai/litellm:main-v1.63.2"
+  default     = "litellm/litellm:v1.81.3-stable"
 }
 
 variable "enable_ai_route" {

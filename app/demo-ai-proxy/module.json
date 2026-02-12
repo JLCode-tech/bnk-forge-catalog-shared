@@ -68,7 +68,7 @@
       { "name": "bedrock_fast_model_id", "type": "string", "description": "Bedrock model ID for fast/cheap tier", "source": "user", "default": "amazon.nova-micro-v1:0" },
       { "name": "bedrock_iam_role_arn", "type": "string", "description": "IAM Role ARN for IRSA Bedrock access", "source": "user", "default": "" },
       { "name": "litellm_replicas", "type": "number", "description": "LiteLLM proxy replicas", "source": "user", "default": 2 },
-      { "name": "litellm_image", "type": "string", "description": "LiteLLM container image", "source": "user", "default": "ghcr.io/berriai/litellm:main-v1.63.2" },
+      { "name": "litellm_image", "type": "string", "description": "LiteLLM container image", "source": "user", "default": "litellm/litellm:v1.81.3-stable" },
       { "name": "enable_ai_route", "type": "boolean", "description": "Create AI HTTPRoute on smart listener", "source": "user", "default": true }
     ]
   },
