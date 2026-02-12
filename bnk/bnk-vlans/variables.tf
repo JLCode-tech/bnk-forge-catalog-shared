@@ -18,19 +18,22 @@ variable "namespace" {
 }
 
 # =============================================================================
-# SELF IPS — must match NAD IPAM rangeStart/rangeEnd from network-setup
+# SELF IPS — static IPs that TMM will configure on its data-plane interfaces
+# These are chosen by the operator from the subnet range.
+# One IP per TMM replica. NADs have NO IPAM — TMM sets these IPs itself
+# via the F5SPKVlan CR.
 # =============================================================================
 
 variable "external_self_ips" {
-  description = "External self IPs for TMM VLANs (one per AZ, wired from network-setup.external_self_ips)"
+  description = "External self IPs for TMM VLANs (one per TMM replica, from external subnet)"
   type        = list(string)
-  default     = ["10.0.10.240", "10.0.11.240"]
+  default     = ["10.0.10.240"]
 }
 
 variable "internal_self_ips" {
-  description = "Internal self IPs for TMM VLANs (one per AZ, wired from network-setup.internal_self_ips)"
+  description = "Internal self IPs for TMM VLANs (one per TMM replica, from internal subnet)"
   type        = list(string)
-  default     = ["10.0.20.240", "10.0.21.240"]
+  default     = ["10.0.20.240"]
 }
 
 # =============================================================================
@@ -38,15 +41,15 @@ variable "internal_self_ips" {
 # =============================================================================
 
 variable "external_subnet_cidrs" {
-  description = "External subnet CIDRs (wired from network-setup.external_subnet_cidrs)"
+  description = "External subnet CIDRs (used to derive prefix length for VLAN CR)"
   type        = list(string)
-  default     = ["10.0.10.0/24", "10.0.11.0/24"]
+  default     = ["10.0.10.0/24"]
 }
 
 variable "internal_subnet_cidrs" {
-  description = "Internal subnet CIDRs (wired from network-setup.internal_subnet_cidrs)"
+  description = "Internal subnet CIDRs (used to derive prefix length for VLAN CR)"
   type        = list(string)
-  default     = ["10.0.20.0/24", "10.0.21.0/24"]
+  default     = ["10.0.20.0/24"]
 }
 
 # =============================================================================

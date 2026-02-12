@@ -6,12 +6,12 @@
 #
 # Key design decisions:
 # - No hardcoded PCI bus IDs (they vary per node/cloud)
-# - CNI type is configurable (host-device, sriov, vfio)
-# - Resource names are configurable (intel.com/xxx, etc.)
+# - CNI type is configurable (host-device for AWS SR-IOV, sf for DPU, sriov, vfio)
+# - Resource names are configurable (intel.com/xxx, nvidia.com/xxx, etc.)
 # - NADs go in the CNEInstance namespace (f5-operator) since FLO deploys TMM there
-# - IPAM uses rangeStart=rangeEnd for DETERMINISTIC self IPs per AZ
-#   This is critical: VLAN CRs must use the same IP that Multus assigns.
-#   Old SPK used this pattern and it's the only way to guarantee the match.
+# - NO IPAM — the NAD provides a raw L2 interface only
+#   Self-IP configuration is handled by F5SPKVlan CRs (bnk-vlans module)
+#   This matches F5 docs, Lanner PoC, and bnk-poc reference implementations
 
 # =============================================================================
 # EXTERNAL NETWORK ATTACHMENT DEFINITION
@@ -33,16 +33,6 @@ resource "kubernetes_manifest" "external_nad" {
         type       = var.cni_type
         cniVersion = "0.3.1"
         name       = "external-network"
-        ipam = {
-          type = "host-local"
-          ranges = [
-            for i, cidr in var.external_subnet_cidrs : [{
-              subnet     = cidr
-              rangeStart = var.external_self_ips[i]
-              rangeEnd   = var.external_self_ips[i]
-            }]
-          ]
-        }
       })
     }
   }
@@ -73,16 +63,6 @@ resource "kubernetes_manifest" "internal_nad" {
         type       = var.cni_type
         cniVersion = "0.3.1"
         name       = "internal-network"
-        ipam = {
-          type = "host-local"
-          ranges = [
-            for i, cidr in var.internal_subnet_cidrs : [{
-              subnet     = cidr
-              rangeStart = var.internal_self_ips[i]
-              rangeEnd   = var.internal_self_ips[i]
-            }]
-          ]
-        }
       })
     }
   }

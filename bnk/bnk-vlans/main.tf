@@ -2,15 +2,17 @@
 # F5SPKVlan CRs — TMM VLAN Self IPs
 #
 # Creates F5SPKVlan custom resources that tell TMM which IP addresses to use
-# on its data-plane interfaces. The self IPs MUST match the NAD IPAM IPs
-# (rangeStart=rangeEnd) so TMM's VLAN config aligns with what Multus assigned.
+# on its data-plane interfaces. TMM configures these IPs on its interfaces
+# itself — they are NOT assigned by Multus IPAM (the NADs have no IPAM).
+#
+# Reference: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-configure-network.html
 #
 # Uses kubectl apply because the F5SPKVlan CRD is installed by FLO at runtime,
 # not available at plan time (same pattern as cneinstance module).
 #
-# Interface mapping:
-#   1.1 = external (first SR-IOV VF / net1)
-#   1.2 = internal (second SR-IOV VF / net2)
+# Interface mapping (determined by order in CNEInstance networkAttachments):
+#   1.1 = external (first NAD listed = external-netdevice)
+#   1.2 = internal (second NAD listed = internal-netdevice)
 
 # =============================================================================
 # KUBECONFIG FOR KUBECTL
