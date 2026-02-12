@@ -155,7 +155,10 @@ locals {
 
       # AI Intelligent Load Balancing — deploys f5-analyzer pod
       # Required for F5BigAnalyzer CRs (custom/builtin scripts)
-      intelligentLB = var.intelligent_lb_enabled
+      # CRD schema requires object format (not bare boolean despite docs)
+      intelligentLB = {
+        enabled = var.intelligent_lb_enabled
+      }
 
       telemetry = {
         loggingSubsystem = {
