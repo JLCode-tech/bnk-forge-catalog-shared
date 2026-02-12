@@ -63,6 +63,46 @@ variable "mtu" {
 }
 
 # =============================================================================
+# AWS ENI SECONDARY IP REGISTRATION
+# Set aws_region to enable automatic ENI discovery and secondary IP registration.
+# This is required on AWS because the Nitro hypervisor ARP proxy blackholes
+# traffic to unregistered IPs.
+# =============================================================================
+
+variable "aws_region" {
+  description = "AWS region for ENI operations. Empty string disables ENI registration (for on-prem/DPU)."
+  type        = string
+  default     = ""
+}
+
+variable "gateway_vips" {
+  description = "Gateway VIP addresses to register on the external ENI (in addition to self-IPs)"
+  type        = list(string)
+  default     = []
+}
+
+variable "internal_subnet_id" {
+  description = "Internal subnet ID — used to discover the internal ENI on the HP node"
+  type        = string
+  default     = ""
+}
+
+# =============================================================================
+# ROUTING
+# =============================================================================
+
+variable "auto_lasthop" {
+  description = "Auto last-hop setting for VLANs. Set to AUTO_LASTHOP_ENABLED on cloud (AWS/Azure) to prevent asymmetric routing."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = contains(["", "AUTO_LASTHOP_ENABLED", "AUTO_LASTHOP_DISABLED", "AUTO_LASTHOP_DEFAULT"], var.auto_lasthop)
+    error_message = "auto_lasthop must be one of: '' (empty/omit), 'AUTO_LASTHOP_ENABLED', 'AUTO_LASTHOP_DISABLED', 'AUTO_LASTHOP_DEFAULT'"
+  }
+}
+
+# =============================================================================
 # DEPENDENCY GATES
 # =============================================================================
 

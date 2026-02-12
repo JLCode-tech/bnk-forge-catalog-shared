@@ -97,6 +97,13 @@
         "from_module": "k8s/cert-manager",
         "from_output": "cert_manager_ready",
         "default": true
+      },
+      {
+        "name": "container_platform",
+        "type": "string",
+        "description": "Container platform type (Generic, AWS, Azure). AWS enables cloud-aware GRPC and networking.",
+        "default": "Generic",
+        "source": "user"
       }
     ]
   },

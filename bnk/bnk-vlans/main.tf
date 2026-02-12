@@ -82,6 +82,9 @@ spec:
   - ${ip}
 %{endfor~}
   prefixlen_v4: ${local.external_prefixlen}
+%{if var.auto_lasthop != ""~}
+  auto_lasthop: "${var.auto_lasthop}"
+%{endif~}
 ---
 apiVersion: k8s.f5net.com/v1
 kind: F5SPKVlan
@@ -99,6 +102,9 @@ spec:
   - ${ip}
 %{endfor~}
   prefixlen_v4: ${local.internal_prefixlen}
+%{if var.auto_lasthop != ""~}
+  auto_lasthop: "${var.auto_lasthop}"
+%{endif~}
 YAML
 }
 
@@ -161,11 +167,133 @@ resource "null_resource" "vlans" {
 }
 
 # =============================================================================
+# AWS ENI SECONDARY IP REGISTRATION (Cloud-only)
+# =============================================================================
+# On AWS, secondary IPs MUST be registered on the ENI for the Nitro hypervisor
+# ARP proxy to work. Unregistered IPs are blackholed even on the same subnet.
+#
+# This discovers ENIs by tag (external: ENIType=external-dpdk, internal: by
+# subnet and instance) and registers self-IPs + gateway VIPs as secondary IPs.
+#
+# Only runs when aws_region is set (i.e. cloud deployment). On-prem/DPU
+# deployments skip this entirely.
+
+resource "null_resource" "register_eni_secondary_ips" {
+  count = var.aws_region != "" ? 1 : 0
+
+  triggers = {
+    external_self_ips = join(",", var.external_self_ips)
+    internal_self_ips = join(",", var.internal_self_ips)
+    gateway_vips      = join(",", var.gateway_vips)
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Registering secondary IPs on AWS ENIs ==="
+
+      # Get the HP node instance ID (node with f5-role=tmm label)
+      INSTANCE_ID=$(${local.kubectl} get nodes -l f5-role=tmm \
+        -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | sed 's|.*/||')
+
+      if [ -z "$INSTANCE_ID" ]; then
+        echo "WARNING: Could not find HP node with f5-role=tmm label"
+        echo "ENI secondary IP registration skipped — register manually:"
+        echo "  aws ec2 assign-private-ip-addresses --network-interface-id <ENI_ID> --private-ip-addresses ${join(" ", var.external_self_ips)} ${join(" ", var.gateway_vips)}"
+        exit 0
+      fi
+
+      echo "HP node instance: $INSTANCE_ID"
+
+      # --- External ENI: find by tag ENIType=external-dpdk ---
+      EXT_ENI=$(aws ec2 describe-network-interfaces \
+        --region ${var.aws_region} \
+        --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" \
+                  "Name=tag:ENIType,Values=external-dpdk" \
+        --query 'NetworkInterfaces[0].NetworkInterfaceId' \
+        --output text 2>/dev/null)
+
+      if [ "$EXT_ENI" = "None" ] || [ -z "$EXT_ENI" ]; then
+        echo "WARNING: External ENI (ENIType=external-dpdk) not found on $INSTANCE_ID"
+        echo "Skipping external IP registration"
+      else
+        echo "External ENI: $EXT_ENI"
+
+        # Collect all IPs to register on external ENI: self-IPs + VIPs
+        EXT_IPS="${join(" ", concat(var.external_self_ips, var.gateway_vips))}"
+
+        if [ -n "$EXT_IPS" ]; then
+          echo "Registering on external ENI: $EXT_IPS"
+          # assign-private-ip-addresses errors if IP already assigned — that's OK
+          aws ec2 assign-private-ip-addresses \
+            --region ${var.aws_region} \
+            --network-interface-id "$EXT_ENI" \
+            --private-ip-addresses $EXT_IPS 2>&1 || \
+            echo "WARNING: Some external IPs may already be assigned (this is OK)"
+        fi
+
+        # Disable source/dest check (required for TMM to forward traffic)
+        aws ec2 modify-network-interface-attribute \
+          --region ${var.aws_region} \
+          --network-interface-id "$EXT_ENI" \
+          --no-source-dest-check 2>&1 || true
+
+        echo "External ENI IPs registered"
+      fi
+
+      # --- Internal ENI: find by subnet and instance (not tagged external-dpdk) ---
+      # The internal ENI is the node's secondary ENI (eth1) in the internal subnet.
+      # We identify it by exclusion: attached to the instance, NOT the primary (index 0),
+      # NOT tagged external-dpdk.
+      INT_ENI=$(aws ec2 describe-network-interfaces \
+        --region ${var.aws_region} \
+        --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" \
+                  "Name=subnet-id,Values=${var.internal_subnet_id}" \
+        --query 'NetworkInterfaces[0].NetworkInterfaceId' \
+        --output text 2>/dev/null)
+
+      if [ "$INT_ENI" = "None" ] || [ -z "$INT_ENI" ]; then
+        echo "WARNING: Internal ENI not found in subnet ${var.internal_subnet_id} on $INSTANCE_ID"
+        echo "Skipping internal IP registration"
+      else
+        echo "Internal ENI: $INT_ENI"
+
+        INT_IPS="${join(" ", var.internal_self_ips)}"
+
+        if [ -n "$INT_IPS" ]; then
+          echo "Registering on internal ENI: $INT_IPS"
+          aws ec2 assign-private-ip-addresses \
+            --region ${var.aws_region} \
+            --network-interface-id "$INT_ENI" \
+            --private-ip-addresses $INT_IPS 2>&1 || \
+            echo "WARNING: Some internal IPs may already be assigned (this is OK)"
+        fi
+
+        # Disable source/dest check
+        aws ec2 modify-network-interface-attribute \
+          --region ${var.aws_region} \
+          --network-interface-id "$INT_ENI" \
+          --no-source-dest-check 2>&1 || true
+
+        echo "Internal ENI IPs registered"
+      fi
+
+      echo ""
+      echo "=== ENI secondary IP registration complete ==="
+    EOT
+  }
+
+  depends_on = [null_resource.vlans]
+}
+
+# =============================================================================
 # WAIT FOR VLANS TO BE PROGRAMMED
 # =============================================================================
 
 resource "null_resource" "wait_for_programmed" {
-  depends_on = [null_resource.vlans]
+  depends_on = [
+    null_resource.vlans,
+    null_resource.register_eni_secondary_ips,
+  ]
 
   provisioner "local-exec" {
     command = <<-EOT

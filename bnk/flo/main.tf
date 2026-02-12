@@ -181,6 +181,11 @@ resource "helm_release" "flo" {
         namespace = "f5-utils"
       }
 
+      # Container platform (Generic, AWS, Azure, etc.)
+      # Setting this to AWS tells FLO the deployment target is AWS,
+      # affecting GRPC endpoint config and cloud-specific networking.
+      containerPlatform = var.container_platform
+
       # CRD management
       crds = {
         install = true

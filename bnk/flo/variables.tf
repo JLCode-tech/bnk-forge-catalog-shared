@@ -73,6 +73,21 @@ variable "f5_license_proxy_url" {
 }
 
 # =============================================================================
+# PLATFORM CONFIGURATION
+# =============================================================================
+
+variable "container_platform" {
+  description = "Container platform type (Generic, AWS, Azure). AWS enables cloud-aware GRPC and networking."
+  type        = string
+  default     = "Generic"
+
+  validation {
+    condition     = contains(["Generic", "AWS", "Azure"], var.container_platform)
+    error_message = "container_platform must be one of: Generic, AWS, Azure"
+  }
+}
+
+# =============================================================================
 # CERTIFICATE CONFIGURATION (wired from cert-manager)
 # =============================================================================
 

@@ -65,12 +65,26 @@ locals {
   )
 
   # Controller environment variables
+  # When cloud_provider is set (e.g. "aws"), inject CLOUD_ENV, CLOUD_PROVIDER,
+  # and CLOUD_NETWORK_CONFIGMAP so the CNE controller is cloud-aware.
+  cloud_env = var.cloud_provider != "" ? [
+    { name = "CLOUD_ENV", value = "true" },
+    { name = "CLOUD_PROVIDER", value = var.cloud_provider },
+    { name = "CLOUD_NETWORK_CONFIGMAP", value = "cloud-network-mapping" },
+  ] : []
+
   controller_env = concat(
     [
       { name = "TMM_DEFAULT_MTU", value = tostring(var.tmm_default_mtu) },
     ],
+    local.cloud_env,
     var.controller_extra_env
   )
+
+  # Optional spec fields that should only appear when set
+  storage_class_field = var.storage_class_name != "" ? {
+    storageClassName = var.storage_class_name
+  } : {}
 
   # Build the CNEInstance YAML manifest
   # All feature toggles MUST be set explicitly with enabled: true/false.
@@ -89,7 +103,7 @@ locals {
         "app.kubernetes.io/version"    = var.manifest_version
       }
     }
-    spec = {
+    spec = merge({
       manifestVersion = var.manifest_version
       deploymentSize  = var.deployment_size
 
@@ -166,7 +180,59 @@ locals {
           env = local.tmm_env
         }
       }
-    }
+    }, local.storage_class_field)
+  }
+}
+
+# =============================================================================
+# CLOUD NETWORK MAPPING CONFIGMAP (AWS only)
+# =============================================================================
+# When cloud_provider is set, the CNE controller expects a ConfigMap mapping
+# availability zones to subnet CIDRs/IDs. This tells the controller which
+# subnet belongs to which AZ for cloud-aware routing and self-IP assignment.
+
+resource "null_resource" "cloud_network_mapping" {
+  count = var.cloud_provider != "" && length(var.cloud_az_subnet_mappings) > 0 ? 1 : 0
+
+  triggers = {
+    mappings_hash = sha256(jsonencode(var.cloud_az_subnet_mappings))
+    namespace     = var.instance_namespace
+    kubeconfig    = local_file.kubeconfig.filename
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "=== Creating cloud-network-mapping ConfigMap ==="
+      cat <<'MANIFEST' | ${local.kubectl} apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-network-mapping
+  namespace: ${var.instance_namespace}
+data:
+  config.yaml: |
+    availability_zones:
+%{for mapping in var.cloud_az_subnet_mappings~}
+      - name: "${mapping.az}"
+        subnets:
+%{for subnet in mapping.subnets~}
+          - cidr: "${subnet.cidr}"
+            subnet_id: "${subnet.subnet_id}"
+%{endfor~}
+%{endfor~}
+MANIFEST
+      echo "cloud-network-mapping ConfigMap created"
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "=== Deleting cloud-network-mapping ConfigMap ==="
+      kubectl --kubeconfig ${self.triggers.kubeconfig} delete configmap cloud-network-mapping \
+        -n ${self.triggers.namespace} 2>/dev/null || \
+      echo "ConfigMap already deleted or not found"
+    EOT
   }
 }
 
@@ -221,7 +287,10 @@ resource "null_resource" "cneinstance" {
     EOT
   }
 
-  depends_on = [local_file.cneinstance_manifest]
+  depends_on = [
+    local_file.cneinstance_manifest,
+    null_resource.cloud_network_mapping,
+  ]
 }
 
 # =============================================================================

@@ -109,6 +109,27 @@
         "description": "Deployment size: Small, Medium, Large, Max",
         "default": "Small",
         "source": "user"
+      },
+      {
+        "name": "cloud_provider",
+        "type": "string",
+        "description": "Cloud provider (aws, azure, or empty). Enables cloud-aware controller env vars.",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "storage_class_name",
+        "type": "string",
+        "description": "StorageClass for DSSM PVCs (e.g. gp3 for AWS EBS CSI driver).",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "cloud_az_subnet_mappings",
+        "type": "list(object)",
+        "description": "AZ-to-subnet mappings for cloud-network-mapping ConfigMap.",
+        "default": [],
+        "source": "user"
       }
     ]
   },

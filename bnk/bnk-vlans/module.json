@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "layer": "bnk-network",
     "category": "bnk",
-    "description": "F5SPKVlan CRs for BNK TMM data-plane self IPs. Self IPs must match NAD IPAM IPs from network-setup module.",
+    "description": "F5SPKVlan CRs for BNK TMM data-plane self IPs. TMM configures these IPs on its raw L2 interfaces (NADs have NO IPAM). On AWS, also registers secondary IPs on ENIs.",
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
@@ -49,6 +49,34 @@
         "from_module": "bnk/cneinstance",
         "from_output": "instance_ready",
         "default": true
+      },
+      {
+        "name": "auto_lasthop",
+        "type": "string",
+        "description": "Auto last-hop setting. Set to AUTO_LASTHOP_ENABLED on AWS/Azure to prevent asymmetric routing.",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region for ENI secondary IP registration. Empty disables ENI management.",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "gateway_vips",
+        "type": "list(string)",
+        "description": "Gateway VIP addresses to register as secondary IPs on the external ENI.",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "internal_subnet_id",
+        "type": "string",
+        "description": "Internal subnet ID for discovering the internal ENI on the HP node.",
+        "default": "",
+        "source": "user"
       }
     ]
   },

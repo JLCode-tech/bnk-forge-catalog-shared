@@ -71,6 +71,39 @@ variable "cluster_issuer_name" {
 }
 
 # =============================================================================
+# CLOUD CONFIGURATION (AWS/Azure)
+# =============================================================================
+
+variable "cloud_provider" {
+  description = "Cloud provider (aws, azure, or empty for generic/on-prem). Enables cloud-aware controller env vars."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = contains(["", "aws", "azure"], var.cloud_provider)
+    error_message = "cloud_provider must be one of: '' (empty), 'aws', 'azure'"
+  }
+}
+
+variable "storage_class_name" {
+  description = "StorageClass for DSSM PVCs (e.g. gp3 for AWS EBS CSI driver). Empty uses cluster default."
+  type        = string
+  default     = ""
+}
+
+variable "cloud_az_subnet_mappings" {
+  description = "AZ-to-subnet mappings for cloud-network-mapping ConfigMap. Required when cloud_provider is set."
+  type = list(object({
+    az = string
+    subnets = list(object({
+      cidr      = string
+      subnet_id = string
+    }))
+  }))
+  default = []
+}
+
+# =============================================================================
 # DEPLOYMENT CONFIGURATION
 # =============================================================================
 
