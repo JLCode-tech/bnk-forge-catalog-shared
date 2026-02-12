@@ -130,6 +130,13 @@
         "description": "AZ-to-subnet mappings for cloud-network-mapping ConfigMap.",
         "default": [],
         "source": "user"
+      },
+      {
+        "name": "intelligent_lb_enabled",
+        "type": "boolean",
+        "description": "Enable AI Intelligent Load Balancing (deploys f5-analyzer pod for F5BigAnalyzer CRs)",
+        "default": false,
+        "source": "user"
       }
     ]
   },

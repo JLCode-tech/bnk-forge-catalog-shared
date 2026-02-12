@@ -153,6 +153,10 @@ locals {
         enabled = var.core_collection_enabled
       }
 
+      # AI Intelligent Load Balancing — deploys f5-analyzer pod
+      # Required for F5BigAnalyzer CRs (custom/builtin scripts)
+      intelligentLB = var.intelligent_lb_enabled
+
       telemetry = {
         loggingSubsystem = {
           enabled = var.telemetry_logging_enabled

@@ -160,6 +160,12 @@ variable "core_collection_enabled" {
   default     = false
 }
 
+variable "intelligent_lb_enabled" {
+  description = "Enable AI Intelligent Load Balancing (deploys f5-analyzer pod for F5BigAnalyzer CRs)"
+  type        = bool
+  default     = false
+}
+
 variable "telemetry_logging_enabled" {
   description = "Enable logging subsystem (fluentbit sidecars)"
   type        = bool
