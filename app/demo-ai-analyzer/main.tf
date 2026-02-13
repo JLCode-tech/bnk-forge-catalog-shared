@@ -391,25 +391,25 @@ resource "kubernetes_manifest" "token_counting_irule" {
     }
 
     spec = {
+      # BNK 2.2 strict TCL validator requires ALL expressions braced.
+      # Key rules: use {braces} not "quotes" in if/for/expr/clock format args.
       iRule = <<-IRULE
         when RULE_INIT {
-          log local0. "Initializing BNK Demo AI Token Counter iRule (Bedrock via LiteLLM)"
+          log local0. {Initializing BNK Demo AI Token Counter iRule (Bedrock via LiteLLM)}
         }
-
-        # JSON path helper — same as lanner-bnk-poc genai-token-hsl-irule
         proc jpath { e path {d .} } {
-          if { [catch {set v [call jpath2 $e $path $d]} err] } { return "" }
+          if {[catch {set v [call jpath2 $e $path $d]} err]} { return {} }
           return $v
         }
         proc jpath2 { e path {d .} } {
           set parray [split $path $d]
           set plen [llength $parray]
           set i 0
-          for {} {$i < $plen} {incr i} {
+          for {set i 0} {$i < $plen} {incr i} {
             set p [lindex $parray $i]
             set t [JSON::type $e]
             set v [JSON::get $e]
-            if { $t eq "array" } {
+            if {$t eq {array}} {
               set e [JSON::array get $v $p]
             } else {
               set e [JSON::object get $v $p]
@@ -419,33 +419,29 @@ resource "kubernetes_manifest" "token_counting_irule" {
           set v [JSON::get $e $t]
           return $v
         }
-
         when HTTP_REQUEST {
           set host [HTTP::header host]
           set endpoint [HTTP::uri]
           set authorization [HTTP::header authorization]
           set virtual_server [IP::local_addr]
         }
-
         when JSON_RESPONSE {
           set root [JSON::root]
-          # Only log if response contains usage data (OpenAI chat completion format)
-          if { [call jpath $root usage] ne "" } {
+          set usage_val [call jpath $root usage]
+          if {$usage_val ne {}} {
             set model [call jpath $root model]
             set prompt [call jpath $root usage.prompt_tokens]
             set completion [call jpath $root usage.completion_tokens]
             set total [call jpath $root usage.total_tokens]
-            set timestamp [clock format [clock seconds] -format "%Y-%m-%dT%TZ" -gmt true]
+            set timestamp [clock format [clock seconds] -format {%Y-%m-%dT%TZ} -gmt true]
             set status [HTTP::status]
             set ip_address [IP::client_addr]
-
-            # Build JSON log message
             set jc [JSON::create]
             set jr [JSON::root $jc]
-            set ele [JSON::set $jr object ""]
+            set ele [JSON::set $jr object {}]
             set obj [JSON::get $jr object]
             JSON::object add $obj timestamp string $timestamp
-            JSON::object add $obj type string "ai_token_usage"
+            JSON::object add $obj type string {ai_token_usage}
             JSON::object add $obj model string $model
             JSON::object add $obj endpoint string $endpoint
             JSON::object add $obj input_tokens string $prompt
@@ -455,10 +451,8 @@ resource "kubernetes_manifest" "token_counting_irule" {
             JSON::object add $obj client_ip string $ip_address
             JSON::object add $obj domain string $host
             JSON::object add $obj virtual_server string $virtual_server
-            JSON::object add $obj provider string "aws-bedrock"
+            JSON::object add $obj provider string {aws-bedrock}
             set js_msg [JSON::render $jc]
-
-            # HSL to Fluent Bit UDP → Loki
             set hsl [HSL::open -proto UDP -standalone fluentbit-hsl-udp.${var.observability_namespace}.svc.cluster.local:${var.fluentbit_hsl_port}]
             HSL::send $hsl $js_msg
           }
