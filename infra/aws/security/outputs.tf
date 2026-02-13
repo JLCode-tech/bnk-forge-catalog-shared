@@ -132,6 +132,15 @@ output "efs_csi_driver_role_arn" {
 }
 
 # =============================================================================
+# BEDROCK IRSA ROLE OUTPUT (conditional)
+# =============================================================================
+
+output "bedrock_litellm_role_arn" {
+  description = "ARN of the Bedrock LiteLLM IRSA role (pass to demo-ai-proxy bedrock_iam_role_arn)"
+  value       = var.create_oidc_provider && var.enable_bedrock_irsa ? aws_iam_role.bedrock_litellm[0].arn : null
+}
+
+# =============================================================================
 # F5 BNK ROLE OUTPUTS (conditional)
 # =============================================================================
 
@@ -157,5 +166,6 @@ output "security_summary" {
     backup_jumphost_enabled = var.enable_jumphost_backup
     oidc_provider_created   = var.create_oidc_provider
     f5_roles_enabled        = var.enable_f5_bnk_roles
+    bedrock_irsa_enabled    = var.enable_bedrock_irsa
   }
 }

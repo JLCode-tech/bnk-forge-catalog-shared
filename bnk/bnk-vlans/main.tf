@@ -191,12 +191,12 @@ resource "null_resource" "register_eni_secondary_ips" {
     command = <<-EOT
       echo "=== Registering secondary IPs on AWS ENIs ==="
 
-      # Get the HP node instance ID (node with f5-role=tmm label)
-      INSTANCE_ID=$(${local.kubectl} get nodes -l f5-role=tmm \
+      # Get the HP node instance ID (node with app=f5-tmm label, set by high-performance-nodes module)
+      INSTANCE_ID=$(${local.kubectl} get nodes -l app=f5-tmm \
         -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | sed 's|.*/||')
 
       if [ -z "$INSTANCE_ID" ]; then
-        echo "WARNING: Could not find HP node with f5-role=tmm label"
+        echo "WARNING: Could not find HP node with app=f5-tmm label"
         echo "ENI secondary IP registration skipped — register manually:"
         echo "  aws ec2 assign-private-ip-addresses --network-interface-id <ENI_ID> --private-ip-addresses ${join(" ", var.external_self_ips)} ${join(" ", var.gateway_vips)}"
         exit 0

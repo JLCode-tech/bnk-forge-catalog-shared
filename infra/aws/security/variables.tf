@@ -61,7 +61,7 @@ variable "public_subnet_id" {
 variable "user_ip" {
   description = "Your public IP address in CIDR format (e.g., 203.123.45.67/32) for SSH access restriction"
   type        = string
-  
+
   validation {
     condition     = can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}/32$", var.user_ip))
     error_message = "The user_ip must be in CIDR format with /32 suffix (e.g., 203.123.45.67/32)."
@@ -76,7 +76,7 @@ variable "ssh_key_algorithm" {
   description = "Algorithm for SSH key generation"
   type        = string
   default     = "RSA"
-  
+
   validation {
     condition     = contains(["RSA", "ECDSA", "ED25519"], var.ssh_key_algorithm)
     error_message = "SSH key algorithm must be one of: RSA, ECDSA, ED25519."
@@ -87,7 +87,7 @@ variable "ssh_key_rsa_bits" {
   description = "Number of bits for RSA SSH key (ignored for other algorithms)"
   type        = number
   default     = 4096
-  
+
   validation {
     condition     = var.ssh_key_rsa_bits >= 2048 && var.ssh_key_rsa_bits <= 8192
     error_message = "RSA key size must be between 2048 and 8192 bits."
@@ -108,7 +108,7 @@ variable "jumphost_volume_size" {
   description = "Root volume size for jumphost (GB)"
   type        = number
   default     = 20
-  
+
   validation {
     condition     = var.jumphost_volume_size >= 8 && var.jumphost_volume_size <= 100
     error_message = "Jumphost volume size must be between 8 and 100 GB."
@@ -135,7 +135,7 @@ variable "kubectl_release_date" {
   description = "Release date for kubectl version (AWS EKS format: YYYY-MM-DD)"
   type        = string
   default     = "2024-05-12"
-  
+
   validation {
     condition     = can(regex("^\\d{4}-\\d{2}-\\d{2}$", var.kubectl_release_date))
     error_message = "kubectl_release_date must be in YYYY-MM-DD format."
@@ -156,6 +156,24 @@ variable "enable_f5_bnk_roles" {
   description = "Enable F5 BIG-IP Next service account roles (for future F5 module)"
   type        = bool
   default     = false
+}
+
+variable "enable_bedrock_irsa" {
+  description = "Create IRSA role for LiteLLM Bedrock access (bedrock:InvokeModel)"
+  type        = bool
+  default     = false
+}
+
+variable "litellm_namespace" {
+  description = "Namespace where LiteLLM service account lives (for IRSA trust policy)"
+  type        = string
+  default     = "demo-apps"
+}
+
+variable "litellm_service_account" {
+  description = "LiteLLM service account name (for IRSA trust policy)"
+  type        = string
+  default     = "litellm-proxy"
 }
 
 # =============================================================================

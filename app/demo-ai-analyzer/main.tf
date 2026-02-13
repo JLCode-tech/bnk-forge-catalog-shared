@@ -405,7 +405,7 @@ resource "kubernetes_manifest" "token_counting_irule" {
           set parray [split $path $d]
           set plen [llength $parray]
           set i 0
-          for {} {$i < [expr {$plen }]} {incr i} {
+          for {} {$i < $plen} {incr i} {
             set p [lindex $parray $i]
             set t [JSON::type $e]
             set v [JSON::get $e]

@@ -7,7 +7,7 @@
 
 resource "aws_iam_role" "eks_cluster" {
   name = "${var.project_name}-eks-cluster-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -20,7 +20,7 @@ resource "aws_iam_role" "eks_cluster" {
       }
     ]
   })
-  
+
   tags = merge(var.common_tags, {
     Name = "${var.project_name}-eks-cluster-role"
   })
@@ -37,7 +37,7 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
 
 resource "aws_iam_role" "nodegroup" {
   name = "${var.project_name}-nodegroup-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -50,7 +50,7 @@ resource "aws_iam_role" "nodegroup" {
       }
     ]
   })
-  
+
   tags = merge(var.common_tags, {
     Name = "${var.project_name}-nodegroup-role"
   })
@@ -64,7 +64,7 @@ resource "aws_iam_role_policy_attachment" "nodegroup_policies" {
     "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ])
-  
+
   policy_arn = each.value
   role       = aws_iam_role.nodegroup.name
 }
@@ -73,7 +73,7 @@ resource "aws_iam_role_policy_attachment" "nodegroup_policies" {
 resource "aws_iam_role_policy" "nodegroup_enhanced_permissions" {
   name = "${var.project_name}-nodegroup-enhanced-policy"
   role = aws_iam_role.nodegroup.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -105,7 +105,7 @@ resource "aws_iam_role_policy" "nodegroup_enhanced_permissions" {
 
 resource "aws_iam_role" "jumphost_role" {
   name = "${var.project_name}-jumphost-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -118,7 +118,7 @@ resource "aws_iam_role" "jumphost_role" {
       }
     ]
   })
-  
+
   tags = merge(var.common_tags, {
     Name = "${var.project_name}-jumphost-role"
   })
@@ -128,7 +128,7 @@ resource "aws_iam_role" "jumphost_role" {
 resource "aws_iam_role_policy" "jumphost_full_access" {
   name = "${var.project_name}-jumphost-full-access"
   role = aws_iam_role.jumphost_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -170,7 +170,7 @@ resource "aws_iam_role_policy_attachment" "jumphost_ssm_policy" {
 resource "aws_iam_instance_profile" "jumphost_profile" {
   name = "${var.project_name}-jumphost-profile"
   role = aws_iam_role.jumphost_role.name
-  
+
   tags = merge(var.common_tags, {
     Name = "${var.project_name}-jumphost-profile"
   })
@@ -195,7 +195,7 @@ data "tls_certificate" "eks_oidc" {
 # IAM OIDC provider for the EKS cluster (fully automated)
 resource "aws_iam_openid_connect_provider" "eks" {
   count = var.create_oidc_provider ? 1 : 0
-  
+
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks_oidc[0].certificates[0].sha1_fingerprint]
   url             = data.aws_eks_cluster.cluster[0].identity[0].oidc[0].issuer
@@ -339,6 +339,62 @@ resource "aws_iam_role_policy" "eni_attachment_manager_policy" {
           "ec2:CreateTags"
         ]
         Resource = "*"
+      }
+    ]
+  })
+}
+
+# =============================================================================
+# BEDROCK IRSA ROLE — LiteLLM AI Proxy
+# =============================================================================
+# Grants LiteLLM pods bedrock:InvokeModel via IRSA so they don't need
+# to use the node instance profile. Scoped to the litellm-proxy SA.
+
+resource "aws_iam_role" "bedrock_litellm" {
+  count = var.create_oidc_provider && var.enable_bedrock_irsa ? 1 : 0
+  name  = "${var.project_name}-bedrock-litellm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks[0].arn
+        }
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks[0].url, "https://", "")}:sub" = "system:serviceaccount:${var.litellm_namespace}:${var.litellm_service_account}"
+            "${replace(aws_iam_openid_connect_provider.eks[0].url, "https://", "")}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(var.common_tags, {
+    Name = "${var.project_name}-bedrock-litellm-role"
+  })
+}
+
+resource "aws_iam_role_policy" "bedrock_litellm_invoke" {
+  count = var.create_oidc_provider && var.enable_bedrock_irsa ? 1 : 0
+  name  = "${var.project_name}-bedrock-invoke-policy"
+  role  = aws_iam_role.bedrock_litellm[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:ListFoundationModels",
+          "bedrock:GetFoundationModel"
+        ]
+        Resource = "arn:aws:bedrock:*:*:foundation-model/*"
       }
     ]
   })
