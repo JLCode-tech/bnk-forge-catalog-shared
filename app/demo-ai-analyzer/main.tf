@@ -363,13 +363,26 @@ resource "kubernetes_manifest" "analyzer" {
 }
 
 # =============================================================================
-# AI TOKEN COUNTING iRULE — Adapted from lanner-bnk-poc for Bedrock
+# AI TOKEN COUNTING iRULE — BNK 2.2 Compatible
 # =============================================================================
 #
-# The lanner-bnk-poc genai-token-hsl-irule parses OpenAI-format JSON responses
-# and logs token usage via HSL → Fluent Bit → Loki. LiteLLM returns the same
-# OpenAI format regardless of backend (Bedrock, NIM, etc.), so the iRule works
-# unchanged. We just adapt the HSL endpoint to our observability stack.
+# Parses OpenAI-format JSON responses from LiteLLM and logs token usage as
+# structured key=value syslog via TMM log local0. Fluent Bit collects TMM logs
+# and forwards to Loki.
+#
+# BNK 2.2 webhook (f5validate.f5net.com) restrictions discovered via testing:
+#   - proc/call: NOT supported (webhook does static analysis, can't resolve vars)
+#   - JSON:: API: Only works in simple inline form, NOT inside procs
+#   - HSL::open -standalone: NOT supported (webhook expects -pool)
+#   - HSL::open -pool: Also rejected in practice
+#   - ne/eq operators: NOT supported in expr context
+#   - JSON_RESPONSE: IS supported (but JSON:: API inside procs fails)
+#   - HTTP_RESPONSE + HTTP::collect + HTTP_RESPONSE_DATA: WORKS
+#   - findstr: WORKS for JSON field extraction
+#   - log local0.: WORKS
+#
+# Strategy: Use HTTP_RESPONSE_DATA with findstr to extract token counts from
+# the response payload, then emit structured log via log local0. for Fluent Bit.
 
 resource "kubernetes_manifest" "token_counting_irule" {
   count      = var.enable_token_irule ? 1 : 0
@@ -391,72 +404,35 @@ resource "kubernetes_manifest" "token_counting_irule" {
     }
 
     spec = {
-      # BNK 2.2 strict TCL validator requires ALL expressions and string
-      # literals to use {braces} not "quotes". Verified working via direct
-      # kubectl apply with identical TCL. Using chomp() to avoid HCL heredoc
-      # indentation issues with kubernetes_manifest resource.
+      # BNK 2.2 webhook-compatible iRule: no procs, no JSON:: in procs,
+      # no HSL::open, no ne/eq operators. Uses HTTP_RESPONSE_DATA + findstr.
       iRule = chomp(<<-EOT
 when RULE_INIT {
-  log local0. {Initializing BNK Demo AI Token Counter iRule (Bedrock via LiteLLM)}
-}
-proc jpath { e path {d .} } {
-  if {[catch {set v [call jpath2 $e $path $d]} err]} {return {}}
-  return $v
-}
-proc jpath2 { e path {d .} } {
-  set parray [split $path $d]
-  set plen [llength $parray]
-  for {set i 0} {$i < $plen} {incr i} {
-    set p [lindex $parray $i]
-    set t [JSON::type $e]
-    set v [JSON::get $e]
-    if {$t eq {array}} {
-      set e [JSON::array get $v $p]
-    } else {
-      set e [JSON::object get $v $p]
-    }
-  }
-  set t [JSON::type $e]
-  set v [JSON::get $e $t]
-  return $v
+  log local0. {BNK AI Token Counter v2.0 initialized (BNK 2.2 compatible)}
 }
 when HTTP_REQUEST {
   set host [HTTP::header host]
   set endpoint [HTTP::uri]
-  set authorization [HTTP::header authorization]
   set virtual_server [IP::local_addr]
+  set ip_address [IP::client_addr]
 }
-when JSON_RESPONSE {
-  set root [JSON::root]
-  set usage_val [call jpath $root usage]
-  if {$usage_val ne {}} {
-    set model [call jpath $root model]
-    set prompt [call jpath $root usage.prompt_tokens]
-    set completion [call jpath $root usage.completion_tokens]
-    set total [call jpath $root usage.total_tokens]
-    set timestamp [clock format [clock seconds] -format {%Y-%m-%dT%TZ} -gmt true]
-    set status [HTTP::status]
-    set ip_address [IP::client_addr]
-    set jc [JSON::create]
-    set jr [JSON::root $jc]
-    set ele [JSON::set $jr object {}]
-    set obj [JSON::get $jr object]
-    JSON::object add $obj timestamp string $timestamp
-    JSON::object add $obj type string {ai_token_usage}
-    JSON::object add $obj model string $model
-    JSON::object add $obj endpoint string $endpoint
-    JSON::object add $obj input_tokens string $prompt
-    JSON::object add $obj output_tokens string $completion
-    JSON::object add $obj total_tokens string $total
-    JSON::object add $obj status string $status
-    JSON::object add $obj client_ip string $ip_address
-    JSON::object add $obj domain string $host
-    JSON::object add $obj virtual_server string $virtual_server
-    JSON::object add $obj provider string {aws-bedrock}
-    set js_msg [JSON::render $jc]
-    set hsl [HSL::open -proto UDP -standalone fluentbit-hsl-udp.${var.observability_namespace}.svc.cluster.local:${var.fluentbit_hsl_port}]
-    HSL::send $hsl $js_msg
-  }
+when HTTP_RESPONSE {
+  HTTP::collect [HTTP::header Content-Length]
+}
+when HTTP_RESPONSE_DATA {
+  set payload [HTTP::payload]
+  set status [HTTP::status]
+  set timestamp [clock format [clock seconds] -format {%Y-%m-%dT%TZ} -gmt true]
+  set total_tokens [findstr $payload {"total_tokens":} 15 ,]
+  set prompt_tokens [findstr $payload {"prompt_tokens":} 16 ,]
+  set completion_tokens [findstr $payload {"completion_tokens":} 20 ,]
+  set model_val [findstr $payload {"model":"} 9 "\""]
+  set total_tokens [string trim $total_tokens]
+  set prompt_tokens [string trim $prompt_tokens]
+  set completion_tokens [string trim $completion_tokens]
+  set model_val [string trim $model_val]
+  log local0. "AI_TOKEN_USAGE timestamp=$timestamp model=$model_val endpoint=$endpoint input_tokens=$prompt_tokens output_tokens=$completion_tokens total_tokens=$total_tokens status=$status client_ip=$ip_address domain=$host virtual_server=$virtual_server provider=aws-bedrock"
+  HTTP::release
 }
 EOT
       )
