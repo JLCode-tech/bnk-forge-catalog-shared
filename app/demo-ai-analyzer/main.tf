@@ -391,73 +391,75 @@ resource "kubernetes_manifest" "token_counting_irule" {
     }
 
     spec = {
-      # BNK 2.2 strict TCL validator requires ALL expressions braced.
-      # Key rules: use {braces} not "quotes" in if/for/expr/clock format args.
-      iRule = <<-IRULE
-        when RULE_INIT {
-          log local0. {Initializing BNK Demo AI Token Counter iRule (Bedrock via LiteLLM)}
-        }
-        proc jpath { e path {d .} } {
-          if {[catch {set v [call jpath2 $e $path $d]} err]} { return {} }
-          return $v
-        }
-        proc jpath2 { e path {d .} } {
-          set parray [split $path $d]
-          set plen [llength $parray]
-          set i 0
-          for {set i 0} {$i < $plen} {incr i} {
-            set p [lindex $parray $i]
-            set t [JSON::type $e]
-            set v [JSON::get $e]
-            if {$t eq {array}} {
-              set e [JSON::array get $v $p]
-            } else {
-              set e [JSON::object get $v $p]
-            }
-          }
-          set t [JSON::type $e]
-          set v [JSON::get $e $t]
-          return $v
-        }
-        when HTTP_REQUEST {
-          set host [HTTP::header host]
-          set endpoint [HTTP::uri]
-          set authorization [HTTP::header authorization]
-          set virtual_server [IP::local_addr]
-        }
-        when JSON_RESPONSE {
-          set root [JSON::root]
-          set usage_val [call jpath $root usage]
-          if {$usage_val ne {}} {
-            set model [call jpath $root model]
-            set prompt [call jpath $root usage.prompt_tokens]
-            set completion [call jpath $root usage.completion_tokens]
-            set total [call jpath $root usage.total_tokens]
-            set timestamp [clock format [clock seconds] -format {%Y-%m-%dT%TZ} -gmt true]
-            set status [HTTP::status]
-            set ip_address [IP::client_addr]
-            set jc [JSON::create]
-            set jr [JSON::root $jc]
-            set ele [JSON::set $jr object {}]
-            set obj [JSON::get $jr object]
-            JSON::object add $obj timestamp string $timestamp
-            JSON::object add $obj type string {ai_token_usage}
-            JSON::object add $obj model string $model
-            JSON::object add $obj endpoint string $endpoint
-            JSON::object add $obj input_tokens string $prompt
-            JSON::object add $obj output_tokens string $completion
-            JSON::object add $obj total_tokens string $total
-            JSON::object add $obj status string $status
-            JSON::object add $obj client_ip string $ip_address
-            JSON::object add $obj domain string $host
-            JSON::object add $obj virtual_server string $virtual_server
-            JSON::object add $obj provider string {aws-bedrock}
-            set js_msg [JSON::render $jc]
-            set hsl [HSL::open -proto UDP -standalone fluentbit-hsl-udp.${var.observability_namespace}.svc.cluster.local:${var.fluentbit_hsl_port}]
-            HSL::send $hsl $js_msg
-          }
-        }
-      IRULE
+      # BNK 2.2 strict TCL validator requires ALL expressions and string
+      # literals to use {braces} not "quotes". Verified working via direct
+      # kubectl apply with identical TCL. Using chomp() to avoid HCL heredoc
+      # indentation issues with kubernetes_manifest resource.
+      iRule = chomp(<<-EOT
+when RULE_INIT {
+  log local0. {Initializing BNK Demo AI Token Counter iRule (Bedrock via LiteLLM)}
+}
+proc jpath { e path {d .} } {
+  if {[catch {set v [call jpath2 $e $path $d]} err]} {return {}}
+  return $v
+}
+proc jpath2 { e path {d .} } {
+  set parray [split $path $d]
+  set plen [llength $parray]
+  for {set i 0} {$i < $plen} {incr i} {
+    set p [lindex $parray $i]
+    set t [JSON::type $e]
+    set v [JSON::get $e]
+    if {$t eq {array}} {
+      set e [JSON::array get $v $p]
+    } else {
+      set e [JSON::object get $v $p]
+    }
+  }
+  set t [JSON::type $e]
+  set v [JSON::get $e $t]
+  return $v
+}
+when HTTP_REQUEST {
+  set host [HTTP::header host]
+  set endpoint [HTTP::uri]
+  set authorization [HTTP::header authorization]
+  set virtual_server [IP::local_addr]
+}
+when JSON_RESPONSE {
+  set root [JSON::root]
+  set usage_val [call jpath $root usage]
+  if {$usage_val ne {}} {
+    set model [call jpath $root model]
+    set prompt [call jpath $root usage.prompt_tokens]
+    set completion [call jpath $root usage.completion_tokens]
+    set total [call jpath $root usage.total_tokens]
+    set timestamp [clock format [clock seconds] -format {%Y-%m-%dT%TZ} -gmt true]
+    set status [HTTP::status]
+    set ip_address [IP::client_addr]
+    set jc [JSON::create]
+    set jr [JSON::root $jc]
+    set ele [JSON::set $jr object {}]
+    set obj [JSON::get $jr object]
+    JSON::object add $obj timestamp string $timestamp
+    JSON::object add $obj type string {ai_token_usage}
+    JSON::object add $obj model string $model
+    JSON::object add $obj endpoint string $endpoint
+    JSON::object add $obj input_tokens string $prompt
+    JSON::object add $obj output_tokens string $completion
+    JSON::object add $obj total_tokens string $total
+    JSON::object add $obj status string $status
+    JSON::object add $obj client_ip string $ip_address
+    JSON::object add $obj domain string $host
+    JSON::object add $obj virtual_server string $virtual_server
+    JSON::object add $obj provider string {aws-bedrock}
+    set js_msg [JSON::render $jc]
+    set hsl [HSL::open -proto UDP -standalone fluentbit-hsl-udp.${var.observability_namespace}.svc.cluster.local:${var.fluentbit_hsl_port}]
+    HSL::send $hsl $js_msg
+  }
+}
+EOT
+      )
     }
   }
 }
