@@ -1,0 +1,78 @@
+# AI Agent Configuration
+# Copy this to your project root's .agent/ directory and customize
+
+project:
+  name: "your-project-name"
+  type: "web-app"  # web-app, api, library, cli, monorepo
+  language: "typescript"  # typescript, javascript, python, go, rust, etc.
+  
+# Build & Development Commands
+commands:
+  install: "npm install"
+  build: "npm run build"
+  test: "npm test"
+  lint: "npm run lint"
+  format: "npm run format"
+  dev: "npm run dev"
+  
+# Lock files that agents should NEVER modify simultaneously
+lock_files:
+  - "package-lock.json"
+  - "yarn.lock"
+  - "pnpm-lock.yaml"
+  - "Cargo.lock"
+  - "poetry.lock"
+  - "go.sum"
+
+# Files/patterns that require coordination between agents
+coordination_required:
+  - "docker-compose*.yml"
+  - "*.dockerfile"
+  - "Dockerfile*"
+  - ".env*"
+  - "tsconfig.json"
+  - "package.json"
+  - "**/migrations/*"
+  - "**/schema.prisma"
+
+# Directories each agent should work in isolation when possible
+# Helps prevent merge conflicts
+isolated_workspaces:
+  frontend: "src/frontend"
+  backend: "src/backend"
+  api: "src/api"
+  shared: "src/shared"
+  tests: "tests"
+
+# Git workflow settings
+git:
+  # Branch naming convention for agents
+  branch_prefix: "agent/"
+  # Always pull before starting work
+  pull_before_work: true
+  # Never force push
+  allow_force_push: false
+  # Commit message convention (conventional commits)
+  # Format: <type>(<scope>): <subject>
+  # Types: feat, fix, docs, refactor, test, chore, perf
+  commit_convention: "conventional"
+
+# Worktree settings (for multi-agent isolation)
+worktrees:
+  # Number of slots to create
+  slots: 3
+  # Branch naming for slots
+  branch_prefix: "worktree/slot-"
+  # Worktree directory pattern (sibling dirs)
+  dir_pattern: "../{project}-wt{n}"
+
+# Sprint tracking
+sprints:
+  # Active sprint (null if none)
+  active: null
+  # History of completed sprints
+  # - name: "sprint-name"
+  #   status: "complete"
+  #   items_total: 10
+  #   items_done: 10
+  #   progress_doc: "archive/sprints/sprint-name.md"
