@@ -5,18 +5,18 @@
 ![F5 BNK](https://img.shields.io/badge/F5_BNK-2.2_GA-orange)
 ![Status](https://img.shields.io/badge/Status-Tested-brightgreen)
 
-This repository contains the official BNK-Forge module library - a curated collection of Terraform/Terragrunt modules for deploying infrastructure, Kubernetes prerequisites, and BIG-IP Next for Kubernetes (BNK) components.
+This repository contains the official BNK-Forge module library - a curated collection of OpenTofu/Terraform modules for deploying infrastructure, Kubernetes prerequisites, and BIG-IP Next for Kubernetes (BNK) components.
 
 **Last Tested:** 2026-02-10 (full 14-module stack deployed on aws-sydney-bnk-demo-cluster)
 
-> **IMPORTANT:** Always use the `release/2.2` branch for production deployments. The `main` branch is for development and may be unstable.
+> **IMPORTANT:** Always use the `release/2.2` branch for production deployments. `main` mirrors the latest stable release.
 
 ## Version Compatibility
 
 | Module Branch | bnk-forge-v2 | F5 BNK Version | Status |
 |---------------|--------------|----------------|--------|
 | **release/2.2** | 2.6.x | 2.2 GA | **Current - Tested** |
-| main | Development | N/A | Unstable |
+| main | Mirrors latest stable | N/A | Snapshot of release/2.2 |
 
 ### Configuring BNK-Forge to Use This Library
 
@@ -140,7 +140,7 @@ Reference demo stack with GenAI architecture
 ## Module Standards
 
 Each module includes:
-- `main.tf` - Terraform resources
+- `main.tf` - Resources
 - `variables.tf` - Input variables with validation
 - `outputs.tf` - Output values with descriptions
 - `versions.tf` - Provider requirements
