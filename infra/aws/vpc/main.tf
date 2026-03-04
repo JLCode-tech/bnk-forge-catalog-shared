@@ -44,10 +44,10 @@ resource "aws_subnet" "private_external_a" {
   availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = merge(var.common_tags, {
-    Name = "${var.project_name}-private-external-a"
-    Type = "Private"
+    Name                                                = "${var.project_name}-private-external-a"
+    Type                                                = "Private"
     "kubernetes.io/cluster/${var.project_name}-cluster" = "owned"
-    "kubernetes.io/role/internal-elb" = "1"
+    "kubernetes.io/role/internal-elb"                   = "1"
   })
 }
 
@@ -57,10 +57,10 @@ resource "aws_subnet" "private_external_b" {
   availability_zone = data.aws_availability_zones.available.names[1]
 
   tags = merge(var.common_tags, {
-    Name = "${var.project_name}-private-external-b"
-    Type = "Private"
+    Name                                                = "${var.project_name}-private-external-b"
+    Type                                                = "Private"
     "kubernetes.io/cluster/${var.project_name}-cluster" = "owned"
-    "kubernetes.io/role/internal-elb" = "1"
+    "kubernetes.io/role/internal-elb"                   = "1"
   })
 }
 
@@ -70,8 +70,8 @@ resource "aws_subnet" "private_internal_a" {
   availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = merge(var.common_tags, {
-    Name = "${var.project_name}-private-internal-a"
-    Type = "Private"
+    Name                                                = "${var.project_name}-private-internal-a"
+    Type                                                = "Private"
     "kubernetes.io/cluster/${var.project_name}-cluster" = "owned"
   })
 }
@@ -82,8 +82,8 @@ resource "aws_subnet" "private_internal_b" {
   availability_zone = data.aws_availability_zones.available.names[1]
 
   tags = merge(var.common_tags, {
-    Name = "${var.project_name}-private-internal-b"
-    Type = "Private"
+    Name                                                = "${var.project_name}-private-internal-b"
+    Type                                                = "Private"
     "kubernetes.io/cluster/${var.project_name}-cluster" = "owned"
   })
 }

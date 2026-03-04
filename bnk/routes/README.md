@@ -186,9 +186,22 @@ rules = [
 ]
 ```
 
+## API Groups
+
+| Route Type | API Group | API Version |
+|------------|-----------|-------------|
+| HTTPRoute | `gateway.networking.k8s.io` | `v1` |
+| GRPCRoute | `gateway.networking.k8s.io` | `v1` |
+| L4Route | `gateway.k8s.f5net.com` | `v1` |
+
+## References
+
+- [F5 Routes Documentation](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-gateway-api-routes.html)
+- [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute)
+
 ## Module Metadata
 
 - **Category**: bnk
 - **Workflow Compatibility**: Greenfield, Partial
-- **Version**: 2.1.x
-- **Last Updated**: 2025-11-22
+- **Version**: 2.2.0
+- **Last Updated**: 2026-03-04

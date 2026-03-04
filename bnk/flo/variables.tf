@@ -55,17 +55,6 @@ variable "license_mode" {
   }
 }
 
-variable "license_environment" {
-  description = "Licensing environment: production or test"
-  type        = string
-  default     = "production"
-
-  validation {
-    condition     = contains(["production", "test"], var.license_environment)
-    error_message = "license_environment must be either 'production' or 'test'"
-  }
-}
-
 variable "f5_license_proxy_url" {
   description = "F5 License Proxy URL (for f5licenseproxy mode)"
   type        = string

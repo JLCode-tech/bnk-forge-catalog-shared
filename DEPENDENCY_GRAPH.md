@@ -2,7 +2,7 @@
 
 This document maps all module dependencies and their input/output relationships for automated root.hcl generation.
 
-## Module Layers (FLO-Based Architecture)
+## Module Layers (FLO-Based Architecture, BNK 2.2)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -12,26 +12,27 @@ This document maps all module dependencies and their input/output relationships 
                        │
 ┌──────────────────────┴──────────────────────────────────────┐
 │                   BNK Gateway Layer                          │
-│              gateway, bnk-gatewayclass                       │
+│         gateway, bnk-gatewayclass, bnk-gateway-ext          │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+┌──────────────────────┴──────────────────────────────────────┐
+│                   BNK Data Plane Layer                       │
+│              cneinstance, bnk-vlans                          │
+│    ┌─────────────────────────────────────────────────┐      │
+│    │  CNEInstance triggers FLO to deploy:             │      │
+│    │  CWC, DSSM, TMM, F5 Ingress, Fluentd, CRDs,    │      │
+│    │  Observer, IPAM, RabbitMQ, OTEL, etc.           │      │
+│    └─────────────────────────────────────────────────┘      │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────┴──────────────────────────────────────┐
 │                   BNK Platform Layer                         │
 │                         flo                                  │
-│    ┌─────────────────────────────────────────────────┐      │
-│    │  FLO Auto-Deploys: CWC, DSSM, TMM, F5 Ingress,  │      │
-│    │  Fluentd, CRDs, Observer, IPAM, RabbitMQ, etc.  │      │
-│    └─────────────────────────────────────────────────┘      │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-┌──────────────────────┴──────────────────────────────────────┐
-│                   BNK Foundation Layer                       │
-│                       far-setup                              │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────┴──────────────────────────────────────┐
 │                   Kubernetes Layer                           │
-│              cert-manager, network-setup                     │
+│       bnk-prerequisites, cert-manager, network-setup        │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────┴──────────────────────────────────────┐
@@ -56,7 +57,7 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
 | IPAM Controller | Manual | FLO auto-deploys |
 | RabbitMQ | Manual | FLO auto-deploys |
 
-**Trigger**: When you apply a `BnkGatewayClass` CR, FLO deploys all required BNK components.
+**Trigger**: When you apply a **CNEInstance** CR, FLO deploys all required BNK components (CWC, DSSM, TMM, etc.). The **GatewayClass** then tells the CNE controller which class of Gateways to manage.
 
 ## Detailed Module Dependencies
 
@@ -126,15 +127,28 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
 
 ### Kubernetes Layer
 
+#### k8s/bnk-prerequisites
+- **Layer**: K8s Foundation (FIRST module in BNK stack)
+- **Dependencies**: Kubernetes cluster
+- **Required Inputs**:
+  - cne_pull_secret (project secret — base64 F5 service account key)
+  - bnk_manifest_version
+- **Key Outputs**:
+  - operator_namespace, utils_namespace, gateway_namespace
+  - far_secret_name
+  - flo_version (parsed from manifest)
+  - prerequisites_ready
+- **Required For**: cert-manager, flo, all BNK modules (namespace creation)
+
 #### k8s/cert-manager
 - **Layer**: K8s Foundation
-- **Dependencies**: far-setup (for FAR registry access)
+- **Dependencies**: bnk-prerequisites (for FAR registry access)
 - **Required Inputs**:
   - cluster_name
   - namespace
-  - far_secret_name (from far-setup)
+  - far_secret_name (from bnk-prerequisites)
   - cert_manager_version
-- **Key Outputs**: cert_manager_ready, release_status
+- **Key Outputs**: cert_manager_ready, cluster_issuer_name
 - **Required For**: flo (prerequisite for webhook certificates)
 
 #### k8s/network-setup
@@ -146,72 +160,70 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
   - external_subnet_cidrs (from vpc or user-provided)
   - internal_subnet_cidrs (from vpc or user-provided)
 - **Key Outputs**: external_nad_name, internal_nad_name
-- **Required For**: bnk-gatewayclass (network attachments for TMM pods)
-
-### BNK Foundation Layer
-
-#### bnk/far-setup
-- **Layer**: BNK Foundation
-- **Dependencies**: Kubernetes cluster (any)
-- **Required Inputs**:
-  - cluster_name
-  - bnk_manifest_version
-  - service_account_key_file (user-provided FAR credentials)
-- **Key Outputs**:
-  - bnk_namespace (also aliased as spk_namespace for backward compat)
-  - utils_namespace
-  - far_secret_name
-  - setup_complete
-- **Required For**: cert-manager, flo
+- **Required For**: cneinstance (network attachments for TMM pods)
 
 ### BNK Platform Layer
 
 #### bnk/flo
 - **Layer**: BNK Platform (Core Operator)
-- **Dependencies**: far-setup, cert-manager
+- **Dependencies**: bnk-prerequisites, cert-manager
 - **Required Inputs**:
   - cluster_name
-  - flo_namespace
-  - flo_version
-  - far_secret_name (from far-setup)
-  - far_setup_complete (from far-setup)
+  - flo_namespace (from bnk-prerequisites)
+  - flo_version (from bnk-prerequisites)
+  - far_secret_name (from bnk-prerequisites)
+  - cluster_issuer_name (from cert-manager)
   - cert_manager_ready (from cert-manager)
-  - license_mode (connected|disconnected)
-  - jwt_token (for licensing, if connected mode)
+  - license_mode (connected|f5licenseproxy)
+  - jwt_token (for licensing)
+  - container_platform (Generic|AWS|Azure)
 - **Key Outputs**:
   - flo_ready
   - flo_namespace
-  - crds_installed (FLO manages all CRDs)
+  - crds_installed
   - license_mode
-- **What FLO Auto-Deploys**:
-  - CWC (Cluster Wide Controller)
-  - DSSM (Distributed Session State Manager)
-  - TMM (Traffic Management Microkernel)
-  - F5 Ingress
-  - Fluentd (logging)
-  - All CRDs
-  - Observer
-  - IPAM Controller (if enabled)
-  - RabbitMQ
-  - OTEL Collector
-- **Required For**: bnk-gatewayclass, gateway, routes, policies
+- **Required For**: cneinstance, bnk-gatewayclass, gateway, routes, policies
+
+### BNK Data Plane Layer
+
+#### bnk/cneinstance
+- **Layer**: BNK Data Plane
+- **Dependencies**: flo, network-setup
+- **Required Inputs**:
+  - flo_ready (from flo)
+  - namespace (from bnk-prerequisites.operator_namespace)
+  - network_attachments (from network-setup)
+- **Key Outputs**: instance_ready, network_attachments
+- **Trigger**: Applying CNEInstance CR causes FLO to deploy all BNK components
+- **Required For**: bnk-vlans, bnk-gatewayclass
+
+#### bnk/bnk-vlans
+- **Layer**: BNK Data Plane
+- **Dependencies**: cneinstance
+- **Required Inputs**:
+  - namespace
+  - external_self_ips, internal_self_ips
+  - external_subnet_cidrs, internal_subnet_cidrs
+  - aws_region (optional, enables ENI registration)
+  - cneinstance_ready (from cneinstance)
+- **Key Outputs**: vlans_ready, external_self_ips, internal_self_ips
+- **Required For**: Gateway (TMM needs IPs before handling traffic)
 
 ### BNK Gateway Layer
 
 #### bnk/bnk-gatewayclass
 - **Layer**: BNK Gateway
-- **Dependencies**: flo
+- **Dependencies**: flo, cneinstance
 - **Required Inputs**:
-  - cluster_name
   - gatewayclass_name
-  - flo_namespace (from flo)
+  - flo_namespace (from flo — used to construct controllerName)
   - flo_ready (from flo)
-  - tmm_resource_limits (CPU, memory, hugepages)
-  - network_attachments (from network-setup or user-provided)
+  - instance_ready (from cneinstance)
 - **Key Outputs**:
   - gatewayclass_name
+  - gatewayclass_controller
   - gatewayclass_ready
-- **Trigger**: Applying BnkGatewayClass CR triggers FLO to deploy all BNK components
+- **Note**: Creates a standard GatewayClass (gateway.networking.k8s.io/v1). controllerName is auto-constructed as `f5.com/<namespace>-f5-cne-controller`.
 - **Required For**: gateway
 
 #### bnk/bnk-gateway-ext
@@ -293,43 +305,47 @@ As of BIG-IP Next for Kubernetes v2.1.0, the **F5 Lifecycle Operator (FLO)** aut
 
 ### Pattern 1: Full AWS + BNK Gateway API Stack (Recommended)
 ```
-vpc → security → eks → storage → far-setup → cert-manager → network-setup → flo → bnk-gatewayclass → gateway → routes
-                                                                                   └→ bnk-secpolicy
-                                                                                   └→ bnk-netpolicy
+vpc → security → eks → storage → high-performance-nodes
+  → bnk-prerequisites → cert-manager → network-setup
+  → flo → cneinstance → bnk-vlans → bnk-gatewayclass → gateway → routes
+                                                        └→ bnk-secpolicy
+                                                        └→ bnk-netpolicy
 ```
 
 ### Pattern 2: Existing K8s + BNK Gateway API
 ```
-(existing K8s) → far-setup → cert-manager → network-setup → flo → bnk-gatewayclass → gateway → routes
+(existing K8s) → bnk-prerequisites → cert-manager → network-setup → flo → cneinstance → bnk-vlans → bnk-gatewayclass → gateway → routes
 ```
 
-### Pattern 3: Minimal BNK Deployment
+### Pattern 3: Minimal BNK Deployment (no high-performance networking)
 ```
-far-setup → cert-manager → flo → bnk-gatewayclass → gateway → routes
+bnk-prerequisites → cert-manager → flo → cneinstance → bnk-gatewayclass → gateway → routes
 ```
 
-### Pattern 4: BNK with High-Performance Nodes (DPU)
+### Pattern 4: BNK with High-Performance Nodes + Full Traffic Path
 ```
-vpc → security → eks → high-performance-nodes → far-setup → cert-manager → network-setup → flo → bnk-gatewayclass → gateway
+vpc → security → eks → high-performance-nodes
+  → bnk-prerequisites → cert-manager → network-setup
+  → flo → cneinstance → bnk-vlans → bnk-gatewayclass → bnk-gateway-ext → gateway → routes
 ```
 
 ## Entry Points by User Scenario
 
 ### Scenario A: "I have nothing, deploy everything on AWS"
 **Entry Point**: vpc
-**Full Chain**: vpc → security → eks → storage → far-setup → cert-manager → network-setup → flo → bnk-gatewayclass → gateway → routes
+**Full Chain**: vpc → security → eks → storage → high-performance-nodes → bnk-prerequisites → cert-manager → network-setup → flo → cneinstance → bnk-vlans → bnk-gatewayclass → gateway → routes
 
 ### Scenario B: "I have AWS EKS, add BNK"
-**Entry Point**: far-setup
-**Chain**: far-setup → cert-manager → network-setup → flo → bnk-gatewayclass → gateway → routes
+**Entry Point**: bnk-prerequisites
+**Chain**: bnk-prerequisites → cert-manager → network-setup → flo → cneinstance → bnk-vlans → bnk-gatewayclass → gateway → routes
 
 ### Scenario C: "I have Kubernetes (any provider), add BNK"
-**Entry Point**: far-setup
-**Chain**: far-setup → cert-manager → flo → bnk-gatewayclass → gateway → routes
+**Entry Point**: bnk-prerequisites
+**Chain**: bnk-prerequisites → cert-manager → flo → cneinstance → bnk-gatewayclass → gateway → routes
 
 ### Scenario D: "I have FLO installed, configure traffic"
-**Entry Point**: bnk-gatewayclass
-**Chain**: bnk-gatewayclass → gateway → routes
+**Entry Point**: cneinstance
+**Chain**: cneinstance → bnk-gatewayclass → gateway → routes
 
 ## Auto-Dependency Resolution Rules
 

@@ -1,13 +1,13 @@
 # BNK-Forge Official Module Library
 
-![Version](https://img.shields.io/badge/Version-2.2.0-blue)
+![Version](https://img.shields.io/badge/Version-2.2--rev.25-blue)
 ![Branch](https://img.shields.io/badge/Branch-release/2.2-green)
 ![F5 BNK](https://img.shields.io/badge/F5_BNK-2.2_GA-orange)
 ![Status](https://img.shields.io/badge/Status-Tested-brightgreen)
 
 This repository contains the official BNK-Forge module library - a curated collection of Terraform/Terragrunt modules for deploying infrastructure, Kubernetes prerequisites, and BIG-IP Next for Kubernetes (BNK) components.
 
-**Last Tested:** 2026-02-09 (2 full deploy/destroy cycles completed successfully)
+**Last Tested:** 2026-02-10 (full 14-module stack deployed on aws-sydney-bnk-demo-cluster)
 
 > **IMPORTANT:** Always use the `release/2.2` branch for production deployments. The `main` branch is for development and may be unstable.
 
@@ -41,66 +41,84 @@ bnk-forge-modules/
 │   └── aws/
 │       ├── vpc/              # AWS VPC with public/private subnets
 │       ├── eks/              # Amazon EKS cluster
-│       ├── security/         # Security groups and IAM
-│       ├── storage/          # S3, EFS storage
-│       └── high-performance-nodes/  # DPU/GPU node pools
+│       ├── security/         # Security groups, IAM, jumphost
+│       ├── storage/          # EBS gp3, EFS, volume snapshots
+│       └── high-performance-nodes/  # SR-IOV, DPDK, hugepages, Multus
 ├── k8s/                      # Kubernetes prerequisite modules
+│   ├── bnk-prerequisites/    # Namespaces, FAR secrets, manifest parsing
 │   ├── cert-manager/         # F5 cert-manager (TLS certificates)
-│   └── network-setup/        # Multus CNI network attachments
+│   └── network-setup/        # Multus CNI network attachment definitions
 ├── bnk/                      # BIG-IP Next for Kubernetes modules
-│   ├── far-setup/            # FAR image pull secrets (prerequisite)
-│   ├── flo/                  # F5 Lifecycle Operator
-│   ├── bnk-gatewayclass/     # BnkGatewayClass CR (triggers FLO deployment)
-│   ├── gateway/              # Gateway API Gateway resources
+│   ├── flo/                  # F5 Lifecycle Operator (core operator)
+│   ├── cneinstance/          # CNEInstance CR (triggers FLO component deployment)
+│   ├── bnk-vlans/            # F5SPKVlan CRs (TMM data-plane IPs + AWS ENI)
+│   ├── bnk-gatewayclass/     # Standard GatewayClass (gateway.networking.k8s.io/v1)
+│   ├── bnk-gateway-ext/      # F5BnkGateway CR (IPAM integration)
+│   ├── gateway/              # Gateway API Gateway instances
 │   ├── routes/               # HTTPRoute, GRPCRoute, L4Route
-│   ├── bnk-netpolicy/        # Network policies (TCP, HTTP, logging)
-│   └── bnk-secpolicy/        # Security policies (firewall, DDoS, ACL)
+│   ├── bnk-netpolicy/        # BNKNetPolicy (TCP profiles, iRules, logging)
+│   ├── bnk-secpolicy/        # BNKSecPolicy (firewall, DDoS, ACL)
+│   └── far-setup/            # FAR image pull secrets (legacy — use bnk-prerequisites)
+├── app/                      # Demo application modules
+│   ├── demo-namespace/       # Demo namespace setup
+│   ├── demo-apps/            # Backend demo applications
+│   ├── demo-gateway/         # Demo Gateway instance
+│   ├── demo-routes/          # Demo HTTPRoute configuration
+│   ├── demo-security/        # Demo security policies
+│   ├── demo-irules/          # Demo iRules
+│   ├── demo-ai-proxy/        # LiteLLM Bedrock proxy
+│   ├── demo-ai-analyzer/     # F5BigAnalyzer for AI Intelligent LB
+│   ├── demo-observability/   # Fluent Bit + Loki logging
+│   ├── demo-traffic/         # In-cluster traffic generator
+│   └── demo-ec2-traffic/     # EC2-based external traffic source
 ├── archived/                 # Deprecated modules (managed by FLO)
 └── templates/                # Module templates
 ```
 
-## BNK Deployment Flow (v2.1.0+)
+## BNK Deployment Flow (v2.2)
 
-With F5 Lifecycle Operator (FLO), many components are now deployed automatically:
+### 1. Infrastructure (AWS)
+| Order | Module | Purpose |
+|-------|--------|---------|
+| 1 | `infra/aws/vpc` | VPC, subnets, NAT gateway |
+| 2 | `infra/aws/security` | Security groups, IAM, jumphost |
+| 3 | `infra/aws/eks` | EKS cluster and node groups |
+| 4 | `infra/aws/storage` | EBS gp3 storage class, EFS |
+| 5 | `infra/aws/high-performance-nodes` | SR-IOV, DPDK, hugepages, TMM node pool |
 
-### 1. Prerequisites
-| Module | Purpose |
-|--------|---------|
-| `k8s/cert-manager` | TLS certificate management |
-| `k8s/network-setup` | Multus CNI network attachments |
-| `bnk/far-setup` | FAR image pull secrets for repo.f5.com |
+### 2. Kubernetes Prerequisites
+| Order | Module | Purpose |
+|-------|--------|---------|
+| 6 | `k8s/bnk-prerequisites` | Namespaces, FAR secrets, manifest download |
+| 7 | `k8s/cert-manager` | TLS certificate management (ClusterIssuer) |
+| 8 | `k8s/network-setup` | Multus CNI network attachment definitions |
 
-### 2. FLO Deployment
-| Module | Purpose |
-|--------|---------|
-| `bnk/flo` | Deploys F5 Lifecycle Operator via Helm |
+### 3. BNK Platform
+| Order | Module | Purpose |
+|-------|--------|---------|
+| 9 | `bnk/flo` | F5 Lifecycle Operator (Helm) |
+| 10 | `bnk/cneinstance` | CNEInstance CR — triggers FLO to deploy all BNK components |
+| 11 | `bnk/bnk-vlans` | F5SPKVlan CRs — TMM data-plane IP configuration |
 
-### 3. BNK Components (FLO Auto-Deploys)
-When you apply a `BnkGatewayClass` CR, FLO automatically deploys:
-- CWC (Cluster Wide Controller)
+### 4. Gateway API
+| Order | Module | Purpose |
+|-------|--------|---------|
+| 12 | `bnk/bnk-gatewayclass` | Standard GatewayClass |
+| 13 | `bnk/gateway` | Gateway instances (listeners, TLS, policies) |
+| 14 | `bnk/routes` | HTTPRoute, GRPCRoute, L4Route |
+
+### FLO Auto-Deploys
+When CNEInstance + GatewayClass are applied, FLO automatically deploys:
+- CWC (Cluster-Wide Controller)
 - DSSM (Distributed Session State Manager)
 - TMM (Traffic Management Microkernel)
-- F5 Ingress
-- Fluentd
+- F5 Ingress, Fluentd, Observer, OTEL, RabbitMQ
 - All CRDs
-- And more...
-
-| Module | Purpose |
-|--------|---------|
-| `bnk/bnk-gatewayclass` | Creates BnkGatewayClass CR to trigger FLO |
-
-### 4. Traffic Configuration
-| Module | Purpose |
-|--------|---------|
-| `bnk/gateway` | Gateway resources for traffic entry points |
-| `bnk/routes` | HTTPRoute, GRPCRoute, L4Route for routing |
-| `bnk/bnk-netpolicy` | Network policies (TCP profiles, logging) |
-| `bnk/bnk-secpolicy` | Security policies (firewall, DDoS, rate limiting) |
 
 ## Module Categories
 
 ### Infrastructure (infra)
-Cloud infrastructure components - networks, compute, databases
+Cloud infrastructure components - networks, compute, storage
 - **Workflow Compatibility**: Greenfield only
 - **Providers**: AWS (Azure, GCP planned)
 
@@ -114,22 +132,19 @@ BIG-IP Next for Kubernetes components
 - **Workflow Compatibility**: Greenfield, Partial, Minimal
 - **Providers**: Cloud-agnostic (requires Kubernetes)
 
-## Archived Modules
-
-Some modules have been archived as they are now managed by FLO:
-- `cwc`, `dssm`, `fluentd`, `f5-controller`
-- `crds/common`, `crds/deprecated`, `crds/service-proxy`
-
-See `archived/README.md` for details.
+### Demo Applications (app)
+Reference demo stack with GenAI architecture
+- **Workflow Compatibility**: Greenfield
+- **Providers**: AWS (Bedrock integration)
 
 ## Module Standards
 
 Each module includes:
 - `main.tf` - Terraform resources
-- `variables.tf` - Input variables
-- `outputs.tf` - Output values
+- `variables.tf` - Input variables with validation
+- `outputs.tf` - Output values with descriptions
 - `versions.tf` - Provider requirements
-- `module.json` - BNK-Forge metadata
+- `module.json` - BNK-Forge metadata for auto-wiring
 - `README.md` - Documentation
 
 ## Usage

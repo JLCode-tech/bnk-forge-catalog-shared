@@ -94,7 +94,7 @@ output "kubectl_config_command" {
 # Storage Validation Commands
 output "storage_validation_commands" {
   description = "Commands to validate storage setup"
-  value = <<-EOT
+  value       = <<-EOT
     # Configure kubectl first
     aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name} --profile ${var.aws_profile}
     
@@ -136,13 +136,13 @@ output "storage_validation_commands" {
 output "eks_summary" {
   description = "Summary of EKS cluster information"
   value = {
-    cluster_name         = aws_eks_cluster.main.name
-    cluster_endpoint     = aws_eks_cluster.main.endpoint
-    cluster_version      = aws_eks_cluster.main.version
-    nodegroup_name       = aws_eks_node_group.main.node_group_name
-    node_count          = var.node_count
-    instance_type       = var.instance_type
-    oidc_provider_arn   = aws_iam_openid_connect_provider.eks.arn
-    kubectl_command     = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name} --profile ${var.aws_profile}"
+    cluster_name      = aws_eks_cluster.main.name
+    cluster_endpoint  = aws_eks_cluster.main.endpoint
+    cluster_version   = aws_eks_cluster.main.version
+    nodegroup_name    = aws_eks_node_group.main.node_group_name
+    node_count        = var.node_count
+    instance_type     = var.instance_type
+    oidc_provider_arn = aws_iam_openid_connect_provider.eks.arn
+    kubectl_command   = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name} --profile ${var.aws_profile}"
   }
 }

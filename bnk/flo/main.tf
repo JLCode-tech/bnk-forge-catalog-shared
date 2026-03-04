@@ -56,28 +56,20 @@ resource "local_file" "kubeconfig" {
 locals {
   kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
 
-  # TEEM URLs by environment (for connected licensing)
+  # TEEM URLs for connected licensing
+  # Per F5 CloudDocs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/installing-bnk-dpu-using-f5-lifecycle-operator/installing/bnk-install-flo.html
   teem_urls = {
-    production = {
-      cert_url           = "https://product.apis.f5.com/ee/v1"
-      entitlement_url    = "https://product-s.apis.f5.com/ee/v1"
-      initial_config_url = "https://product-s.apis.f5.com/ee/v1"
-    }
-    test = {
-      cert_url           = "https://product-tst.apis.f5networks.net/ee/v1"
-      entitlement_url    = "https://product-s-tst.apis.f5networks.net/ee/v1"
-      initial_config_url = "https://product-s-tst.apis.f5networks.net/ee/v1"
-    }
+    cert_url           = "https://product.apis.f5.com/ee/v1"
+    entitlement_url    = "https://product-s.apis.f5.com/ee/v1"
+    initial_config_url = "https://product-s.apis.f5.com/ee/v1"
   }
-
-  selected_teem = local.teem_urls[var.license_environment]
 
   # Licensing configuration based on mode
   license_config = var.license_mode == "connected" ? {
     operationMode        = "connected"
-    teemCertUrl          = local.selected_teem.cert_url
-    teemEntitlementUrl   = local.selected_teem.entitlement_url
-    teemInitialConfigUrl = local.selected_teem.initial_config_url
+    teemCertUrl          = local.teem_urls.cert_url
+    teemEntitlementUrl   = local.teem_urls.entitlement_url
+    teemInitialConfigUrl = local.teem_urls.initial_config_url
     jwt                  = var.jwt_token != "" ? var.jwt_token : null
     } : {
     operationMode     = "f5licenseproxy"

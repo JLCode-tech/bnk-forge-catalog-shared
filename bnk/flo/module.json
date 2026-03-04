@@ -83,13 +83,6 @@
         "source": "user"
       },
       {
-        "name": "license_environment",
-        "type": "string",
-        "description": "Licensing environment: production or test",
-        "default": "production",
-        "source": "user"
-      },
-      {
         "name": "cert_manager_ready",
         "type": "boolean",
         "description": "Dependency gate from cert-manager",

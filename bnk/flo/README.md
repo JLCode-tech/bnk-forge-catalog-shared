@@ -4,27 +4,31 @@
 
 Deploys the F5 Lifecycle Operator (FLO) via Helm chart from F5 Artifact Registry (FAR). FLO is the core operator that manages the lifecycle of BIG-IP Next for Kubernetes components.
 
-## What FLO Installs
+## What FLO Manages
 
-FLO automatically deploys the following components:
-- **IPAM Operator**: IP Address Management for Kubernetes services
-- **BnkGatewayClass CRD**: Gateway API custom resource definition
-- **Component CRDs**: All BIG-IP Next for Kubernetes custom resource definitions
+When triggered by a CNEInstance + GatewayClass, FLO automatically deploys:
+- **CWC** (Cluster-Wide Controller)
+- **DSSM** (Distributed Session State Manager)
+- **TMM** (Traffic Management Microkernel)
+- **Observer**, **Fluentd**, **OTEL Collector**
+- **RabbitMQ**
+- **IPAM Controller** (if enabled)
+- **All CRDs** (Gateway API, F5SPKVlan, BNKSecPolicy, BNKNetPolicy, etc.)
 
 ## Features
 
 - Automatic CRD installation and management
 - Integrated licensing (connected mode or F5 License Proxy)
+- CPCL key download and application (JWT license verification)
 - IPAM operator deployment
-- Support for production and test environments
-- Configurable resource requests/limits
-- Node selector and toleration support
+- Cloud-aware configuration (AWS, Azure, Generic)
+- License secret cleanup for clean redeploys
+- CRD adoption for destroy/redeploy cycles
 
 ## Dependencies
 
-- **EKS Cluster**: Running Kubernetes cluster
-- **cert-manager**: Certificate management (must be installed first)
-- **FAR Setup**: F5 Artifact Registry access and pull secrets
+- **bnk-prerequisites**: Namespaces, FAR secrets, and FLO version from manifest
+- **cert-manager**: ClusterIssuer for webhook certificates
 
 ## Usage
 
@@ -35,58 +39,41 @@ module "flo" {
   # Cluster configuration
   cluster_name = "my-eks-cluster"
 
-  # Namespaces
-  flo_namespace  = "f5-operators"
-  ipam_namespace = "f5-ipam"
+  # Namespace (wired from prerequisites)
+  flo_namespace = module.bnk_prerequisites.operator_namespace
 
-  # FAR configuration
-  far_secret_name = "f5-far-secret"
-  flo_version     = "v1.198.4-0.1.36"
+  # FAR configuration (wired from prerequisites)
+  far_secret_name = module.bnk_prerequisites.far_secret_name
+  flo_version     = module.bnk_prerequisites.flo_version
 
-  # Licensing configuration
-  license_mode        = "connected"
-  license_environment = "production"
-  jwt_token           = var.f5_jwt_token # sensitive
+  # Licensing
+  license_mode = "connected"
+  jwt_token    = var.f5_jwt_token  # sensitive — project secret
 
-  # Image registry
-  image_registry = "repo.f5.com/images"
+  # Certificate manager (wired from cert-manager)
+  cluster_issuer_name = module.cert_manager.cluster_issuer_name
+  cert_manager_ready  = module.cert_manager.cert_manager_ready
 
-  # Dependencies
-  cert_manager_ready = module.cert_manager.ready
-  far_setup_complete = module.far_setup.setup_complete
-
-  # Optional: Resource configuration
-  flo_cpu_request    = "100m"
-  flo_memory_request = "128Mi"
-  flo_cpu_limit      = "500m"
-  flo_memory_limit   = "512Mi"
-
-  # Optional: Node placement
-  node_selector = {
-    "node-type" = "management"
-  }
-
-  common_tags = {
-    Environment = "production"
-    Project     = "my-project"
-  }
+  # Platform (affects GRPC and cloud networking)
+  container_platform = "AWS"  # Generic, AWS, or Azure
 }
 ```
 
 ## Licensing Modes
 
 ### Connected Mode (Default)
-Connects directly to F5 licensing servers:
+Connects directly to F5 production licensing servers:
 ```hcl
-license_mode        = "connected"
-license_environment = "production" # or "test"
-jwt_token           = "your-jwt-token"
+license_mode = "connected"
+jwt_token    = "your-jwt-token"
 ```
+
+TEEM URLs are hardcoded to F5 production endpoints (`product.apis.f5.com`, `product-s.apis.f5.com`).
 
 ### F5 License Proxy Mode
 Uses an on-premises license proxy:
 ```hcl
-license_mode          = "f5licenseproxy"
+license_mode         = "f5licenseproxy"
 f5_license_proxy_url = "https://your-license-proxy:8080"
 ```
 
@@ -94,84 +81,94 @@ f5_license_proxy_url = "https://your-license-proxy:8080"
 
 | Name | Description | Type | Required | Default |
 |------|-------------|------|----------|---------|
-| cluster_name | EKS cluster name | string | yes | - |
-| flo_namespace | Namespace for FLO deployment | string | no | "f5-operators" |
-| far_secret_name | FAR pull secret name | string | yes | - |
+| cluster_name | Kubernetes cluster name | string | no | "" |
+| flo_namespace | Namespace for FLO deployment | string | no | "f5-operator" |
 | flo_version | FLO Helm chart version | string | no | "v1.198.4-0.1.36" |
-| license_mode | Licensing mode (connected/f5licenseproxy) | string | no | "connected" |
-| license_environment | License environment (production/test) | string | no | "production" |
-| jwt_token | JWT token for licensing | string (sensitive) | no | "" |
-| cert_manager_ready | Cert-manager ready flag | bool | yes | - |
-| far_setup_complete | FAR setup complete flag | bool | yes | - |
+| far_secret_name | FAR pull secret name | string | no | "far-secret" |
+| jwt_token | JWT token for licensing (sensitive) | string | no | "" |
+| license_mode | connected or f5licenseproxy | string | no | "connected" |
+| f5_license_proxy_url | License proxy URL (proxy mode only) | string | no | "" |
+| container_platform | Platform type: Generic, AWS, Azure | string | no | "Generic" |
+| cluster_issuer_name | ClusterIssuer name from cert-manager | string | no | "bnk-ca-cluster-issuer" |
+| cert_manager_ready | Dependency gate from cert-manager | bool | no | true |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | flo_namespace | Namespace where FLO is deployed |
-| ipam_namespace | Namespace where IPAM operator is deployed |
-| flo_ready | Flag indicating FLO is ready |
-| crds_installed | Flag indicating CRDs are installed |
+| flo_ready | Gate — true when FLO is deployed and verified |
+| crds_installed | Gate — true when FLO CRDs are installed |
 | helm_release_name | Helm release name |
 | helm_release_version | Helm chart version deployed |
 | license_mode | Configured licensing mode |
 
-## Deployment Order
+## Deployment Order (BNK 2.2)
 
-1. VPC
-2. Security (IAM roles, SSH keys, security groups)
-3. EKS
-4. Storage
-5. **FAR Setup** (F5 Artifact Registry access)
-6. **cert-manager** (Certificate management)
-7. **→ FLO** (This module - manages CRDs)
-8. CWC (Cluster Wide Controller)
-9. dSSM (Distributed state)
-10. F5 Controller (Ingress/Gateway)
+```
+1. infra/aws/vpc
+2. infra/aws/security
+3. infra/aws/eks
+4. infra/aws/storage
+5. infra/aws/high-performance-nodes
+6. k8s/bnk-prerequisites     ← namespaces, FAR secrets, manifest
+7. k8s/cert-manager           ← TLS certificates
+8. k8s/network-setup          ← Multus NADs
+9. bnk/flo                    ← THIS MODULE (operator + CRDs)
+10. bnk/cneinstance            ← triggers FLO to deploy BNK components
+11. bnk/bnk-vlans              ← TMM data-plane IP configuration
+12. bnk/bnk-gatewayclass       ← standard GatewayClass
+13. bnk/gateway                ← Gateway instances
+14. bnk/routes                 ← HTTPRoute / L4Route
+```
 
 ## Notes
 
-- FLO must be installed in a dedicated namespace (default: `f5-operators`)
+- FLO must be installed in a dedicated namespace (default: `f5-operator`)
 - FLO automatically installs all required CRDs
-- BNKGatewayClass CR must be created in the same namespace as FLO
-- CRDs persist after FLO Helm uninstallation
-- IPAM operator is deployed automatically unless disabled
+- CRDs persist after FLO Helm uninstallation — the module handles CRD adoption on redeploy
+- CPCL key is downloaded from F5 CloudDocs and applied to the FLO namespace
+- Stale license secrets are cleaned on redeploy to prevent activation conflicts
 
 ## Verification
 
 After deployment, verify FLO is running:
 ```bash
 # Check FLO pods
-kubectl get pods -n f5-operators
-
-# Check IPAM pods
-kubectl get pods -n f5-ipam
+kubectl get pods -n f5-operator
 
 # Verify CRDs installed
-kubectl get crd | grep gateway
-kubectl get crd | grep f5
+kubectl get crd | grep -E "f5|gateway"
+
+# Check license status
+kubectl get secret licensestatus -n f5-operator -o jsonpath='{.data.licensestatus}' | base64 -d
 ```
 
 ## Troubleshooting
 
 **FLO pod not starting:**
 - Verify cert-manager is running: `kubectl get pods -n cert-manager`
-- Check FAR secret exists: `kubectl get secret f5-far-secret -n f5-operators`
-- Review FLO logs: `kubectl logs -n f5-operators -l app=flo`
+- Check FAR secret exists: `kubectl get secret far-secret -n f5-operator`
+- Review FLO logs: `kubectl logs -n f5-operator -l app=flo`
 
 **License errors:**
-- For connected mode: Verify JWT token is valid
+- For connected mode: Verify JWT token is valid and not expired
 - For proxy mode: Verify F5 License Proxy URL is accessible
-- Check license configuration: `kubectl describe pod -n f5-operators -l app=flo`
+- Check CPCL key: `kubectl get configmap cpcl-key-cm -n f5-operator -o yaml`
+
+**CRD adoption errors on redeploy:**
+- The module automatically re-labels CRDs for Helm adoption
+- If Helm still errors, manually delete stale CRD annotations
 
 ## References
 
-- [F5 Lifecycle Operator Documentation](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-install-flo.html)
+- [F5 Lifecycle Operator](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-f5-lifecycle-operator.html)
+- [BNK Installation Guide](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/installing-bnk-dpu-using-f5-lifecycle-operator/installing/bnk-install-flo.html)
 - [F5 Licensing Guide](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-licensing.html)
 
 ## Module Metadata
 
 - **Category**: bnk
 - **Workflow Compatibility**: Greenfield, Partial, Minimal
-- **Version**: 2.1.x
-- **Last Updated**: 2025-11-22
+- **Version**: 2.2.0
+- **Last Updated**: 2026-03-04

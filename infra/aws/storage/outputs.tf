@@ -73,11 +73,11 @@ output "f5_storage_classes" {
 output "storage_summary" {
   description = "Summary of storage configuration"
   value = {
-    cluster_name               = var.cluster_name
-    region                    = var.aws_region
-    project_name              = var.project_name
-    environment               = var.environment
-    default_storage_class     = "gp3-standard"
+    cluster_name             = var.cluster_name
+    region                   = var.aws_region
+    project_name             = var.project_name
+    environment              = var.environment
+    default_storage_class    = "gp3-standard"
     f5_efs_enabled           = var.enable_f5_efs_storage
     volume_snapshots_enabled = var.enable_volume_snapshots
     encryption_enabled       = true
@@ -91,7 +91,7 @@ output "storage_summary" {
 
 output "storage_validation_commands" {
   description = "Commands to validate storage setup"
-  value = <<-EOT
+  value       = <<-EOT
     # Configure kubectl first
     aws eks update-kubeconfig --region ${var.aws_region} --name ${var.cluster_name} --profile ${var.aws_profile}
     

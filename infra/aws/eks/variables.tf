@@ -37,7 +37,7 @@ variable "common_tags" {
 variable "user_ip" {
   description = "Your public IP address in CIDR format (e.g., 203.123.45.67/32) for EKS API endpoint access"
   type        = string
-  
+
   validation {
     condition     = can(regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}/32$", var.user_ip))
     error_message = "The user_ip must be in CIDR format with /32 suffix (e.g., 203.123.45.67/32)."
