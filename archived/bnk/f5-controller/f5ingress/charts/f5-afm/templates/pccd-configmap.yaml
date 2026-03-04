@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Values.afm.pccd.config.name }}
-  namespace: {{ .Release.Namespace }}
-data:
-{{ toYaml .Values.afm.pccd.config.entries | indent 2 }}

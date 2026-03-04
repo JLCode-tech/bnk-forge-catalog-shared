@@ -1,6 +1,0 @@
-apiVersion: v2
-appVersion: v0.6.19
-description: A Helm chart for Kubernetes
-name: f5-cne-proxy
-type: application
-version: 0.4.27

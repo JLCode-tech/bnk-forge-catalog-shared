@@ -1,7 +1,0 @@
-The F5Ingress Controller has been installed.
-
-{{- if (index .Values "f5-tmm").debug.enabled }}
-TMM debug sidecar is deployed. To access: kubectl exec -it deployment/{{ (index .Values "f5-tmm").tmm.name }} -c {{ (index .Values "f5-tmm").debug.name }} -n {{ .Release.Namespace }} -- bash
-
-
-{{- end }}

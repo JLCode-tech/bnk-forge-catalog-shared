@@ -1,3 +1,0 @@
-{{- if and (not (lookup "v1" "ConfigMap" .Release.Namespace "f5log-min-level")) (not .Values.skipF5logCreation) }}
-{{- include "resource.spk" (dict "kind" "ConfigMap" "name" "f5log-min-level" "namespace" .Release.Namespace) }}
-{{- end }}

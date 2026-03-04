@@ -1,6 +1,0 @@
-apiVersion: v2
-appVersion: 0.0.1
-description: A Common Helm Chart for BigIP Next deployments for SPK/CNF.
-name: spk-common
-type: application
-version: 1.3.5
