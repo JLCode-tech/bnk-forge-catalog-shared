@@ -31,7 +31,7 @@ Then sync the catalog at **Settings > Environment Config > Sync Modules**.
 
 ## Overview
 
-This is a **read-only reference library** that is synced into the BNK-Forge tool. Users select modules from this catalog through the BNK-Forge UI, which then generates their customized project in `bnk-forge-live`.
+This is a **read-only reference library** that is synced into the BNK-Forge tool. Users select modules from this catalog through the BNK-Forge UI.
 
 ## Repository Structure
 
@@ -153,8 +153,7 @@ Each module includes:
 Users interact through BNK-Forge UI:
 1. Select modules from the catalog
 2. Configure variables
-3. BNK-Forge generates project in `bnk-forge-live`
-4. Deploy with Terragrunt
+3. Deploy
 
 ## Reference Documentation
 
@@ -165,7 +164,6 @@ Users interact through BNK-Forge UI:
 ## Related Repositories
 
 - **bnk-forge-v2**: Main BNK-Forge application
-- **bnk-forge-live**: User deployment projects
 
 ---
 
