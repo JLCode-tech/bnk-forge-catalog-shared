@@ -34,9 +34,10 @@ bnk-forge-v2 parses this for automatic wiring.
 Remove `project_name`, `environment`, `common_tags` from inputs - defined in root.hcl.
 Keep only module-specific user inputs and module dependency inputs.
 
-### ADR-008: Version-Based Branching
-`release/X.Y` branches track F5 product versions (2.2, 2.3, etc.).
-Main = latest stable. Tags: vX.Y.0.
+### ADR-008: Release Branch Strategy (Updated 2026-03-04)
+All work happens on `release/X.Y` branches mapped to F5 BNK GA versions.
+`main` is a snapshot — always reset to the latest stable release branch.
+No feature branches, no PRs to main. New BNK version = new branch from previous release.
 
 ### ADR-009: Policy Modules = CR Configuration
 Policy modules create CR **instances**, not install CRDs. FLO handles CRDs.
