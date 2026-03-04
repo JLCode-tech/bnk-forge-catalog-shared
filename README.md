@@ -4,7 +4,7 @@
 ![F5 BNK](https://img.shields.io/badge/F5_BNK-2.2_GA-orange)
 ![Status](https://img.shields.io/badge/Status-Production-brightgreen)
 
-Terraform/Terragrunt module library for deploying F5 BIG-IP Next for Kubernetes (BNK) via BNK-Forge.
+OpenTofu/Terraform module library for deploying F5 BIG-IP Next for Kubernetes (BNK) via BNK-Forge.
 
 ## Branching Strategy
 
@@ -44,7 +44,7 @@ Module Library Git Ref: release/2.2
 
 ## What's In This Library
 
-A curated collection of **36+ Terraform modules** organized in three tiers:
+A curated collection of **36+ OpenTofu modules** organized in three tiers:
 
 ```
 bnk-forge-modules/
