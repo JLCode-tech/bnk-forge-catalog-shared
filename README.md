@@ -71,7 +71,6 @@ bnk-forge-modules/
 │   ├── demo-observability/   # Fluent Bit + Loki logging
 │   ├── demo-traffic/         # In-cluster traffic generator
 │   └── demo-ec2-traffic/     # EC2-based external traffic source
-├── archived/                 # Deprecated modules (managed by FLO)
 └── templates/                # Module templates
 ```
 
@@ -165,9 +164,9 @@ Users interact through BNK-Forge UI:
 
 ## Related Repositories
 
-- **bnk-forge**: Main BNK-Forge application
+- **bnk-forge-v2**: Main BNK-Forge application
 - **bnk-forge-live**: User deployment projects
 
 ---
 
-For more information, see the [BNK-Forge Documentation](https://github.com/JLCode-tech/bnk-forge)
+For more information, see the [BNK-Forge Documentation](https://github.com/JLCode-tech/bnk-forge-v2)
