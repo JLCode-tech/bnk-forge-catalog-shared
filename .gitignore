@@ -4,6 +4,7 @@
 .agent/
 .claude/
 .jules/
+.opencode/
 CLAUDE.md
 templates/
 
