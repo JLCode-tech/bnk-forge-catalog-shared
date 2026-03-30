@@ -366,27 +366,27 @@ resource "null_resource" "wait_for_x86_nodes" {
       # Wait for EKS node group to be ACTIVE using AWS CLI (no kubectl required)
       timeout 600 bash -c '
         while true; do
-          STATUS=$$(aws eks describe-nodegroup \
+          STATUS=$(aws eks describe-nodegroup \
             --cluster-name ${var.cluster_name} \
             --nodegroup-name ${aws_eks_node_group.x86_high_perf.node_group_name} \
             --region ${var.region} \
             --query "nodegroup.status" \
             --output text 2>/dev/null)
           
-          if [ "$$STATUS" = "ACTIVE" ]; then
-            HEALTH=$$(aws eks describe-nodegroup \
+          if [ "$STATUS" = "ACTIVE" ]; then
+            HEALTH=$(aws eks describe-nodegroup \
               --cluster-name ${var.cluster_name} \
               --nodegroup-name ${aws_eks_node_group.x86_high_perf.node_group_name} \
               --region ${var.region} \
               --query "nodegroup.health.issues" \
               --output text 2>/dev/null)
             
-            if [ "$$HEALTH" = "None" ] || [ -z "$$HEALTH" ]; then
+            if [ "$HEALTH" = "None" ] || [ -z "$HEALTH" ]; then
               echo "Node group is ACTIVE and healthy"
               break
             fi
           fi
-          echo "Waiting for x86_64 nodes to be ready... (status: $$STATUS)"
+          echo "Waiting for x86_64 nodes to be ready... (status: $STATUS)"
           sleep 10
         done
       '
@@ -655,43 +655,43 @@ resource "null_resource" "configure_tmm_nodes" {
       export KUBECONFIG=/tmp/hp-nodes-kubeconfig
       
       # Get high-performance node names (sorted for deterministic ordering)
-      HP_NODES=$$(kubectl get nodes -l node-type=high-performance \
+      HP_NODES=$(kubectl get nodes -l node-type=high-performance \
         --sort-by=.metadata.creationTimestamp \
         -o jsonpath='{.items[*].metadata.name}')
       
-      echo "High-performance nodes found: $$HP_NODES"
+      echo "High-performance nodes found: $HP_NODES"
       
       TMM_COUNT=0
-      for NODE in $$HP_NODES; do
-        if [ $$TMM_COUNT -lt ${var.tmm_node_count} ]; then
-          echo "=== Configuring $$NODE as TMM-dedicated node ==="
+      for NODE in $HP_NODES; do
+        if [ $TMM_COUNT -lt ${var.tmm_node_count} ]; then
+          echo "=== Configuring $NODE as TMM-dedicated node ==="
           
           # Apply app=f5-tmm label (required by TMM pod nodeSelector)
-          kubectl label node $$NODE app=f5-tmm --overwrite
+          kubectl label node $NODE app=f5-tmm --overwrite
           
           # Apply dpu=true:NoSchedule taint (restricts node to TMM + system daemonsets)
-          kubectl taint nodes $$NODE dpu=true:NoSchedule --overwrite 2>/dev/null || \
-            echo "Taint already exists on $$NODE"
+          kubectl taint nodes $NODE dpu=true:NoSchedule --overwrite 2>/dev/null || \
+            echo "Taint already exists on $NODE"
           
-          echo "  $$NODE: labeled app=f5-tmm, tainted dpu=true:NoSchedule"
-          TMM_COUNT=$$((TMM_COUNT + 1))
+          echo "  $NODE: labeled app=f5-tmm, tainted dpu=true:NoSchedule"
+          TMM_COUNT=$((TMM_COUNT + 1))
         else
-          echo "=== Configuring $$NODE as BNK control plane node (no taint) ==="
+          echo "=== Configuring $NODE as BNK control plane node (no taint) ==="
           
           # Ensure NO TMM label on non-TMM nodes
-          kubectl label node $$NODE app- 2>/dev/null || true
+          kubectl label node $NODE app- 2>/dev/null || true
           
           # Ensure NO dpu taint on non-TMM nodes
-          kubectl taint nodes $$NODE dpu=true:NoSchedule- 2>/dev/null || true
+          kubectl taint nodes $NODE dpu=true:NoSchedule- 2>/dev/null || true
           
-          echo "  $$NODE: untainted, available for BNK control plane pods"
+          echo "  $NODE: untainted, available for BNK control plane pods"
         fi
       done
       
       echo ""
       echo "=== TMM Node Configuration Summary ==="
-      echo "TMM-dedicated nodes: $$TMM_COUNT of ${var.node_count}"
-      echo "BNK control plane nodes: $$((${var.node_count} - TMM_COUNT)) of ${var.node_count}"
+      echo "TMM-dedicated nodes: $TMM_COUNT of ${var.node_count}"
+      echo "BNK control plane nodes: $((${var.node_count} - TMM_COUNT)) of ${var.node_count}"
       
       # Clean up
       rm -f /tmp/hp-nodes-kubeconfig
@@ -735,7 +735,7 @@ resource "null_resource" "verify_setup" {
       echo
       echo "=== Node Topology ==="
       echo "- ${var.tmm_node_count} node(s): app=f5-tmm label + dpu=true:NoSchedule (TMM only)"
-      echo "- $$((${var.node_count} - ${var.tmm_node_count})) node(s): no taint (BNK control plane + general workloads)"
+      echo "- $((${var.node_count} - ${var.tmm_node_count})) node(s): no taint (BNK control plane + general workloads)"
       echo
       echo "=== Ready for F5 BNK Installation ==="
     EOT
