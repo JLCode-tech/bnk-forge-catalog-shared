@@ -360,6 +360,7 @@ resource "null_resource" "wait_for_x86_nodes" {
   depends_on = [aws_eks_node_group.x86_high_perf]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "Waiting for x86_64 high-performance nodes to be ready..."
       
@@ -454,6 +455,7 @@ resource "null_resource" "wait_for_eni_attachment" {
   depends_on = [kubernetes_manifest.eni_attachment_daemonset]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "Waiting for ENI attachment manager to complete..."
       
@@ -538,6 +540,7 @@ resource "null_resource" "wait_for_multus" {
   depends_on = [kubernetes_manifest.multus_daemonset]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "Waiting for Multus CNI daemonset to be ready..."
       
@@ -590,6 +593,7 @@ resource "null_resource" "wait_for_sriov_cni" {
   depends_on = [kubernetes_manifest.sriov_cni_installer]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "Waiting for SR-IOV CNI installer to complete..."
       
@@ -667,6 +671,7 @@ resource "null_resource" "wait_for_dpdk" {
   depends_on = [kubernetes_manifest.dpdk_daemonset]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "Waiting for DPDK configurator to bind NICs to vfio-pci..."
       
@@ -738,6 +743,7 @@ resource "null_resource" "wait_for_sriov_device_plugin" {
   depends_on = [kubernetes_manifest.sriov_device_plugin]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "Waiting for SR-IOV Device Plugin to discover vfio-pci devices..."
       
@@ -801,6 +807,7 @@ resource "null_resource" "configure_tmm_nodes" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "=== Configuring TMM-dedicated nodes ==="
       echo "TMM node count: ${var.tmm_node_count}"
@@ -875,6 +882,7 @@ resource "null_resource" "verify_setup" {
   ]
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = <<-EOT
       echo "=== x86_64 High-Performance Nodes Setup Complete ==="
       echo "Architecture: x86_64"
@@ -919,6 +927,7 @@ resource "null_resource" "cleanup" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     when    = destroy
     command = <<-EOT
       echo "High-Performance Nodes cleanup initiated..."
