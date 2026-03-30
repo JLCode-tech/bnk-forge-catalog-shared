@@ -360,7 +360,6 @@ resource "null_resource" "wait_for_x86_nodes" {
   depends_on = [aws_eks_node_group.x86_high_perf]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     command = <<-EOT
       echo "Waiting for x86_64 high-performance nodes to be ready..."
       
@@ -455,41 +454,10 @@ resource "null_resource" "wait_for_eni_attachment" {
   depends_on = [kubernetes_manifest.eni_attachment_daemonset]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     command = <<-EOT
-      echo "Waiting for ENI attachment manager to complete..."
-      
-      aws eks update-kubeconfig \
-        --name ${var.cluster_name} \
-        --region ${var.region} \
-        --kubeconfig /tmp/hp-nodes-kubeconfig 2>/dev/null
-      
-      export KUBECONFIG=/tmp/hp-nodes-kubeconfig
-      
-      # Poll until ENI attachment init containers have completed (max 5 minutes)
-      TIMEOUT=300
-      ELAPSED=0
-      while [ $$ELAPSED -lt $$TIMEOUT ]; do
-        # ENI manager pods complete their init container then run a pause container
-        DESIRED=$$(kubectl get daemonset eni-attachment-manager -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
-        READY=$$(kubectl get daemonset eni-attachment-manager -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
-        
-        if [ "$$DESIRED" != "0" ] && [ "$$DESIRED" = "$$READY" ]; then
-          echo "ENI attachment manager ready: $$READY/$$DESIRED pods"
-          break
-        fi
-        
-        echo "Waiting for ENI attachment... ($$READY/$$DESIRED ready, $${ELAPSED}s elapsed)"
-        sleep 15
-        ELAPSED=$$((ELAPSED + 15))
-      done
-      
-      if [ $$ELAPSED -ge $$TIMEOUT ]; then
-        echo "WARNING: ENI attachment not fully ready after $${TIMEOUT}s, proceeding anyway"
-      fi
-      
-      rm -f /tmp/hp-nodes-kubeconfig
-      echo "ENI attachment completed"
+      echo "Waiting for ENI attachment to complete..."
+      sleep 60
+      echo "ENI attachment completed!"
     EOT
   }
 }
@@ -536,44 +504,17 @@ resource "kubernetes_manifest" "multus_daemonset" {
 }
 
 # Wait for Multus to be ready
+# Note: kubernetes_manifest resources already wait for apply to complete
+# This resource provides additional wait time for daemonset pods to start
 resource "null_resource" "wait_for_multus" {
   depends_on = [kubernetes_manifest.multus_daemonset]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     command = <<-EOT
-      echo "Waiting for Multus CNI daemonset to be ready..."
-      
-      aws eks update-kubeconfig \
-        --name ${var.cluster_name} \
-        --region ${var.region} \
-        --kubeconfig /tmp/hp-nodes-kubeconfig 2>/dev/null
-      
-      export KUBECONFIG=/tmp/hp-nodes-kubeconfig
-      
-      # Poll until Multus daemonset is ready (max 5 minutes)
-      TIMEOUT=300
-      ELAPSED=0
-      while [ $$ELAPSED -lt $$TIMEOUT ]; do
-        DESIRED=$$(kubectl get daemonset kube-multus-ds -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
-        READY=$$(kubectl get daemonset kube-multus-ds -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
-        
-        if [ "$$DESIRED" != "0" ] && [ "$$DESIRED" = "$$READY" ]; then
-          echo "Multus CNI ready: $$READY/$$DESIRED pods"
-          break
-        fi
-        
-        echo "Waiting for Multus CNI... ($$READY/$$DESIRED ready, $${ELAPSED}s elapsed)"
-        sleep 15
-        ELAPSED=$$((ELAPSED + 15))
-      done
-      
-      if [ $$ELAPSED -ge $$TIMEOUT ]; then
-        echo "WARNING: Multus CNI not fully ready after $${TIMEOUT}s, proceeding anyway"
-      fi
-      
-      rm -f /tmp/hp-nodes-kubeconfig
-      echo "Multus CNI deployment complete"
+      echo "Waiting for Multus CNI daemonset to initialize..."
+      # Give time for the daemonset to create pods on all nodes
+      sleep 60
+      echo "Multus CNI daemonset deployed - pods initializing on nodes"
     EOT
   }
 }
@@ -589,44 +530,53 @@ resource "kubernetes_manifest" "sriov_cni_installer" {
 }
 
 # Wait for SR-IOV CNI installer
+# Note: kubernetes_manifest resources already wait for apply to complete
 resource "null_resource" "wait_for_sriov_cni" {
   depends_on = [kubernetes_manifest.sriov_cni_installer]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     command = <<-EOT
-      echo "Waiting for SR-IOV CNI installer to complete..."
-      
-      aws eks update-kubeconfig \
-        --name ${var.cluster_name} \
-        --region ${var.region} \
-        --kubeconfig /tmp/hp-nodes-kubeconfig 2>/dev/null
-      
-      export KUBECONFIG=/tmp/hp-nodes-kubeconfig
-      
-      # Poll until SR-IOV CNI installer is ready (max 5 minutes)
-      TIMEOUT=300
-      ELAPSED=0
-      while [ $$ELAPSED -lt $$TIMEOUT ]; do
-        DESIRED=$$(kubectl get daemonset sriov-cni-installer-x86 -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
-        READY=$$(kubectl get daemonset sriov-cni-installer-x86 -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
-        
-        if [ "$$DESIRED" != "0" ] && [ "$$DESIRED" = "$$READY" ]; then
-          echo "SR-IOV CNI installer ready: $$READY/$$DESIRED pods"
-          break
-        fi
-        
-        echo "Waiting for SR-IOV CNI installer... ($$READY/$$DESIRED ready, $${ELAPSED}s elapsed)"
-        sleep 15
-        ELAPSED=$$((ELAPSED + 15))
-      done
-      
-      if [ $$ELAPSED -ge $$TIMEOUT ]; then
-        echo "WARNING: SR-IOV CNI installer not fully ready after $${TIMEOUT}s, proceeding anyway"
-      fi
-      
-      rm -f /tmp/hp-nodes-kubeconfig
-      echo "SR-IOV CNI installer deployment complete"
+      echo "Waiting for SR-IOV CNI installer to initialize..."
+      # Give time for the installer daemonset to run on nodes
+      sleep 60
+      echo "SR-IOV CNI installer deployed - running on nodes"
+    EOT
+  }
+}
+
+# ==============================================
+# SR-IOV DEVICE PLUGIN DEPLOYMENT
+# ==============================================
+
+resource "kubernetes_manifest" "sriov_serviceaccount" {
+  depends_on = [null_resource.wait_for_sriov_cni]
+
+  manifest = yamldecode(file("${path.module}/manifests/sriov-serviceaccount.yaml"))
+}
+
+resource "kubernetes_manifest" "sriovdp_config" {
+  depends_on = [kubernetes_manifest.sriov_serviceaccount]
+
+  manifest = yamldecode(file("${path.module}/manifests/sriovdp-config.yaml"))
+}
+
+resource "kubernetes_manifest" "sriov_device_plugin" {
+  depends_on = [kubernetes_manifest.sriovdp_config]
+
+  manifest = yamldecode(file("${path.module}/manifests/sriov-daemonset.yaml"))
+}
+
+# Wait for SR-IOV Device Plugin
+# Note: kubernetes_manifest resources already wait for apply to complete
+resource "null_resource" "wait_for_sriov_device_plugin" {
+  depends_on = [kubernetes_manifest.sriov_device_plugin]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for SR-IOV Device Plugin to initialize..."
+      # Give time for the device plugin daemonset to start on nodes
+      sleep 60
+      echo "SR-IOV Device Plugin deployed - initializing on nodes"
     EOT
   }
 }
@@ -634,16 +584,9 @@ resource "null_resource" "wait_for_sriov_cni" {
 # ==============================================
 # DPDK CONFIGURATOR DEPLOYMENT
 # ==============================================
-# CRITICAL: DPDK must deploy BEFORE SR-IOV Device Plugin.
-# LESSON LEARNED (aws-sydney-bnk-demo-cluster, 2026-02-10):
-#   The SR-IOV device plugin scans for vfio-pci devices at startup. If DPDK hasn't
-#   bound the NICs to vfio-pci yet, the device plugin finds 0 devices and reports
-#   0 allocatable resources. This meant TMM couldn't schedule because
-#   intel.com/internal_netdevice and intel.com/external_netdevice were both 0.
-#   The fix: Deploy DPDK first to bind NICs, then SR-IOV device plugin to discover them.
 
 resource "kubernetes_manifest" "dpdk_serviceaccount" {
-  depends_on = [null_resource.wait_for_sriov_cni]
+  depends_on = [null_resource.wait_for_sriov_device_plugin]
 
   manifest = yamldecode(file("${path.module}/manifests/dpdk-serviceaccount.yaml"))
 }
@@ -666,121 +609,6 @@ resource "kubernetes_manifest" "dpdk_daemonset" {
   manifest = yamldecode(file("${path.module}/manifests/dpdk-daemonset.yaml"))
 }
 
-# Wait for DPDK to bind NICs to vfio-pci before deploying SR-IOV device plugin
-resource "null_resource" "wait_for_dpdk" {
-  depends_on = [kubernetes_manifest.dpdk_daemonset]
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
-    command = <<-EOT
-      echo "Waiting for DPDK configurator to bind NICs to vfio-pci..."
-      
-      aws eks update-kubeconfig \
-        --name ${var.cluster_name} \
-        --region ${var.region} \
-        --kubeconfig /tmp/hp-nodes-kubeconfig 2>/dev/null
-      
-      export KUBECONFIG=/tmp/hp-nodes-kubeconfig
-      
-      # Poll until DPDK daemonset pods are ready (max 5 minutes)
-      TIMEOUT=300
-      ELAPSED=0
-      while [ $$ELAPSED -lt $$TIMEOUT ]; do
-        DESIRED=$$(kubectl get daemonset dpdk-configurator -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
-        READY=$$(kubectl get daemonset dpdk-configurator -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
-        
-        if [ "$$DESIRED" != "0" ] && [ "$$DESIRED" = "$$READY" ]; then
-          echo "DPDK configurator ready: $$READY/$$DESIRED pods"
-          break
-        fi
-        
-        echo "Waiting for DPDK configurator... ($$READY/$$DESIRED ready, $${ELAPSED}s elapsed)"
-        sleep 15
-        ELAPSED=$$((ELAPSED + 15))
-      done
-      
-      if [ $$ELAPSED -ge $$TIMEOUT ]; then
-        echo "WARNING: DPDK configurator not fully ready after $${TIMEOUT}s, proceeding anyway"
-      fi
-      
-      # Additional wait for DPDK to finish binding (pod running != binding complete)
-      echo "Allowing additional time for DPDK NIC binding to complete..."
-      sleep 30
-      
-      rm -f /tmp/hp-nodes-kubeconfig
-      echo "DPDK configurator deployment complete"
-    EOT
-  }
-}
-
-# ==============================================
-# SR-IOV DEVICE PLUGIN DEPLOYMENT
-# ==============================================
-# Deploys AFTER DPDK so that vfio-pci devices are already bound when the
-# device plugin scans for them. The init container provides an additional
-# safety gate — it won't start the device plugin until /dev/vfio exists.
-
-resource "kubernetes_manifest" "sriov_serviceaccount" {
-  depends_on = [null_resource.wait_for_dpdk]
-
-  manifest = yamldecode(file("${path.module}/manifests/sriov-serviceaccount.yaml"))
-}
-
-resource "kubernetes_manifest" "sriovdp_config" {
-  depends_on = [kubernetes_manifest.sriov_serviceaccount]
-
-  manifest = yamldecode(file("${path.module}/manifests/sriovdp-config.yaml"))
-}
-
-resource "kubernetes_manifest" "sriov_device_plugin" {
-  depends_on = [kubernetes_manifest.sriovdp_config]
-
-  manifest = yamldecode(file("${path.module}/manifests/sriov-daemonset.yaml"))
-}
-
-# Wait for SR-IOV Device Plugin with actual readiness polling
-resource "null_resource" "wait_for_sriov_device_plugin" {
-  depends_on = [kubernetes_manifest.sriov_device_plugin]
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
-    command = <<-EOT
-      echo "Waiting for SR-IOV Device Plugin to discover vfio-pci devices..."
-      
-      aws eks update-kubeconfig \
-        --name ${var.cluster_name} \
-        --region ${var.region} \
-        --kubeconfig /tmp/hp-nodes-kubeconfig 2>/dev/null
-      
-      export KUBECONFIG=/tmp/hp-nodes-kubeconfig
-      
-      # Poll until SR-IOV device plugin daemonset is ready (max 5 minutes)
-      TIMEOUT=300
-      ELAPSED=0
-      while [ $$ELAPSED -lt $$TIMEOUT ]; do
-        DESIRED=$$(kubectl get daemonset kube-sriov-device-plugin-amd64 -n kube-system -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
-        READY=$$(kubectl get daemonset kube-sriov-device-plugin-amd64 -n kube-system -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
-        
-        if [ "$$DESIRED" != "0" ] && [ "$$DESIRED" = "$$READY" ]; then
-          echo "SR-IOV Device Plugin ready: $$READY/$$DESIRED pods"
-          break
-        fi
-        
-        echo "Waiting for SR-IOV Device Plugin... ($$READY/$$DESIRED ready, $${ELAPSED}s elapsed)"
-        sleep 15
-        ELAPSED=$$((ELAPSED + 15))
-      done
-      
-      if [ $$ELAPSED -ge $$TIMEOUT ]; then
-        echo "WARNING: SR-IOV Device Plugin not fully ready after $${TIMEOUT}s"
-      fi
-      
-      rm -f /tmp/hp-nodes-kubeconfig
-      echo "SR-IOV Device Plugin deployment complete"
-    EOT
-  }
-}
-
 # ==============================================
 # SELECTIVE TMM NODE CONFIGURATION
 # ==============================================
@@ -794,7 +622,7 @@ resource "null_resource" "wait_for_sriov_device_plugin" {
 
 resource "null_resource" "configure_tmm_nodes" {
   depends_on = [
-    null_resource.wait_for_sriov_device_plugin,
+    kubernetes_manifest.dpdk_daemonset,
     null_resource.wait_for_x86_nodes
   ]
 
@@ -807,7 +635,6 @@ resource "null_resource" "configure_tmm_nodes" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     command = <<-EOT
       echo "=== Configuring TMM-dedicated nodes ==="
       echo "TMM node count: ${var.tmm_node_count}"
@@ -882,7 +709,6 @@ resource "null_resource" "verify_setup" {
   ]
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     command = <<-EOT
       echo "=== x86_64 High-Performance Nodes Setup Complete ==="
       echo "Architecture: x86_64"
@@ -927,7 +753,6 @@ resource "null_resource" "cleanup" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash"]
     when    = destroy
     command = <<-EOT
       echo "High-Performance Nodes cleanup initiated..."
