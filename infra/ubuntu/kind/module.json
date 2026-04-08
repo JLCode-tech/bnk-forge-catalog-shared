@@ -1,0 +1,13 @@
+{
+  "name": "Ubuntu Kind Cluster",
+  "description": "Provisions a kind Kubernetes cluster on Ubuntu for BNK development/testing",
+  "category": "infra",
+  "platform": "ubuntu",
+  "engine": "opentofu",
+  "inputs": {
+    "providers": {
+      "required": ["null", "local"]
+    }
+  },
+  "outputs": ["kubeconfig_content", "cluster_name", "cluster_endpoint"]
+}

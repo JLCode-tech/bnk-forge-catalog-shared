@@ -1,0 +1,13 @@
+{
+  "name": "OpenShift Cluster Connection",
+  "description": "Validates and connects to an existing OpenShift cluster",
+  "category": "infra",
+  "platform": "ocp",
+  "engine": "opentofu",
+  "inputs": {
+    "providers": {
+      "required": ["null", "local"]
+    }
+  },
+  "outputs": ["kubeconfig_content", "cluster_name", "cluster_endpoint"]
+}
