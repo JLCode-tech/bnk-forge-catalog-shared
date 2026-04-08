@@ -1,6 +1,10 @@
 # infra/ubuntu/kind/main.tf
 # Provisions a kind cluster on Ubuntu for BNK development/testing
 
+locals {
+  kubeconfig_path = "${path.module}/work/kubeconfig"
+}
+
 # Generate kind config with the requested number of workers
 resource "local_file" "kind_config" {
   filename = "${path.module}/kind-config.yaml"
@@ -14,35 +18,29 @@ resource "local_file" "kind_config" {
   })
 }
 
-resource "null_resource" "kind_cluster" {
+resource "terraform_data" "kind_cluster" {
   depends_on = [local_file.kind_config]
 
-  triggers = {
+  input = {
     cluster_name       = var.cluster_name
     kubernetes_version = var.kubernetes_version
     worker_nodes       = var.worker_nodes
+    kubeconfig_path    = local.kubeconfig_path
   }
 
   provisioner "local-exec" {
     command = <<-EOT
-      mkdir -p ${path.module}/work && \
+      mkdir -p "$(dirname '${local.kubeconfig_path}')" && \
       kind create cluster \
         --name ${var.cluster_name} \
         --image kindest/node:v${var.kubernetes_version} \
         --config ${path.module}/kind-config.yaml \
-        --kubeconfig ${path.module}/work/kubeconfig
+        --kubeconfig ${local.kubeconfig_path}
     EOT
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "kind delete cluster --name ${self.triggers.cluster_name} || true"
+    command = "kind delete cluster --name ${self.input.cluster_name} || true"
   }
-}
-
-# Read the kubeconfig after kind creates it.
-# null_resource.kind_cluster must complete first (explicit dependency).
-data "local_file" "kubeconfig" {
-  depends_on = [null_resource.kind_cluster]
-  filename   = "${path.module}/work/kubeconfig"
 }

@@ -6,8 +6,8 @@
   "engine": "opentofu",
   "inputs": {
     "providers": {
-      "required": ["null", "local"]
+      "required": ["local"]
     }
   },
-  "outputs": ["kubeconfig_content", "cluster_name", "cluster_endpoint"]
+  "outputs": ["kubeconfig_path", "cluster_name", "cluster_endpoint"]
 }

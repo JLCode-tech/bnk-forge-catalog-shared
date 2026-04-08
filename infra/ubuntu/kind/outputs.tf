@@ -1,7 +1,6 @@
-output "kubeconfig_content" {
-  description = "Kubeconfig for the kind cluster"
-  value       = data.local_file.kubeconfig.content
-  sensitive   = true
+output "kubeconfig_path" {
+  description = "Path to the kind cluster kubeconfig file"
+  value       = local.kubeconfig_path
 }
 
 output "cluster_name" {
