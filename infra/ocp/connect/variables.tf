@@ -21,3 +21,9 @@ variable "oc_token" {
   sensitive   = true
   default     = ""
 }
+
+variable "skip_tls_verify" {
+  description = "Skip TLS certificate verification (use only for self-signed certs in dev/test)"
+  type        = bool
+  default     = false
+}

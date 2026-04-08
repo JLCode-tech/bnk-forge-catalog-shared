@@ -1,6 +1,6 @@
 output "kubeconfig_content" {
   description = "Kubeconfig for the kind cluster"
-  value       = local_file.kubeconfig.content
+  value       = data.local_file.kubeconfig.content
   sensitive   = true
 }
 
