@@ -1,6 +1,6 @@
 # bnk/cneinstance/versions.tf
-# Needs kubernetes + aws providers so BNK-Forge generates provider config
-# (kubectl uses kubeconfig derived from the kubernetes provider data)
+# Provider configuration is injected by BNK-Forge platform (bnk_forge_providers.tf)
+# Platform-agnostic: no cloud-specific provider requirements
 
 terraform {
   required_version = ">= 1.0.0"
@@ -9,10 +9,6 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.20.0"
-    }
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0.0"
     }
     local = {
       source  = "hashicorp/local"

@@ -1,6 +1,6 @@
 # k8s/cert-manager/versions.tf
 # Provider configuration is injected by BNK-Forge platform (bnk_forge_providers.tf)
-# aws is required so the platform injects EKS data sources for kubeconfig generation
+# Platform-agnostic: no cloud-specific provider requirements
 
 terraform {
   required_version = ">= 1.5.0"
@@ -13,10 +13,6 @@ terraform {
     helm = {
       source  = "hashicorp/helm"
       version = ">= 2.10.0"
-    }
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0.0"
     }
     null = {
       source  = "hashicorp/null"

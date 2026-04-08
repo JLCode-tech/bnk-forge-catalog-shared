@@ -17,35 +17,14 @@
 # =============================================================================
 # KUBECONFIG FOR KUBECTL
 # =============================================================================
+# Platform-agnostic kubeconfig for kubectl in local-exec provisioners.
+# local.forge_kubeconfig is injected by BNK-Forge via bnk_forge_providers.tf.
+# Falls back to var.forge_kubeconfig_content for standalone usage outside Forge.
 
 resource "local_file" "kubeconfig" {
   filename        = "${path.module}/work/kubeconfig"
   file_permission = "0600"
-  content = yamlencode({
-    apiVersion = "v1"
-    kind       = "Config"
-    clusters = [{
-      name = "cluster"
-      cluster = {
-        server                     = data.aws_eks_cluster.cluster.endpoint
-        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
-      }
-    }]
-    users = [{
-      name = "user"
-      user = {
-        token = data.aws_eks_cluster_auth.cluster.token
-      }
-    }]
-    contexts = [{
-      name = "default"
-      context = {
-        cluster = "cluster"
-        user    = "user"
-      }
-    }]
-    current-context = "default"
-  })
+  content         = try(local.forge_kubeconfig, var.forge_kubeconfig_content)
 }
 
 # =============================================================================

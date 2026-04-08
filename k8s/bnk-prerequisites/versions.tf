@@ -1,4 +1,5 @@
 # k8s/bnk-prerequisites/versions.tf
+# Platform-agnostic: no cloud-specific provider requirements
 
 terraform {
   required_version = ">= 1.0.0"
@@ -7,10 +8,6 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.20.0"
-    }
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0.0"
     }
     null = {
       source  = "hashicorp/null"

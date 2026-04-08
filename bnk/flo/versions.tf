@@ -1,6 +1,6 @@
 # bnk/flo/versions.tf
 # Provider configuration is injected by BNK-Forge platform (bnk_forge_providers.tf)
-# aws is required so the platform injects EKS data sources for kubeconfig generation
+# Platform-agnostic: no cloud-specific provider requirements
 
 terraform {
   required_version = ">= 1.3.0"
@@ -14,11 +14,6 @@ terraform {
     helm = {
       source  = "hashicorp/helm"
       version = ">= 2.9"
-    }
-
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0.0"
     }
 
     local = {

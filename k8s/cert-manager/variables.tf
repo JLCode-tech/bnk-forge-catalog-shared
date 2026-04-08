@@ -3,6 +3,17 @@
 # Per F5 BNK 2.2 GA: Use Jetstack cert-manager v1.16.1
 
 # =============================================================================
+# PLATFORM KUBECONFIG (injected by BNK-Forge or set manually)
+# =============================================================================
+
+variable "forge_kubeconfig_content" {
+  description = "Kubeconfig YAML content. Automatically injected by BNK-Forge for any platform (EKS, AKS, GKE, OCP, generic). Set manually for standalone usage."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# =============================================================================
 # CLUSTER CONFIGURATION
 # =============================================================================
 

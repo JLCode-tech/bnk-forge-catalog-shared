@@ -1,8 +1,8 @@
 # bnk/flo/main.tf
 # F5 Lifecycle Operator (FLO) Helm deployment
 #
-# Deploys FLO using helm_release (no shell-outs to AWS CLI).
-# Platform already injects kubernetes/helm provider config.
+# Deploys FLO using helm_release — platform-agnostic.
+# Kubernetes/Helm provider config is injected by BNK-Forge (bnk_forge_providers.tf).
 #
 # FLO manages the entire BNK control plane:
 # - CRDs (GatewayClass, Gateway, HTTPRoute, etc.)
@@ -14,39 +14,15 @@
 # =============================================================================
 # KUBECONFIG FOR KUBECTL
 # =============================================================================
-# Generate a kubeconfig file from the platform-injected EKS data sources
-# so kubectl works in local-exec provisioners (celery-worker container).
-# data.aws_eks_cluster.cluster and data.aws_eks_cluster_auth.cluster are
-# provided by BNK-Forge auto-injection (bnk_forge_providers.tf).
+# Platform-agnostic kubeconfig for kubectl in local-exec provisioners.
+# local.forge_kubeconfig is injected by BNK-Forge via bnk_forge_providers.tf
+# for any platform (EKS, AKS, GKE, OCP, generic).
+# Falls back to var.forge_kubeconfig_content for standalone usage outside Forge.
 
 resource "local_file" "kubeconfig" {
   filename        = "${path.module}/work/kubeconfig"
   file_permission = "0600"
-  content = yamlencode({
-    apiVersion = "v1"
-    kind       = "Config"
-    clusters = [{
-      name = "cluster"
-      cluster = {
-        server                     = data.aws_eks_cluster.cluster.endpoint
-        certificate-authority-data = data.aws_eks_cluster.cluster.certificate_authority[0].data
-      }
-    }]
-    users = [{
-      name = "user"
-      user = {
-        token = data.aws_eks_cluster_auth.cluster.token
-      }
-    }]
-    contexts = [{
-      name = "default"
-      context = {
-        cluster = "cluster"
-        user    = "user"
-      }
-    }]
-    current-context = "default"
-  })
+  content         = try(local.forge_kubeconfig, var.forge_kubeconfig_content)
 }
 
 # =============================================================================
