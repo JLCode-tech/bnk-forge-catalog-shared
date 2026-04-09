@@ -1,13 +1,25 @@
 {
   "name": "Ubuntu Kind Cluster",
-  "description": "Provisions a kind Kubernetes cluster on Ubuntu for BNK development/testing",
+  "description": "Bootstraps a remote Ubuntu host over SSH, installs Docker/kind/kubectl when needed, and creates a kind Kubernetes cluster for development/testing",
   "category": "infra",
   "platform": "ubuntu",
   "engine": "opentofu",
   "inputs": {
     "providers": {
       "required": ["local"]
+    },
+    "variables": {
+      "required": ["ssh_host", "ssh_private_key_path"],
+      "optional": [
+        "ssh_user",
+        "ssh_timeout",
+        "cluster_name",
+        "worker_nodes",
+        "kubernetes_version",
+        "kind_version",
+        "kubectl_version"
+      ]
     }
   },
-  "outputs": ["kubeconfig_path", "cluster_name", "cluster_endpoint"]
+  "outputs": ["kubeconfig_path", "cluster_name", "cluster_endpoint", "remote_kubeconfig_path", "remote_host"]
 }
