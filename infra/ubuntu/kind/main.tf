@@ -46,20 +46,18 @@ resource "terraform_data" "kind_cluster" {
   depends_on = [local_file.kind_config]
 
   triggers_replace = {
-    cluster_name       = var.cluster_name
-    kubernetes_version = var.kubernetes_version
-    worker_nodes       = tostring(var.worker_nodes)
-    ssh_host           = var.ssh_host
-    ssh_user           = var.ssh_user
-    kind_config_sha256 = sha256(local_file.kind_config.content)
-  }
-
-  connection {
-    type        = "ssh"
-    host        = var.ssh_host
-    user        = var.ssh_user
-    private_key = file(var.ssh_private_key_path)
-    timeout     = var.ssh_timeout
+    cluster_name           = var.cluster_name
+    kubernetes_version     = var.kubernetes_version
+    worker_nodes           = tostring(var.worker_nodes)
+    ssh_host               = var.ssh_host
+    ssh_user               = var.ssh_user
+    ssh_private_key_path   = var.ssh_private_key_path
+    ssh_timeout            = var.ssh_timeout
+    remote_workspace_dir   = local.remote_workspace_dir
+    remote_kubeconfig_dir  = local.remote_kubeconfig_dir
+    local_kubeconfig_path  = local.local_kubeconfig_path
+    local_kind_config_path = local.local_kind_config_path
+    kind_config_sha256     = sha256(local_file.kind_config.content)
   }
 
   provisioner "local-exec" {
@@ -67,11 +65,27 @@ resource "terraform_data" "kind_cluster" {
   }
 
   provisioner "file" {
+    connection {
+      type        = "ssh"
+      host        = var.ssh_host
+      user        = var.ssh_user
+      private_key = file(var.ssh_private_key_path)
+      timeout     = var.ssh_timeout
+    }
+
     source      = local_file.kind_config.filename
     destination = "${local.remote_workspace_dir}/kind-config.yaml"
   }
 
   provisioner "remote-exec" {
+    connection {
+      type        = "ssh"
+      host        = var.ssh_host
+      user        = var.ssh_user
+      private_key = file(var.ssh_private_key_path)
+      timeout     = var.ssh_timeout
+    }
+
     inline = [
       "set -euo pipefail",
       "export DEBIAN_FRONTEND=noninteractive",
@@ -103,15 +117,23 @@ resource "terraform_data" "kind_cluster" {
   provisioner "remote-exec" {
     when = destroy
 
+    connection {
+      type        = "ssh"
+      host        = self.triggers_replace.ssh_host
+      user        = self.triggers_replace.ssh_user
+      private_key = file(self.triggers_replace.ssh_private_key_path)
+      timeout     = self.triggers_replace.ssh_timeout
+    }
+
     inline = [
       "set -e",
       "if command -v kind >/dev/null 2>&1; then kind delete cluster --name '${self.triggers_replace.cluster_name}' || true; fi",
-      "rm -rf '${local.remote_workspace_dir}' '${local.remote_kubeconfig_dir}' || true",
+      "rm -rf '${self.triggers_replace.remote_workspace_dir}' '${self.triggers_replace.remote_kubeconfig_dir}' || true",
     ]
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "rm -f '${local.local_kubeconfig_path}' '${local.local_kind_config_path}' || true"
+    command = "rm -f '${self.triggers_replace.local_kubeconfig_path}' '${self.triggers_replace.local_kind_config_path}' || true"
   }
 }
