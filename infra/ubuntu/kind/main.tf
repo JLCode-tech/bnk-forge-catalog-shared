@@ -9,7 +9,10 @@ locals {
   kind_node_image        = "kindest/node:v${var.kubernetes_version}"
 }
 
-resource "terraform_data" "validate_remote_inputs" {
+resource "local_file" "remote_input_guard" {
+  filename = "${local.local_artifact_dir}/.remote-input-guard"
+  content  = "remote-inputs-validated"
+
   lifecycle {
     precondition {
       condition     = local.remote_enabled
@@ -29,7 +32,7 @@ resource "terraform_data" "validate_remote_inputs" {
 }
 
 resource "local_file" "kind_config" {
-  depends_on = [terraform_data.validate_remote_inputs]
+  depends_on = [local_file.remote_input_guard]
 
   filename = local.local_kind_config_path
   content = yamlencode({
