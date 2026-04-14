@@ -293,10 +293,11 @@ resource "aws_launch_template" "x86_high_perf_nodegroup" {
     })
   }
 
-  # Use original compact_userdata.sh with corrected variable names
+  # Use compact_userdata.sh with boothook for hugepages + explicit EKS bootstrap
   user_data = base64encode(templatefile("${path.module}/scripts/compact_userdata.sh", {
     s3_bucket_name   = aws_s3_bucket.dpdk_scripts.id
     region           = var.region
+    cluster_name     = var.cluster_name
     hugepages_2mi    = var.hugepages_2mi
     hugepages_1gi    = var.hugepages_1gi
     f5_bnk_enabled   = var.f5_bnk_enabled ? "true" : "false"

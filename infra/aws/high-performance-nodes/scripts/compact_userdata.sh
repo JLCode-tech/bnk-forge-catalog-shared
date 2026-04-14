@@ -6,8 +6,9 @@ Content-Type: text/cloud-boothook; charset="us-ascii"
 #!/bin/bash
 # CLOUD BOOTHOOK: Runs very early, before everything else.
 # Sets GRUB kernel params for hugepages AND creates the reboot service.
-# This is the ONLY custom user_data — no text/x-shellscript part.
-# EKS appends its bootstrap.sh after this, and it will run unmodified.
+# EKS managed node groups may not properly merge bootstrap.sh when
+# MIME multipart user_data is provided, so we explicitly call it in the
+# text/x-shellscript part below.
 
 exec >> /var/log/boothook-hugepages.log 2>&1
 
@@ -97,5 +98,23 @@ systemctl enable post-bootstrap-reboot.service
 
 touch "$STATE_DIR/grub_configured"
 echo "[$(date)] === Boothook complete. Reboot will happen after EKS bootstrap + 5min. ==="
+
+--==MYBOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+#!/bin/bash
+# EKS BOOTSTRAP: Explicitly call bootstrap.sh to join the cluster.
+# When using a custom launch template with MIME multipart user_data,
+# EKS managed node groups may not properly append the bootstrap script.
+# Calling it explicitly ensures the node always joins the cluster.
+
+set -o xtrace
+exec >> /var/log/eks-bootstrap.log 2>&1
+
+echo "[$(date)] Starting EKS bootstrap for cluster ${cluster_name}"
+
+# Bootstrap the node to join the EKS cluster
+/etc/eks/bootstrap.sh '${cluster_name}' --region '${region}'
+
+echo "[$(date)] EKS bootstrap completed"
 
 --==MYBOUNDARY==--
