@@ -334,7 +334,7 @@ resource "aws_eks_node_group" "x86_high_perf" {
     max_unavailable = 1
   }
 
-  # x86_64 labels — applied to ALL nodes in the group
+  # x86_64 labels -- applied to ALL nodes in the group
   labels = local.x86_combined_node_labels
 
   # NOTE: No taints at node group level.
