@@ -4,208 +4,98 @@ MIME-Version: 1.0
 --==MYBOUNDARY==
 Content-Type: text/cloud-boothook; charset="us-ascii"
 #!/bin/bash
-set -euo pipefail
-mkdir -p /var/lib/dpdk-setup/
-echo "PHASE_1_STARTED" > /var/lib/dpdk-setup/phase1.state
+# CLOUD BOOTHOOK: Runs very early, before everything else.
+# Sets GRUB kernel params for hugepages AND creates the reboot service.
+# This is the ONLY custom user_data — no text/x-shellscript part.
+# EKS appends its bootstrap.sh after this, and it will run unmodified.
 
---==MYBOUNDARY==
-Content-Type: text/x-shellscript; charset="us-ascii"
-#!/bin/bash
-set -euo pipefail
-
-# Config from Terraform
-S3_BUCKET="${s3_bucket_name}"
-REGION="${region}"
-HUGEPAGES_2MI="${hugepages_2mi}"
-HUGEPAGES_1GI="${hugepages_1gi}"
-F5_BNK_ENABLED="${f5_bnk_enabled}"
-F5_TMM_CPU_CORES="${f5_tmm_cpu_cores}"
-F5_NUMA_NODE="${f5_numa_node}"
+exec >> /var/log/boothook-hugepages.log 2>&1
 
 STATE_DIR="/var/lib/dpdk-setup"
-LOG_FILE="/var/log/dpdk-setup.log"
-CHECKPOINT_FILE="$$STATE_DIR/checkpoints"
+mkdir -p "$STATE_DIR"
 
-log() { echo "[$$(date '+%Y-%m-%d %H:%M:%S')] $$1" | tee -a "$$LOG_FILE"; }
-error_exit() { log "ERROR: $$1"; echo "FAILED: $$1" > "$$STATE_DIR/error.state"; exit 1; }
-checkpoint() { log "CHECKPOINT: $$1"; echo "$$1:$$(date +%s)" >> "$$CHECKPOINT_FILE"; }
-is_checkpoint_complete() { grep -q "^$$1:" "$$CHECKPOINT_FILE" 2>/dev/null; }
-retry_with_backoff() {
-    local a=1 d=1
-    while [ $$a -le 5 ]; do
-        "$$@" && return 0
-        [ $$a -eq 5 ] && error_exit "Failed after 5 attempts: $$*"
-        sleep $$d; d=$$((d*2)); a=$$((a+1))
-    done
-}
+# Skip if hugepages already active (post-reboot)
+if grep -q "hugepagesz=2M" /proc/cmdline 2>/dev/null; then
+    echo "[$(date)] Hugepages active in cmdline. Done."
+    touch "$STATE_DIR/hugepages_active"
+    exit 0
+fi
 
-get_metadata() {
-    local t=$$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-    curl -s -H "X-aws-ec2-metadata-token: $$t" "http://169.254.169.254/latest/$$1"
-}
-INSTANCE_ID=$$(get_metadata "meta-data/instance-id")
-log "DPDK setup - Instance: $$INSTANCE_ID"
+# Skip if already configured
+if [ -f "$STATE_DIR/grub_configured" ]; then
+    echo "[$(date)] GRUB already configured."
+    exit 0
+fi
 
-# PHASE 1: KERNEL PARAMETERS (3-layer: grub drop-in + sysfs + systemd)
-if ! is_checkpoint_complete "kernel_params"; then
-    log "Phase 1: Kernel parameters"
-    KP="default_hugepagesz=2M hugepagesz=2M hugepages=$$HUGEPAGES_2MI hugepagesz=1G hugepages=$$HUGEPAGES_1GI intel_iommu=on iommu=pt"
-    if [ "$$F5_BNK_ENABLED" = "true" ]; then
-        TC=$$(nproc)
-        [ $$TC -gt $$F5_TMM_CPU_CORES ] && KP="$$KP isolcpus=$${F5_TMM_CPU_CORES}-$$((TC-1)) nohz_full=$${F5_TMM_CPU_CORES}-$$((TC-1)) rcu_nocbs=$${F5_TMM_CPU_CORES}-$$((TC-1)) numa_balancing=disable"
-    fi
-    if grep -q "hugepagesz=2M" /proc/cmdline; then
-        NEEDS_REBOOT=false
-    else
-        NEEDS_REBOOT=true
-        mkdir -p /etc/default/grub.d
-        echo "GRUB_CMDLINE_LINUX=\"$$GRUB_CMDLINE_LINUX $$KP\"" > /etc/default/grub.d/99-dpdk-hugepages.cfg
-        cp /etc/default/grub /etc/default/grub.backup
-        grep -q "hugepagesz=2M" /etc/default/grub || sed -i "s/biosdevname=0/& $$KP/g" /etc/default/grub
-        grub2-mkconfig -o /boot/grub2/grub.cfg
-    fi
-    echo $$HUGEPAGES_2MI > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages 2>/dev/null || true
-    echo $$HUGEPAGES_1GI > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages 2>/dev/null || true
-    mkdir -p /mnt/huge-2m /mnt/huge-1g
-    mount -t hugetlbfs -o pagesize=2M nodev /mnt/huge-2m 2>/dev/null || true
-    mount -t hugetlbfs -o pagesize=1G nodev /mnt/huge-1g 2>/dev/null || true
-    echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-    echo never > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
-    cat << 'HP_SVC' > /usr/lib/systemd/system/dpdk-hugepages.service
-[Unit]
-Description=DPDK Hugepages
-DefaultDependencies=no
-Before=kubelet.service
-After=local-fs.target
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/dpdk-hugepages.sh
-[Install]
-WantedBy=multi-user.target
-HP_SVC
-    cat << HP_SCRIPT > /usr/local/bin/dpdk-hugepages.sh
-#!/bin/bash
-echo $$HUGEPAGES_2MI > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
-echo $$HUGEPAGES_1GI > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
+echo "[$(date)] === Configuring hugepages ==="
+
+# --- GRUB kernel params ---
+KP="default_hugepagesz=2M hugepagesz=2M hugepages=${hugepages_2mi} hugepagesz=1G hugepages=${hugepages_1gi} intel_iommu=on iommu=pt"
+
+if [ -f /etc/default/grub ]; then
+    cp /etc/default/grub /etc/default/grub.bak.hp
+    sed -i "s|^GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"$KP |" /etc/default/grub
+    grub2-mkconfig -o /boot/grub2/grub.cfg 2>/dev/null || true
+    echo "[$(date)] GRUB configured."
+fi
+
+# --- Runtime hugepages (best effort) ---
+echo ${hugepages_2mi} > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages 2>/dev/null || true
 mkdir -p /mnt/huge-2m /mnt/huge-1g
 mount -t hugetlbfs -o pagesize=2M nodev /mnt/huge-2m 2>/dev/null || true
 mount -t hugetlbfs -o pagesize=1G nodev /mnt/huge-1g 2>/dev/null || true
 echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-HP_SCRIPT
-    chmod +x /usr/local/bin/dpdk-hugepages.sh
-    systemctl enable dpdk-hugepages.service
-    checkpoint "kernel_params"
-fi
+echo never > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
 
-# PHASE 2: SYSTEM PACKAGES
-if ! is_checkpoint_complete "packages"; then
-    log "Phase 2: Packages"
-    retry_with_backoff yum update -y
-    retry_with_backoff yum install -y net-tools pciutils wget curl awscli kernel kernel-devel kernel-headers git gcc make python3 python3-pip numactl-devel libhugetlbfs-utils libpcap-devel
-    checkpoint "packages"
-fi
-
-# PHASE 3: NETWORK OPTIMIZATIONS
-if ! is_checkpoint_complete "network_opts"; then
-    log "Phase 3: Network optimizations"
-    cat << 'EOF' >> /etc/sysctl.conf
+# --- sysctl optimizations ---
+cat > /etc/sysctl.d/99-dpdk.conf << 'SYSCTL'
 net.ipv4.conf.default.rp_filter = 0
 net.ipv4.conf.all.rp_filter = 0
-net.ipv4.tcp_rmem = 187380 655360 6291456
-net.ipv4.udp_rmem_min = 1048576
-net.ipv4.udp_wmem_min = 1048576
-net.ipv6.conf.all.forwarding = 1
 net.core.rmem_max = 268435456
 net.core.wmem_max = 268435456
-net.core.rmem_default = 67108864
-net.core.wmem_default = 67108864
-EOF
-    sysctl -p
-    checkpoint "network_opts"
-fi
+SYSCTL
+sysctl --system 2>/dev/null || true
 
-# PHASE 4: DPDK CONTINUATION SERVICE
-if ! is_checkpoint_complete "dpdk_service"; then
-    log "Phase 4: DPDK continuation service"
-    retry_with_backoff aws s3 cp "s3://$$S3_BUCKET/dpdk-setup.sh" /usr/local/bin/dpdk-setup.sh --region "$$REGION"
-    chmod +x /usr/local/bin/dpdk-setup.sh
-    cat << 'DSVC' > /usr/lib/systemd/system/dpdk-continuation.service
+# --- Post-bootstrap reboot service ---
+# Creates a systemd service that waits for kubelet, then reboots ONCE.
+cat > /usr/local/bin/post-bootstrap-reboot.sh << 'REBOOT'
+#!/bin/bash
+exec >> /var/log/post-bootstrap-reboot.log 2>&1
+SENTINEL="/var/lib/dpdk-setup/reboot_completed"
+[ -f "$SENTINEL" ] && exit 0
+grep -q "hugepagesz=2M" /proc/cmdline && { touch "$SENTINEL"; exit 0; }
+[ ! -f "/var/lib/dpdk-setup/grub_configured" ] && exit 0
+echo "[$(date)] Waiting for kubelet..."
+for i in $(seq 1 120); do
+    systemctl is-active kubelet >/dev/null 2>&1 && break
+    sleep 5
+done
+echo "[$(date)] Kubelet active. Waiting 5 min for EKS to register node..."
+sleep 300
+echo "[$(date)] Rebooting for hugepages..."
+touch "$SENTINEL"
+sync
+reboot
+REBOOT
+chmod +x /usr/local/bin/post-bootstrap-reboot.sh
+
+cat > /etc/systemd/system/post-bootstrap-reboot.service << 'SVC'
 [Unit]
-Description=DPDK Setup Continuation
-After=network-online.target
-Wants=network-online.target
+Description=One-time reboot for hugepages activation
+After=kubelet.service
+Wants=kubelet.service
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/dpdk-continuation.sh
+ExecStart=/usr/local/bin/post-bootstrap-reboot.sh
 RemainAfterExit=yes
-TimeoutStartSec=1200
-Restart=on-failure
-RestartSec=30
+TimeoutStartSec=900
 [Install]
 WantedBy=multi-user.target
-DSVC
-    cat << CSCRIPT > /usr/local/bin/dpdk-continuation.sh
-#!/bin/bash
-set -euo pipefail
-shopt -s extglob
-log() { echo "[\$$(date '+%Y-%m-%d %H:%M:%S')] \$$1" | tee -a /var/log/dpdk-continuation.log; }
-log "Starting DPDK continuation"
-MW=600; WT=0; TGT=3
-while [ \$$WT -lt \$$MW ]; do
-    shopt -s nullglob; ei=(/sys/class/net/eth+([0-9])); IC=\$${#ei[@]}; shopt -u nullglob
-    [ \$$IC -ge \$$TGT ] && break
-    [ \$$WT -gt 300 ] && [ \$$IC -lt 2 ] && break
-    sleep 15; WT=\$$((WT+15))
-done
-/usr/local/bin/dpdk-setup.sh "$$HUGEPAGES_2MI" "$$HUGEPAGES_1GI" "$$REGION" "$$S3_BUCKET" "$$F5_BNK_ENABLED" "$$F5_TMM_CPU_CORES" "$$F5_NUMA_NODE"
-log "DPDK continuation completed"
-CSCRIPT
-    chmod +x /usr/local/bin/dpdk-continuation.sh
-    systemctl enable dpdk-continuation.service
-    checkpoint "dpdk_service"
-fi
+SVC
+systemctl daemon-reload
+systemctl enable post-bootstrap-reboot.service
 
-# PHASE 5: NODE CONFIGURATION
-if ! is_checkpoint_complete "node_config"; then
-    mkdir -p /etc/node-config
-    cat << NC > /etc/node-config/high-perf-config.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: node-config
-data:
-  hugepages_2mi: "$$HUGEPAGES_2MI"
-  hugepages_1gi: "$$HUGEPAGES_1GI"
-  f5_bnk_enabled: "$$F5_BNK_ENABLED"
-  s3_bucket: "$$S3_BUCKET"
-  region: "$$REGION"
-  dpdk_enabled: "true"
-  sriov_enabled: "true"
-NC
-    checkpoint "node_config"
-fi
-
-# PHASE 6: REBOOT OR CONTINUE
-if [ "$$NEEDS_REBOOT" = "true" ]; then
-    if ! is_checkpoint_complete "reboot_scheduled"; then
-        log "Scheduling reboot for kernel params"
-        cat << 'PRV' > /usr/local/bin/post-reboot-validation.sh
-#!/bin/bash
-echo "[$(date)] Post-reboot: starting DPDK continuation" >> /var/log/post-reboot.log
-systemctl start dpdk-continuation.service
-PRV
-        chmod +x /usr/local/bin/post-reboot-validation.sh
-        echo "/usr/local/bin/post-reboot-validation.sh" >> /etc/rc.d/rc.local
-        chmod +x /etc/rc.d/rc.local
-        systemctl enable rc-local
-        checkpoint "reboot_scheduled"
-        nohup bash -c 'sleep 60; reboot' &
-    fi
-else
-    log "No reboot needed, starting DPDK continuation"
-    systemctl start dpdk-continuation.service &
-fi
-log "DPDK userdata setup completed"
+touch "$STATE_DIR/grub_configured"
+echo "[$(date)] === Boothook complete. Reboot will happen after EKS bootstrap + 5min. ==="
 
 --==MYBOUNDARY==--
