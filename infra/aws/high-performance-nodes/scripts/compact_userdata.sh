@@ -145,20 +145,20 @@ RestartSec=30
 [Install]
 WantedBy=multi-user.target
 DSVC
-    cat << CSCRIPT > /usr/local/bin/dpdk-continuation.sh
+    cat << 'CSCRIPT' > /usr/local/bin/dpdk-continuation.sh
 #!/bin/bash
 set -euo pipefail
 shopt -s extglob
-log() { echo "[\$(date '+%Y-%m-%d %H:%M:%S')] \$1" | tee -a /var/log/dpdk-continuation.log; }
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/dpdk-continuation.log; }
 log "Starting DPDK continuation"
 MW=600; WT=0; TGT=3
-while [ \$WT -lt \$MW ]; do
-    shopt -s nullglob; ei=(/sys/class/net/eth+([0-9])); IC=\${#ei[@]}; shopt -u nullglob
-    [ \$IC -ge \$TGT ] && break
-    [ \$WT -gt 300 ] && [ \$IC -lt 2 ] && break
-    sleep 15; WT=\$((WT+15))
+while [ $WT -lt $MW ]; do
+    shopt -s nullglob; ei=(/sys/class/net/eth+([0-9])); IC=${#ei[@]}; shopt -u nullglob
+    [ $IC -ge $TGT ] && break
+    [ $WT -gt 300 ] && [ $IC -lt 2 ] && break
+    sleep 15; WT=$((WT+15))
 done
-/usr/local/bin/dpdk-setup.sh "\$HUGEPAGES_2MI" "\$HUGEPAGES_1GI" "\$REGION" "\$S3_BUCKET" "\$F5_BNK_ENABLED" "\$F5_TMM_CPU_CORES" "\$F5_NUMA_NODE"
+/usr/local/bin/dpdk-setup.sh "$HUGEPAGES_2MI" "$HUGEPAGES_1GI" "$REGION" "$S3_BUCKET" "$F5_BNK_ENABLED" "$F5_TMM_CPU_CORES" "$F5_NUMA_NODE"
 systemctl restart kubelet
 log "DPDK continuation completed"
 CSCRIPT
