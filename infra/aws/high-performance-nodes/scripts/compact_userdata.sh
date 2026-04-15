@@ -52,7 +52,7 @@ if ! is_checkpoint_complete "kernel_params"; then
     KP="default_hugepagesz=2M hugepagesz=2M hugepages=$HUGEPAGES_2MI hugepagesz=1G hugepages=$HUGEPAGES_1GI intel_iommu=on iommu=pt"
     if [ "$F5_BNK_ENABLED" = "true" ]; then
         TC=$(nproc)
-        [ $TC -gt $F5_TMM_CPU_CORES ] && KP="$KP isolcpus=${F5_TMM_CPU_CORES}-$((TC-1)) nohz_full=${F5_TMM_CPU_CORES}-$((TC-1)) rcu_nocbs=${F5_TMM_CPU_CORES}-$((TC-1)) numa_balancing=disable"
+        [ $TC -gt $F5_TMM_CPU_CORES ] && KP="$KP isolcpus=$F5_TMM_CPU_CORES-$((TC-1)) nohz_full=$F5_TMM_CPU_CORES-$((TC-1)) rcu_nocbs=$F5_TMM_CPU_CORES-$((TC-1)) numa_balancing=disable"
     fi
     if grep -q "hugepagesz=2M" /proc/cmdline; then
         NEEDS_REBOOT=false
@@ -153,7 +153,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/dpdk-continua
 log "Starting DPDK continuation"
 MW=600; WT=0; TGT=3
 while [ $WT -lt $MW ]; do
-    shopt -s nullglob; ei=(/sys/class/net/eth+([0-9])); IC=${#ei[@]}; shopt -u nullglob
+    shopt -s nullglob; ei=(/sys/class/net/eth+([0-9])); IC=$(ls /sys/class/net/ | grep -E '^eth[0-9]+$' | wc -l); shopt -u nullglob
     [ $IC -ge $TGT ] && break
     [ $WT -gt 300 ] && [ $IC -lt 2 ] && break
     sleep 15; WT=$((WT+15))
