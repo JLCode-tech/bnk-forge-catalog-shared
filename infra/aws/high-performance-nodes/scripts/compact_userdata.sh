@@ -35,9 +35,16 @@ KP="default_hugepagesz=2M hugepagesz=2M hugepages=${hugepages_2mi} hugepagesz=1G
 
 if [ -f /etc/default/grub ]; then
     cp /etc/default/grub /etc/default/grub.bak.hp
-    sed -i "s|^GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"$KP |" /etc/default/grub
+    # AL2 uses GRUB_CMDLINE_LINUX_DEFAULT, try both patterns
+    if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub; then
+        sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$KP |" /etc/default/grub
+    elif grep -q '^GRUB_CMDLINE_LINUX=' /etc/default/grub; then
+        sed -i "s|^GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"$KP |" /etc/default/grub
+    else
+        echo "GRUB_CMDLINE_LINUX_DEFAULT=\"$KP\"" >> /etc/default/grub
+    fi
     grub2-mkconfig -o /boot/grub2/grub.cfg 2>/dev/null || true
-    echo "[$(date)] GRUB configured."
+    echo "[$(date)] GRUB configured: $(grep GRUB_CMDLINE /etc/default/grub)"
 fi
 
 # --- Runtime hugepages (best effort) ---
@@ -116,5 +123,13 @@ echo "[$(date)] Starting EKS bootstrap for cluster ${cluster_name}"
 /etc/eks/bootstrap.sh '${cluster_name}' --region '${region}'
 
 echo "[$(date)] EKS bootstrap completed"
+
+# Start the post-bootstrap reboot service explicitly.
+# The boothook created and enabled it, but systemd may have already
+# passed multi-user.target before the service was registered.
+if [ -f /etc/systemd/system/post-bootstrap-reboot.service ]; then
+    echo "[$(date)] Starting post-bootstrap-reboot service..."
+    nohup bash -c 'sleep 10 && /usr/local/bin/post-bootstrap-reboot.sh' >> /var/log/post-bootstrap-reboot.log 2>&1 &
+fi
 
 --==MYBOUNDARY==--
