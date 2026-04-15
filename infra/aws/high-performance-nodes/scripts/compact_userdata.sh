@@ -59,7 +59,7 @@ if ! is_checkpoint_complete "kernel_params"; then
     else
         NEEDS_REBOOT=true
         mkdir -p /etc/default/grub.d
-        echo "GRUB_CMDLINE_LINUX=\"${GRUB_CMDLINE_LINUX:-} $KP\"" > /etc/default/grub.d/99-dpdk-hugepages.cfg
+        echo "GRUB_CMDLINE_LINUX=\"$${GRUB_CMDLINE_LINUX:-} $KP\"" > /etc/default/grub.d/99-dpdk-hugepages.cfg
         cp /etc/default/grub /etc/default/grub.backup
         grep -q "hugepagesz=2M" /etc/default/grub || sed -i "s/biosdevname=0/& $KP/g" /etc/default/grub
         grub2-mkconfig -o /boot/grub2/grub.cfg
