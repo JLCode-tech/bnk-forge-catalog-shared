@@ -1,8 +1,21 @@
-# Module Metadata Schema
+# Module Metadata Contract (v2alpha1)
 
-Each module should have a `module.json` file that describes its dependencies, inputs, and outputs for automated configuration generation.
+This repository is the canonical source of truth for **official BNK-Forge modules**.
 
-## Schema Definition
+Each module must define `module.json` using the contract below.
+
+## Contract goals
+
+- Keep module **source kind** separate from runtime execution details.
+- Keep **execution engine** separate from **deploy/render model**.
+- Represent **Helm** as first-class deploy model metadata.
+- Provide a predictable shape for BNK-Forge catalog sync.
+
+## Generic contract (`module-metadata/v2alpha1`)
+
+The generic contract is release-agnostic.
+
+## Required top-level sections
 
 ```json
 {
@@ -10,457 +23,104 @@ Each module should have a `module.json` file that describes its dependencies, in
     "name": "string",
     "path": "string",
     "version": "string",
-    "layer": "infrastructure|kubernetes|bnk-foundation|bnk-platform|bnk-gateway|bnk-application|bnk-policy",
-    "category": "network|security|compute|storage|platform|application",
+    "layer": "string",
+    "category": "string",
     "description": "string",
-    "cloud_specific": boolean,
-    "supported_platforms": ["aws", "azure", "gcp", "on-prem", "any"]
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
   },
-  "dependencies": {
-    "required": [
-      {
-        "module": "string (module path)",
-        "reason": "string (why it's required)"
-      }
-    ],
-    "optional": [
-      {
-        "module": "string (module path)",
-        "reason": "string (why it's recommended)",
-        "provides": "string (what capability it adds)"
-      }
-    ]
+  "source": {
+    "kind": "string",
+    "channel": "string"
   },
-  "inputs": {
-    "required": [
-      {
-        "name": "string",
-        "type": "string|number|boolean|list|map|object",
-        "description": "string",
-        "source": "user|module|auto",
-        "from_module": "string (if source=module)",
-        "from_output": "string (if source=module)",
-        "example": "any"
-      }
-    ],
-    "optional": [
-      {
-        "name": "string",
-        "type": "string|number|boolean|list|map|object",
-        "description": "string",
-        "default": "any",
-        "source": "user|module|auto",
-        "from_module": "string (optional)",
-        "from_output": "string (optional)"
-      }
-    ]
+  "execution": {
+    "engine": "string",
+    "deploy_models": ["terraform", "helm", "kubernetes_manifest", "shell"]
   },
-  "outputs": {
-    "key_outputs": [
-      {
-        "name": "string",
-        "type": "string",
-        "description": "string",
-        "used_by": ["string (list of modules that consume this)"],
-        "sensitive": boolean
-      }
-    ]
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
   },
-  "providers": {
-    "required": ["kubernetes", "helm", "aws", etc.],
-    "optional": []
-  },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local|consul"
-    }
-  },
+  "dependencies": { "required": [], "optional": [] },
+  "inputs": { "required": [], "optional": [] },
+  "outputs": { "key_outputs": [] },
+  "providers": { "required": [], "optional": [] },
   "deployment": {
-    "order": number,
-    "estimated_time": "string (e.g., '5 minutes')",
-    "requires_user_input": boolean,
-    "sensitive_inputs": ["string (list of sensitive variable names)"]
-  }
-}
-```
-
-## Example: infra/aws/vpc
-
-```json
-{
-  "module": {
-    "name": "AWS VPC",
-    "path": "infra/aws/vpc",
-    "version": "1.0.0",
-    "layer": "infrastructure",
-    "category": "network",
-    "description": "Creates AWS VPC with public and private subnets across 2 availability zones",
-    "cloud_specific": true,
-    "supported_platforms": ["aws"]
-  },
-  "dependencies": {
-    "required": [],
-    "optional": []
-  },
-  "inputs": {
-    "required": [
-      {
-        "name": "project_name",
-        "type": "string",
-        "description": "Name of the project - used for resource naming",
-        "source": "user",
-        "example": "my-bnk-project"
-      },
-      {
-        "name": "environment",
-        "type": "string",
-        "description": "Environment name (dev, staging, prod)",
-        "source": "user",
-        "example": "dev"
-      },
-      {
-        "name": "vpc_cidr",
-        "type": "string",
-        "description": "CIDR block for VPC",
-        "source": "user",
-        "example": "10.0.0.0/16"
-      },
-      {
-        "name": "public_subnet_cidr",
-        "type": "string",
-        "description": "CIDR block for public subnet (jumphost)",
-        "source": "user",
-        "example": "10.0.1.0/24"
-      },
-      {
-        "name": "private_external_subnet_a_cidr",
-        "type": "string",
-        "description": "CIDR block for private external subnet in AZ-A",
-        "source": "user",
-        "example": "10.0.10.0/24"
-      },
-      {
-        "name": "private_external_subnet_b_cidr",
-        "type": "string",
-        "description": "CIDR block for private external subnet in AZ-B",
-        "source": "user",
-        "example": "10.0.11.0/24"
-      },
-      {
-        "name": "private_internal_subnet_a_cidr",
-        "type": "string",
-        "description": "CIDR block for private internal subnet in AZ-A",
-        "source": "user",
-        "example": "10.0.20.0/24"
-      },
-      {
-        "name": "private_internal_subnet_b_cidr",
-        "type": "string",
-        "description": "CIDR block for private internal subnet in AZ-B",
-        "source": "user",
-        "example": "10.0.21.0/24"
-      }
-    ],
-    "optional": [
-      {
-        "name": "common_tags",
-        "type": "map(string)",
-        "description": "Common tags to apply to all resources",
-        "default": {},
-        "source": "user"
-      }
-    ]
-  },
-  "outputs": {
-    "key_outputs": [
-      {
-        "name": "vpc_id",
-        "type": "string",
-        "description": "ID of the VPC",
-        "used_by": ["infra/aws/security", "infra/aws/eks", "infra/aws/high-performance-nodes"],
-        "sensitive": false
-      },
-      {
-        "name": "vpc_cidr_block",
-        "type": "string",
-        "description": "CIDR block of the VPC",
-        "used_by": ["infra/aws/security"],
-        "sensitive": false
-      },
-      {
-        "name": "public_subnet_id",
-        "type": "string",
-        "description": "ID of the public subnet",
-        "used_by": ["infra/aws/security"],
-        "sensitive": false
-      },
-      {
-        "name": "private_external_subnet_ids",
-        "type": "list(string)",
-        "description": "IDs of the private external subnets",
-        "used_by": ["infra/aws/eks"],
-        "sensitive": false
-      },
-      {
-        "name": "private_internal_subnet_ids",
-        "type": "list(string)",
-        "description": "IDs of the private internal subnets",
-        "used_by": ["infra/aws/eks"],
-        "sensitive": false
-      },
-      {
-        "name": "availability_zones",
-        "type": "list(string)",
-        "description": "Availability zones used by the VPC",
-        "used_by": ["k8s/network-setup", "bnk/f5-controller"],
-        "sensitive": false
-      }
-    ]
-  },
-  "providers": {
-    "required": ["aws"],
-    "optional": []
-  },
-  "backend": {
-    "recommendations": {
-      "aws": "s3"
-    }
-  },
-  "deployment": {
-    "order": 1,
-    "estimated_time": "5 minutes",
-    "requires_user_input": true,
+    "order": 0,
+    "estimated_time": "string",
+    "requires_user_input": false,
     "sensitive_inputs": []
   }
 }
 ```
 
-## Example: bnk/flo
+## Field semantics
 
-FLO is the **central orchestrator** for BIG-IP Next for Kubernetes. When you apply a `BnkGatewayClass` CR, FLO automatically deploys all required components (CWC, DSSM, TMM, F5 Ingress, Fluentd, CRDs, etc.).
+### `source`
 
-```json
-{
-  "module": {
-    "name": "F5 Lifecycle Operator (FLO)",
-    "path": "bnk/flo",
-    "version": "1.0.0",
-    "layer": "bnk-platform",
-    "category": "platform",
-    "description": "Deploys F5 Lifecycle Operator - the central orchestrator that manages all BNK components",
-    "cloud_specific": false,
-    "supported_platforms": ["any"]
-  },
-  "dependencies": {
-    "required": [
-      {
-        "module": "bnk/far-setup",
-        "reason": "Provides F5 registry authentication for pulling BNK images"
-      },
-      {
-        "module": "k8s/cert-manager",
-        "reason": "Required for webhook certificates and CRD conversion"
-      }
-    ],
-    "optional": [
-      {
-        "module": "k8s/network-setup",
-        "reason": "Provides Multus network attachments for TMM pods",
-        "provides": "Multi-homing network support for external/internal traffic separation"
-      }
-    ]
-  },
-  "inputs": {
-    "required": [
-      {
-        "name": "cluster_name",
-        "type": "string",
-        "description": "Name of the Kubernetes cluster",
-        "source": "module",
-        "from_module": "infra/aws/eks",
-        "from_output": "cluster_name",
-        "example": "my-eks-cluster"
-      },
-      {
-        "name": "flo_namespace",
-        "type": "string",
-        "description": "Namespace for FLO deployment",
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "spk_namespace",
-        "example": "f5-spk"
-      },
-      {
-        "name": "flo_version",
-        "type": "string",
-        "description": "FLO Helm chart version",
-        "source": "auto",
-        "example": "2.1.0"
-      },
-      {
-        "name": "far_secret_name",
-        "type": "string",
-        "description": "Name of the FAR registry secret",
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "far_secret_name",
-        "example": "far-secret"
-      },
-      {
-        "name": "far_setup_complete",
-        "type": "boolean",
-        "description": "Dependency flag for FAR setup",
-        "source": "module",
-        "from_module": "bnk/far-setup",
-        "from_output": "setup_complete"
-      },
-      {
-        "name": "cert_manager_ready",
-        "type": "boolean",
-        "description": "Dependency flag for cert-manager",
-        "source": "module",
-        "from_module": "k8s/cert-manager",
-        "from_output": "cert_manager_ready"
-      },
-      {
-        "name": "license_mode",
-        "type": "string",
-        "description": "FLO licensing mode (connected|disconnected)",
-        "source": "user",
-        "example": "connected"
-      }
-    ],
-    "optional": [
-      {
-        "name": "enable_ipam_operator",
-        "type": "boolean",
-        "description": "Enable F5 IPAM operator for automatic IP assignment",
-        "default": false,
-        "source": "user"
-      },
-      {
-        "name": "jwt_token",
-        "type": "string",
-        "description": "JWT token for connected licensing mode",
-        "source": "user",
-        "sensitive": true
-      }
-    ]
-  },
-  "outputs": {
-    "key_outputs": [
-      {
-        "name": "flo_ready",
-        "type": "boolean",
-        "description": "Flag indicating FLO is ready for dependent modules",
-        "used_by": [
-          "bnk/bnk-gatewayclass",
-          "bnk/gateway",
-          "bnk/routes",
-          "bnk/bnk-secpolicy",
-          "bnk/bnk-netpolicy"
-        ],
-        "sensitive": false
-      },
-      {
-        "name": "flo_namespace",
-        "type": "string",
-        "description": "Namespace where FLO is deployed",
-        "used_by": ["bnk/bnk-gatewayclass"],
-        "sensitive": false
-      },
-      {
-        "name": "crds_installed",
-        "type": "boolean",
-        "description": "Flag indicating CRDs are installed by FLO (FLO manages all CRD installation)",
-        "used_by": ["bnk/bnk-gatewayclass", "bnk/gateway", "bnk/routes"],
-        "sensitive": false
-      }
-    ]
-  },
-  "flo_auto_deploys": {
-    "note": "When BnkGatewayClass CR is applied, FLO automatically deploys these components",
-    "components": [
-      "CWC (Cluster Wide Controller)",
-      "DSSM (Distributed Session State Manager)",
-      "TMM (Traffic Management Microkernel)",
-      "F5 Ingress",
-      "Fluentd (logging)",
-      "All CRDs (common, service-proxy, deprecated)",
-      "Observer",
-      "IPAM Controller",
-      "RabbitMQ",
-      "OTEL Collector",
-      "CRD Installer",
-      "Node Labeler"
-    ]
-  },
-  "providers": {
-    "required": ["kubernetes", "helm"],
-    "optional": []
-  },
-  "backend": {
-    "recommendations": {
-      "aws": "s3",
-      "azure": "azurerm",
-      "gcp": "gcs",
-      "on-prem": "local"
-    }
-  },
-  "deployment": {
-    "order": 50,
-    "estimated_time": "3 minutes",
-    "requires_user_input": true,
-    "sensitive_inputs": ["jwt_token"]
-  }
-}
+- `kind`: module provenance/classification (example: `official`).
+- `channel`: source channel/stream (example: `release/2.2`).
+
+### `execution`
+
+- `engine`: orchestration/runtime engine (example: `opentofu`).
+- `deploy_models`: module behaviors rendered/executed by the engine.
+  - Allowed values in this slice: `terraform`, `helm`, `kubernetes_manifest`, `shell`
+  - `helm` is first-class and must be present where Helm is part of module execution.
+
+### `contract`
+
+- `metadata_version`: explicit schema contract version for sync consumers.
+
+### Input source enum (`inputs.required[]` / `inputs.optional[]`)
+
+- `user` — value is user-provided
+- `module` — value comes from another module output
+- `auto` — value auto-derived by runtime or module logic
+- `project_secret` — value comes from secure project secret storage
+
+`project_secret` is a first-class input source in this contract and is validated.
+
+## Release-specific baseline assertions (`release/2.2`)
+
+Release-specific expectations are declared in:
+
+- `catalog/releases/release-2.2-official.json`
+
+The release manifest defines:
+
+- release channel/source-kind/execution-engine defaults for the baseline
+- every official `bnk/` and `k8s/` module in scope
+- explicit module state: `active`, `legacy`, or `deprecated`
+
+No official module is allowed to silently fall back outside this manifest.
+
+- `active`: must satisfy generic contract + match release assertions
+- `legacy`: intentionally not yet migrated; must include `reason`
+- `deprecated`: intentionally retired/replaced; must include `reason`
+
+## Initial active migration scope (implemented in this slice)
+
+The following modules are upgraded to this contract:
+
+- `k8s/bnk-prerequisites`
+- `k8s/cert-manager`
+- `k8s/network-setup`
+- `bnk/flo`
+- `bnk/cneinstance`
+- `bnk/bnk-gatewayclass`
+
+## Validation
+
+Run:
+
+```bash
+python3 scripts/validate_module_metadata.py
 ```
 
-## Key Architecture Note
+The validator checks:
 
-As of BIG-IP Next for Kubernetes v2.1.0, the following modules are **archived** because FLO manages them automatically:
-- `bnk/cwc` - FLO auto-deploys
-- `bnk/dssm` - FLO auto-deploys
-- `bnk/fluentd` - FLO auto-deploys
-- `bnk/f5-controller` - FLO auto-deploys (as F5 Ingress)
-- `bnk/crds/*` - FLO manages all CRD installation
-
-See `archived/README.md` for details.
-
-## Input Source Types
-
-### `source: "user"`
-User must provide this value. Will appear in variables.tfvars template with example/default.
-
-### `source: "module"`
-Value comes from another module's output. Will be auto-wired in root.hcl using `dependency` blocks.
-
-### `source: "auto"`
-Value is automatically determined (e.g., from far-setup manifest parsing, data sources, etc.). No user input needed.
-
-## Usage in Code Generation
-
-When generating root.hcl:
-
-1. **Parse module.json** for selected modules
-2. **Resolve dependencies** (required + optional user selects)
-3. **Build dependency tree** ensuring correct order
-4. **Generate terraform blocks** for each module with proper `dependency` references
-5. **Generate variables.tfvars** with all `source: "user"` inputs
-6. **Generate backend.hcl** based on platform selection
-
-## File Location
-
-Each module should have:
-```
-module-name/
-  ├── main.tf
-  ├── variables.tf
-  ├── outputs.tf
-  ├── versions.tf
-  ├── README.md
-  └── module.json  ← Metadata file
-```
+- generic contract structure for active official modules
+- input source enum validity (`user|module|auto|project_secret`)
+- release manifest integrity and explicit module-state classification
+- release-specific assertions for active modules (source/channel/engine/deploy-model alignment)
+- completeness: all official `bnk/` and `k8s/` modules must appear in release manifest
