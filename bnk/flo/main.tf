@@ -95,12 +95,64 @@ resource "null_resource" "adopt_flo_crds" {
   }
 }
 
+resource "null_resource" "cleanup_orphaned_flo_release" {
+  depends_on = [null_resource.adopt_flo_crds]
+
+  triggers = {
+    flo_namespace = var.flo_namespace
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      KC="${local.kubectl}"
+      echo "=== Checking for orphaned FLO Helm release ==="
+
+      # Check if a failed helm release secret exists
+      FAILED_SECRETS=$($KC get secrets -n ${var.flo_namespace} \
+        -l "owner=helm,name=flo,status=failed" \
+        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+
+      if [ -z "$FAILED_SECRETS" ]; then
+        echo "No orphaned FLO release found — proceeding"
+        exit 0
+      fi
+
+      echo "Found orphaned FLO release secrets: $FAILED_SECRETS"
+      echo "Cleaning up orphaned release..."
+
+      # Delete all helm release secrets for flo (failed or pending-install)
+      $KC delete secrets -n ${var.flo_namespace} \
+        -l "owner=helm,name=flo" 2>/dev/null || true
+
+      # Delete deployment/resources left behind
+      $KC delete deployment -n ${var.flo_namespace} \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete service -n ${var.flo_namespace} \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete serviceaccount -n ${var.flo_namespace} \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete configmap -n ${var.flo_namespace} \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete clusterrole \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete clusterrolebinding \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete role -n ${var.flo_namespace} \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+      $KC delete rolebinding -n ${var.flo_namespace} \
+        -l "app.kubernetes.io/instance=flo" --ignore-not-found=true 2>/dev/null || true
+
+      echo "Orphaned FLO release cleaned up successfully"
+    EOT
+  }
+}
+
 # =============================================================================
 # F5 LIFECYCLE OPERATOR HELM RELEASE
 # =============================================================================
 
 resource "helm_release" "flo" {
-  depends_on = [null_resource.adopt_flo_crds]
+  depends_on = [null_resource.adopt_flo_crds, null_resource.cleanup_orphaned_flo_release]
 
   name       = "flo"
   repository = "oci://repo.f5.com/charts"
