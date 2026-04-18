@@ -66,6 +66,9 @@ locals {
 resource "null_resource" "adopt_flo_crds" {
   triggers = {
     flo_namespace = var.flo_namespace
+    # Run every apply — CRDs may have stale ownership annotations from a
+    # prior release/namespace. The script is idempotent (no-op if no CRDs).
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
@@ -100,6 +103,9 @@ resource "null_resource" "cleanup_orphaned_flo_release" {
 
   triggers = {
     flo_namespace = var.flo_namespace
+    # Run every apply — orphaned releases can appear at any time after a
+    # failed deploy. The script is already idempotent (check-first pattern).
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
@@ -148,11 +154,52 @@ resource "null_resource" "cleanup_orphaned_flo_release" {
 }
 
 # =============================================================================
+# VERIFY CERT-MANAGER WEBHOOK BEFORE FLO INSTALL
+# =============================================================================
+# FLO's Helm chart creates cert-manager Certificate CRDs during install.
+# If the cert-manager webhook is not fully operational (TLS not bootstrapped,
+# CA bundle not injected, pods restarting), the install fails with:
+#   "failed calling webhook webhook.cert-manager.io"
+# This explicit check catches the problem BEFORE the 10-minute Helm timeout.
+
+resource "null_resource" "verify_cert_manager_webhook" {
+  depends_on = [null_resource.cleanup_orphaned_flo_release]
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      KC="${local.kubectl}"
+      echo "=== Verifying cert-manager webhook is operational ==="
+
+      TIMEOUT=120
+      ELAPSED=0
+      while [ $ELAPSED -lt $TIMEOUT ]; do
+        # Probe the cert-manager API — if the webhook is down, this fails
+        if $KC get clusterissuers >/dev/null 2>&1; then
+          echo "cert-manager webhook is responding — OK"
+          exit 0
+        fi
+        echo "  cert-manager webhook not ready ($${ELAPSED}s)..."
+        sleep 10
+        ELAPSED=$((ELAPSED + 10))
+      done
+
+      echo "ERROR: cert-manager webhook not responding after $${TIMEOUT}s"
+      echo "Check cert-manager pods: $KC get pods -n cert-manager"
+      exit 1
+    EOT
+  }
+}
+
+# =============================================================================
 # F5 LIFECYCLE OPERATOR HELM RELEASE
 # =============================================================================
 
 resource "helm_release" "flo" {
-  depends_on = [null_resource.adopt_flo_crds, null_resource.cleanup_orphaned_flo_release]
+  depends_on = [null_resource.adopt_flo_crds, null_resource.cleanup_orphaned_flo_release, null_resource.verify_cert_manager_webhook]
 
   name       = "flo"
   repository = "oci://repo.f5.com/charts"
@@ -222,6 +269,12 @@ resource "helm_release" "flo" {
 
 resource "null_resource" "apply_cpcl_key" {
   depends_on = [helm_release.flo]
+
+  triggers = {
+    # Run every apply — CPCL key ConfigMap can be overwritten by Helm upgrade
+    # or deleted out-of-band. The script is idempotent (kubectl apply).
+    always_run = timestamp()
+  }
 
   provisioner "local-exec" {
     command = <<-EOT

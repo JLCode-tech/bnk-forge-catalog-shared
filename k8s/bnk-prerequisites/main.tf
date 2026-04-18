@@ -29,18 +29,40 @@ resource "local_file" "kubeconfig" {
 
 locals {
   kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
-  # Docker auth for FAR: _json_key_base64:<base64 key content>
-  docker_auth = base64encode("_json_key_base64:${var.cne_pull_secret}")
 
-  # Docker config JSON for all pull secrets
-  docker_config_json = jsonencode({
+  # ---------------------------------------------------------------------------
+  # FAR Docker Auth — handles BOTH credential formats
+  # ---------------------------------------------------------------------------
+  # The cne_pull_secret project secret can be provided in two formats:
+  #
+  # Format A (bare service account key):
+  #   A base64-encoded JSON service account key file from F5.
+  #   → We construct dockerconfigjson: {"auths":{"repo.f5.com":{"auth":base64("_json_key_base64:<key>")}}}
+  #
+  # Format B (pre-built dockerconfigjson):
+  #   A base64-encoded dockerconfigjson that already contains {"auths":{"repo.f5.com":{"auth":"..."}}}
+  #   → We base64-decode the outer wrapper and use it directly as .dockerconfigjson.
+  #
+  # Detection: base64-decode the value; if it parses as JSON with an "auths" key,
+  # it's Format B. Otherwise, it's Format A.
+  # ---------------------------------------------------------------------------
+
+  # Try to base64-decode and parse as JSON to detect format
+  _decoded_secret = try(base64decode(var.cne_pull_secret), "")
+  _is_dockerconfig = try(
+    lookup(jsondecode(local._decoded_secret), "auths", null) != null,
+    false
+  )
+
+  # Format B: the decoded value IS the dockerconfigjson — use it directly
+  # Format A: construct dockerconfigjson from the bare key
+  docker_config_json = local._is_dockerconfig ? local._decoded_secret : jsonencode({
     auths = {
       "repo.f5.com" = {
-        auth = local.docker_auth
+        auth = base64encode("_json_key_base64:${var.cne_pull_secret}")
       }
     }
   })
-
 }
 
 # =============================================================================

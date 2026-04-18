@@ -239,6 +239,10 @@ resource "null_resource" "cneinstance" {
     name          = var.instance_name
     namespace     = var.instance_namespace
     kubeconfig    = local_file.kubeconfig.filename
+    # Run every apply — if the CNEInstance CR is deleted out-of-band (cluster
+    # disruption, manual cleanup, bnk_cleanup destroy), manifest_hash won't
+    # change and Terraform won't detect the drift. kubectl apply is idempotent.
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
@@ -266,8 +270,8 @@ resource "null_resource" "cneinstance" {
       echo "=== Deleting CNEInstance ${self.triggers.name} ==="
       kubectl --kubeconfig ${self.triggers.kubeconfig} delete cneinstance ${self.triggers.name} \
         -n ${self.triggers.namespace} \
-        --timeout=120s 2>/dev/null || \
-      echo "CNEInstance ${self.triggers.name} already deleted or not found"
+        --timeout=300s 2>/dev/null || \
+      echo "CNEInstance ${self.triggers.name} already deleted or timed out"
     EOT
   }
 

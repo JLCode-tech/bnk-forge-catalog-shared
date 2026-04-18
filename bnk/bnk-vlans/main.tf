@@ -96,6 +96,9 @@ resource "null_resource" "vlans" {
     manifest_hash = sha256(local_file.vlan_manifests.content)
     namespace     = var.namespace
     kubeconfig    = local_file.kubeconfig.filename
+    # Run every apply — if VLAN CRs are deleted out-of-band, manifest_hash
+    # won't change and Terraform misses the drift. kubectl apply is idempotent.
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
@@ -135,7 +138,7 @@ resource "null_resource" "vlans" {
     when    = destroy
     command = <<-EOT
       echo "=== Deleting F5SPKVlan CRs ==="
-      kubectl --kubeconfig ${self.triggers.kubeconfig} delete f5spkvlan external internal \
+      kubectl --kubeconfig ${self.triggers.kubeconfig} delete f5-spk-vlans.k8s.f5net.com external internal \
         -n ${self.triggers.namespace} \
         --timeout=60s 2>/dev/null || \
       echo "VLAN CRs already deleted or not found"

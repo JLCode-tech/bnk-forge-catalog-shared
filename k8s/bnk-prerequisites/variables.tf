@@ -17,7 +17,12 @@ variable "forge_kubeconfig_content" {
 # =============================================================================
 
 variable "cne_pull_secret" {
-  description = "Base64-encoded F5 FAR service account key JSON content. Injected as a project secret."
+  description = <<-EOT
+    F5 FAR registry credentials. Accepts TWO formats:
+    Format A: Base64-encoded JSON service account key from F5 (bare key).
+    Format B: Base64-encoded dockerconfigjson ({"auths":{"repo.f5.com":{"auth":"..."}}}).
+    Both are auto-detected. Injected as a project secret.
+  EOT
   type        = string
   sensitive   = true
 

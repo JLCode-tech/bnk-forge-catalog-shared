@@ -36,12 +36,42 @@ if ! command -v helm >/dev/null 2>&1; then
 fi
 
 # Authenticate to FAR using service account key if provided
-# Per F5 docs: cat <service_account_key_base64 file> | helm registry login -u _json_key_base64 --password-stdin https://repo.f5.com
-# The service account key file is already base64 encoded from F5
+# Supports TWO formats for cne_pull_secret:
+#   Format A (bare key): base64-encoded JSON service account key
+#     → helm registry login -u _json_key_base64 --password-stdin
+#   Format B (dockerconfigjson): base64-encoded {"auths":{"repo.f5.com":{"auth":"..."}}}
+#     → extract username:password from inner auth field, then helm registry login
 if [ -n "${SERVICE_ACCOUNT_KEY_FILE:-}" ] && [ -f "$SERVICE_ACCOUNT_KEY_FILE" ]; then
-    log "Authenticating to FAR using service account key: $SERVICE_ACCOUNT_KEY_FILE"
-    if ! cat "$SERVICE_ACCOUNT_KEY_FILE" | helm registry login repo.f5.com -u _json_key_base64 --password-stdin >/dev/null 2>&1; then
-        error_exit "Failed to authenticate to FAR. Check service account key file: $SERVICE_ACCOUNT_KEY_FILE"
+    RAW_CONTENT=$(cat "$SERVICE_ACCOUNT_KEY_FILE")
+
+    # Detect format: try base64-decode then check for "auths" key
+    DECODED_CONTENT=$(echo "$RAW_CONTENT" | base64 -d 2>/dev/null || echo "")
+    if echo "$DECODED_CONTENT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'auths' in d" 2>/dev/null; then
+        log "Detected dockerconfigjson format — extracting credentials"
+        # Extract the auth field from the dockerconfigjson
+        INNER_AUTH=$(echo "$DECODED_CONTENT" | python3 -c "
+import sys, json, base64
+d = json.load(sys.stdin)
+auth_b64 = d['auths']['repo.f5.com']['auth']
+decoded = base64.b64decode(auth_b64).decode('utf-8')
+# Split on first colon only — password may contain colons (JSON key)
+idx = decoded.index(':')
+username = decoded[:idx]
+password = decoded[idx+1:]
+print(f'{username}\n{password}')
+")
+        HELM_USER=$(echo "$INNER_AUTH" | head -1)
+        HELM_PASS=$(echo "$INNER_AUTH" | tail -n +2)
+        log "Authenticating to FAR as user: $HELM_USER"
+        if ! echo "$HELM_PASS" | helm registry login repo.f5.com -u "$HELM_USER" --password-stdin >/dev/null 2>&1; then
+            error_exit "Failed to authenticate to FAR (dockerconfigjson format). Check credentials."
+        fi
+    else
+        # Format A: bare service account key — use directly
+        log "Authenticating to FAR using bare service account key"
+        if ! echo "$RAW_CONTENT" | helm registry login repo.f5.com -u _json_key_base64 --password-stdin >/dev/null 2>&1; then
+            error_exit "Failed to authenticate to FAR. Check service account key file: $SERVICE_ACCOUNT_KEY_FILE"
+        fi
     fi
     log "FAR authentication successful"
 else
