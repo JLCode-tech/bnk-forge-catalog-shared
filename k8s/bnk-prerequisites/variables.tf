@@ -51,7 +51,7 @@ variable "utils_namespace" {
 variable "gateway_namespace" {
   description = "Namespace for Gateway API resources (Gateway, HTTPRoute, etc.)"
   type        = string
-  default     = "gateway-ns"
+  default     = "bnk-gw"
 }
 
 # =============================================================================
@@ -59,9 +59,9 @@ variable "gateway_namespace" {
 # =============================================================================
 
 variable "bnk_manifest_version" {
-  description = "BNK manifest version to download from FAR (e.g., 2.2.0-3.2226.0-0.0.385)"
+  description = "BNK manifest version to download from FAR (e.g., 2.2.1-3.2226.0-0.0.511)"
   type        = string
-  default     = "2.2.0-3.2226.0-0.0.385"
+  default     = "2.2.1-3.2226.0-0.0.511"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-", var.bnk_manifest_version))

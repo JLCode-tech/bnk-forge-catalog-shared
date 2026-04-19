@@ -6,11 +6,11 @@ locals {
     apiVersion = "v1"
     kind       = "Config"
     clusters = [{ name = "ocp", cluster = {
-      server                     = var.api_server_url
+      server                   = var.api_server_url
       insecure-skip-tls-verify = var.skip_tls_verify
-    }}]
-    users    = [{ name = "ocp-user", user = { token = var.oc_token }}]
-    contexts = [{ name = "default", context = { cluster = "ocp", user = "ocp-user" }}]
+    } }]
+    users           = [{ name = "ocp-user", user = { token = var.oc_token } }]
+    contexts        = [{ name = "default", context = { cluster = "ocp", user = "ocp-user" } }]
     current-context = "default"
   })
 }
