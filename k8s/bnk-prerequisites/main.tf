@@ -56,19 +56,30 @@ locals {
 
   # Format B fix: pre-built secrets may use "_json_key:" prefix but F5 FLO
   # requires "_json_key_base64:" per F5 docs. Detect and rebuild if needed.
-  _format_b_needs_fix = local._is_dockerconfig ? try(
-    !startswith(
-      base64decode(jsondecode(local._decoded_secret)["auths"]["repo.f5.com"]["auth"]),
-      "_json_key_base64:"
-    ),
-    false
+  # The inner auth field decodes to "username:password" — extract the password.
+  _format_b_decoded_auth = local._is_dockerconfig ? try(
+    base64decode(jsondecode(local._decoded_secret)["auths"]["repo.f5.com"]["auth"]),
+    ""
+  ) : ""
+
+  _format_b_needs_fix = local._is_dockerconfig ? (
+    local._format_b_decoded_auth != "" &&
+    !startswith(local._format_b_decoded_auth, "_json_key_base64:")
   ) : false
 
-  # If Format B has wrong prefix, rebuild with correct _json_key_base64 prefix
+  # Extract the password portion (everything after first ":") from the decoded auth
+  # e.g. "_json_key:{...json...}" → "{...json...}"
+  _format_b_password = local._format_b_needs_fix ? (
+    length(regexall(":", local._format_b_decoded_auth)) > 0
+    ? join(":", slice(split(":", local._format_b_decoded_auth), 1, length(split(":", local._format_b_decoded_auth))))
+    : local._format_b_decoded_auth
+  ) : ""
+
+  # Rebuild with correct _json_key_base64 prefix using extracted password
   _fixed_format_b = local._format_b_needs_fix ? jsonencode({
     auths = {
       "repo.f5.com" = {
-        auth = base64encode("_json_key_base64:${var.cne_pull_secret}")
+        auth = base64encode("_json_key_base64:${local._format_b_password}")
       }
     }
   }) : local._decoded_secret
