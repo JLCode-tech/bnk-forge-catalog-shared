@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: ${observability_namespace}
+  labels:
+    app.kubernetes.io/name: fluentbit-hsl
+    app.kubernetes.io/part-of: bnk-demo
+    app.kubernetes.io/managed-by: bnk-forge
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        1
+        Daemon       off
+        Log_Level    info
+
+    [INPUT]
+        Name         udp
+        Tag          hsl.demo
+        Listen       0.0.0.0
+        Port         ${fluentbit_hsl_port}
+
+    [FILTER]
+        Name         record_modifier
+        Match        hsl.*
+        Record       source hsl
+
+    [OUTPUT]
+        Name         loki
+        Match        *
+        Host         loki
+        Port         3100
+        labels       job=hsl, app=bnk, mode=genai
+        label_keys   $source,$model,$endpoint,$status,$virtual_server
+        line_format  json

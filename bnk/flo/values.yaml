@@ -1,0 +1,33 @@
+global:
+  imagePullSecrets:
+    - name: ${far_secret_name}
+  certmgr:
+    clusterIssuer: ${cluster_issuer_name}
+
+image:
+  repository: repo.f5.com/images
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ${far_secret_name}
+
+serviceAccount:
+  create: true
+  name: flo-controller
+
+license:
+  operationMode: ${license_mode}
+  teemCertUrl: https://product.apis.f5.com/ee/v1
+  teemEntitlementUrl: https://product-s.apis.f5.com/ee/v1
+  teemInitialConfigUrl: https://product-s.apis.f5.com/ee/v1
+  jwt: ${jwt_token}
+  f5LicenseProxyUrl: ${f5_license_proxy_url}
+
+ipam:
+  enabled: true
+  namespace: f5-utils
+
+containerPlatform: ${container_platform}
+
+crds:
+  install: true

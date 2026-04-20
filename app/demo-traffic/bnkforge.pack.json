@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Traffic Generators",
+    "path": "app/demo-traffic",
+    "version": "1.0.0",
+    "category": "app",
+    "description": "Deploys demo traffic scripts ConfigMap and CronJobs for web, API, canary, and blocked-source traffic generation."
+  },
+  "deployment_pack": {
+    "engine": "kubernetes",
+    "runner_profile": "kubernetes-default",
+    "working_directory": ".",
+    "lifecycle": {
+      "supports_init": false,
+      "supports_plan": false,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": false,
+      "supports_drift": false
+    },
+    "entrypoints": {
+      "manifest_path": "manifests/"
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "app/demo-routes",
+        "reason": "Routes should exist before traffic generation starts"
+      }
+    ],
+    "optional": [
+      {
+        "module": "app/demo-gateway",
+        "reason": "Gateway provides overall demo traffic endpoint context"
+      },
+      {
+        "module": "app/demo-apps",
+        "reason": "Backend services must be running to receive traffic"
+      }
+    ]
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "app_namespace",
+        "type": "string",
+        "description": "Namespace for traffic CronJobs and backend services",
+        "source": "user",
+        "default": "demo-apps"
+      },
+      {
+        "name": "backend_service_name",
+        "type": "string",
+        "description": "Name of backend service to target",
+        "source": "user",
+        "default": "demo-web"
+      },
+      {
+        "name": "backend_service_port",
+        "type": "number",
+        "description": "Backend service port",
+        "source": "user",
+        "default": 80
+      },
+      {
+        "name": "traffic_interval_seconds",
+        "type": "number",
+        "description": "Seconds between requests in each traffic script",
+        "source": "user",
+        "default": 5
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "traffic_generators_deployed",
+        "type": "number",
+        "description": "Number of deployed traffic CronJobs"
+      },
+      {
+        "name": "cronjob_names",
+        "type": "list(string)",
+        "description": "Names of deployed traffic CronJobs"
+      }
+    ]
+  }
+}

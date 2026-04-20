@@ -1,0 +1,23 @@
+apiVersion: gateway.k8s.f5net.com/v1alpha1
+kind: BNKNetPolicy
+metadata:
+  name: smart-combined-netpolicy
+  namespace: ${gateway_namespace}
+  labels:
+    app.kubernetes.io/name: smart-combined-netpolicy
+    app.kubernetes.io/component: irule
+    app.kubernetes.io/part-of: bnk-demo
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+  extensionRefs:
+    - group: k8s.f5net.com
+      kind: F5BigCneIrule
+      name: genai-token-hsl-irule
+    - group: k8s.f5net.com
+      kind: F5BigCneIrule
+      name: genai-llm-route-irule
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ${gateway_name}
+      sectionName: smart-http
