@@ -4,7 +4,7 @@
     "name": "AI LLM Proxy (Bedrock)",
     "path": "app/demo-ai-proxy",
     "version": "1.0.0",
-    "category": "ai",
+    "category": "app",
     "description": "Deploys LiteLLM (OpenAI-compatible proxy to AWS Bedrock) with Prometheus metrics and an AI HTTPRoute on the smart listener. Uses IRSA for Bedrock authentication — no API keys needed."
   },
   "deployment_pack": {
