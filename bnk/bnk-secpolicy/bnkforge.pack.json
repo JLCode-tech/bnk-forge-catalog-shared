@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "BNK Security Policy",
+    "path": "bnk/bnk-secpolicy",
+    "version": "2.0.0",
+    "category": "bnk",
+    "description": "Creates BNKSecPolicy resources with optional Firewall, DDoS, access-control, rate-limit, and logging sections."
+  },
+  "deployment_pack": {
+    "engine": "kubernetes",
+    "runner_profile": "kubernetes-default",
+    "working_directory": ".",
+    "template_engine": "jinja2",
+    "lifecycle": {
+      "supports_init": false,
+      "supports_plan": false,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": false,
+      "supports_drift": false
+    },
+    "entrypoints": {
+      "manifest_path": "manifests/"
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/flo",
+        "reason": "FLO must be deployed to install BNKSecPolicy CRD and manage policy reconciliation"
+      }
+    ],
+    "optional": [
+      {
+        "module": "bnk/gateway",
+        "reason": "SecurityPolicy typically attaches to Gateway resources"
+      }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster (used for resource identification)",
+        "source": "user"
+      },
+      {
+        "name": "policy_name",
+        "type": "string",
+        "description": "Name for the BNKSecPolicy resource",
+        "source": "user"
+      },
+      {
+        "name": "policy_namespace",
+        "type": "string",
+        "description": "Namespace for the BNKSecPolicy",
+        "source": "user"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency flag ensuring FLO is ready",
+        "source": "module",
+        "from_module": "bnk/flo",
+        "from_output": "flo_ready"
+      }
+    ],
+    "optional": [
+      {
+        "name": "enable_firewall",
+        "type": "boolean",
+        "description": "Enable firewall policy",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "firewall_policy_ref",
+        "type": "object",
+        "description": "Reference to F5BigFwPolicy resource (name and optional namespace)",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "firewall_rule_lists",
+        "type": "list(object)",
+        "description": "List of firewall rule list references",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "enable_ddos",
+        "type": "boolean",
+        "description": "Enable DDoS protection",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "ddos_global_ref",
+        "type": "object",
+        "description": "Reference to F5BigDdosGlobal resource (name and optional namespace)",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "ddos_protection_mode",
+        "type": "string",
+        "description": "DDoS protection mode (auto, manual, off)",
+        "default": "auto",
+        "source": "user"
+      },
+      {
+        "name": "allowed_source_ranges",
+        "type": "list(string)",
+        "description": "List of allowed source IP CIDR ranges",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "denied_source_ranges",
+        "type": "list(string)",
+        "description": "List of denied source IP CIDR ranges",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "address_lists",
+        "type": "list(object)",
+        "description": "Address-list references with action and optional namespace",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "enable_rate_limiting",
+        "type": "boolean",
+        "description": "Enable rate limiting",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "rate_limit_config",
+        "type": "object",
+        "description": "Rate limiting configuration (requests_per_second, optional burst_size and key)",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "log_profile_ref",
+        "type": "object",
+        "description": "Reference to F5BigLogProfile for security logging",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "hsl_publisher_ref",
+        "type": "object",
+        "description": "Reference to F5BigLogHslpub for remote logging",
+        "default": null,
+        "source": "user"
+      },
+      {
+        "name": "common_labels",
+        "type": "map(string)",
+        "description": "Common labels to apply to resources",
+        "default": {},
+        "source": "user"
+      },
+      {
+        "name": "annotations",
+        "type": "map(string)",
+        "description": "Annotations to add to the policy resource",
+        "default": {},
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "policy_name",
+        "type": "string",
+        "description": "Name of the created BNKSecPolicy"
+      },
+      {
+        "name": "policy_namespace",
+        "type": "string",
+        "description": "Namespace of the BNKSecPolicy"
+      },
+      {
+        "name": "policy_ready",
+        "type": "boolean",
+        "description": "Flag indicating policy was applied"
+      },
+      {
+        "name": "firewall_enabled",
+        "type": "boolean",
+        "description": "Whether firewall is enabled"
+      },
+      {
+        "name": "ddos_enabled",
+        "type": "boolean",
+        "description": "Whether DDoS protection is enabled"
+      },
+      {
+        "name": "rate_limiting_enabled",
+        "type": "boolean",
+        "description": "Whether rate limiting is enabled"
+      }
+    ]
+  }
+}

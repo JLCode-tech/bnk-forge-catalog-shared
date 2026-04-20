@@ -1,0 +1,21 @@
+{% if ipv4_cidr_range or ipv6_cidr_range %}
+apiVersion: k8s.f5net.com/v1
+kind: F5BnkGateway
+metadata:
+  name: ${gateway_ext_name}
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/name: ${gateway_ext_name}
+    app.kubernetes.io/component: ipam-gateway
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+  networks:
+{% if ipv4_cidr_range %}
+    - name: ${default_network}
+      cidr: ${ipv4_cidr_range}
+{% endif %}
+{% if ipv6_cidr_range %}
+    - name: ${default_network}-v6
+      cidr: ${ipv6_cidr_range}
+{% endif %}
+{% endif %}

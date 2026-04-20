@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+  namespace: ${app_namespace}
+  labels:
+    app.kubernetes.io/name: litellm-proxy
+    app.kubernetes.io/component: ai-proxy
+    app.kubernetes.io/part-of: bnk-demo
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+  replicas: ${litellm_replicas}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: litellm-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: litellm-proxy
+        app.kubernetes.io/component: ai-proxy
+        app.kubernetes.io/part-of: bnk-demo
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: litellm-proxy
+      containers:
+        - name: litellm
+          image: ${litellm_image}
+          args:
+            - --config
+            - /app/config.yaml
+            - --port
+            - "4000"
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+          env:
+            - name: LITELLM_MASTER_KEY
+              value: sk-demo-not-secret
+            - name: AWS_DEFAULT_REGION
+              value: ${aws_region}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/liveliness
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: litellm-config
