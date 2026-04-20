@@ -1,25 +1,130 @@
 {
-  "name": "Ubuntu Kind Cluster",
-  "description": "Bootstraps a remote Ubuntu host over SSH, installs Docker/kind/kubectl when needed, and creates a kind Kubernetes cluster for development/testing",
-  "category": "infra",
-  "platform": "ubuntu",
-  "engine": "opentofu",
-  "inputs": {
-    "providers": {
-      "required": ["local"]
-    },
-    "variables": {
-      "required": ["ssh_host", "ssh_private_key_path"],
-      "optional": [
-        "ssh_user",
-        "ssh_timeout",
-        "cluster_name",
-        "worker_nodes",
-        "kubernetes_version",
-        "kind_version",
-        "kubectl_version"
-      ]
-    }
+  "module": {
+    "name": "Ubuntu Kind Cluster",
+    "path": "infra/ubuntu/kind",
+    "version": "1.0.0",
+    "layer": "infrastructure",
+    "category": "infra",
+    "description": "Bootstraps a remote Ubuntu host over SSH, installs Docker/kind/kubectl when needed, and creates a kind Kubernetes cluster for development/testing",
+    "cloud_specific": false,
+    "supported_platforms": ["ubuntu"]
   },
-  "outputs": ["kubeconfig_path", "cluster_name", "cluster_endpoint", "remote_kubeconfig_path", "remote_host"]
+  "source": {
+    "kind": "official",
+    "channel": "release/2.2"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": ["terraform", "shell"]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "ssh_host",
+        "type": "string",
+        "description": "SSH host or IP for the remote Ubuntu machine to bootstrap",
+        "source": "user"
+      },
+      {
+        "name": "ssh_private_key_path",
+        "type": "string",
+        "description": "Path on the runner to the SSH private key used for remote bootstrap",
+        "source": "user"
+      }
+    ],
+    "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the kind cluster created on the remote Ubuntu host",
+        "default": "bnk-dev",
+        "source": "user"
+      },
+      {
+        "name": "kubernetes_version",
+        "type": "string",
+        "description": "Kubernetes version for the remote kind node image",
+        "default": "1.29.2",
+        "source": "user"
+      },
+      {
+        "name": "worker_nodes",
+        "type": "number",
+        "description": "Number of kind worker nodes to create on the remote host",
+        "default": 2,
+        "source": "user"
+      },
+      {
+        "name": "ssh_user",
+        "type": "string",
+        "description": "SSH user on the remote Ubuntu machine",
+        "default": "ubuntu",
+        "source": "user"
+      },
+      {
+        "name": "ssh_timeout",
+        "type": "string",
+        "description": "SSH connection timeout for remote bootstrap operations",
+        "default": "10m",
+        "source": "user"
+      },
+      {
+        "name": "kind_version",
+        "type": "string",
+        "description": "kind release to install on the remote host when kind is absent",
+        "default": "v0.23.0",
+        "source": "user"
+      },
+      {
+        "name": "kubectl_version",
+        "type": "string",
+        "description": "kubectl release to install on the remote host when kubectl is absent",
+        "default": "v1.29.2",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "kubeconfig_path",
+        "type": "string",
+        "description": "Local runner path to the kubeconfig copied back from the remote host"
+      },
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the created kind cluster"
+      },
+      {
+        "name": "cluster_endpoint",
+        "type": "string",
+        "description": "Cluster API endpoint as recorded in the copied kubeconfig"
+      },
+      {
+        "name": "remote_kubeconfig_path",
+        "type": "string",
+        "description": "Remote host path of the generated kubeconfig file"
+      },
+      {
+        "name": "remote_host",
+        "type": "string",
+        "description": "Remote Ubuntu host where the kind cluster was created"
+      }
+    ]
+  },
+  "providers": {
+    "required": ["local"],
+    "optional": []
+  },
+  "deployment": {
+    "order": 10
+  }
 }
