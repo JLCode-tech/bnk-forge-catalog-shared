@@ -54,9 +54,27 @@ locals {
     false
   )
 
-  # Format B: the decoded value IS the dockerconfigjson — use it directly
-  # Format A: construct dockerconfigjson from the bare key
-  docker_config_json = local._is_dockerconfig ? local._decoded_secret : jsonencode({
+  # Format B fix: pre-built secrets may use "_json_key:" prefix but F5 FLO
+  # requires "_json_key_base64:" per F5 docs. Detect and rebuild if needed.
+  _format_b_needs_fix = local._is_dockerconfig ? try(
+    !startswith(
+      base64decode(jsondecode(local._decoded_secret)["auths"]["repo.f5.com"]["auth"]),
+      "_json_key_base64:"
+    ),
+    false
+  ) : false
+
+  # If Format B has wrong prefix, rebuild with correct _json_key_base64 prefix
+  _fixed_format_b = local._format_b_needs_fix ? jsonencode({
+    auths = {
+      "repo.f5.com" = {
+        auth = base64encode("_json_key_base64:${var.cne_pull_secret}")
+      }
+    }
+  }) : local._decoded_secret
+
+  # Final dockerconfigjson — always uses _json_key_base64 prefix
+  docker_config_json = local._is_dockerconfig ? local._fixed_format_b : jsonencode({
     auths = {
       "repo.f5.com" = {
         auth = base64encode("_json_key_base64:${var.cne_pull_secret}")

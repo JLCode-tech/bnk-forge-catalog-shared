@@ -1,8 +1,13 @@
+# FLO Helm override values — aligned with F5 CloudDocs BNK 2.2
+# https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/install/install-using-f5-lifecycle-operator/install-bnk-on-dpu-using-flo.html
+
 global:
-  imagePullSecrets:
-    - name: ${far_secret_name}
   certmgr:
     clusterIssuer: ${cluster_issuer_name}
+  imagePullSecrets:
+    - name: ${far_secret_name}
+
+ServiceIPFamily: ipv4
 
 image:
   repository: repo.f5.com/images
@@ -17,17 +22,19 @@ serviceAccount:
 
 license:
   operationMode: ${license_mode}
-  teemCertUrl: https://product.apis.f5.com/ee/v1
-  teemEntitlementUrl: https://product-s.apis.f5.com/ee/v1
-  teemInitialConfigUrl: https://product-s.apis.f5.com/ee/v1
-  jwt: ${jwt_token}
-  f5LicenseProxyUrl: ${f5_license_proxy_url}
-
-ipam:
-  enabled: true
-  namespace: f5-utils
+  jwt: "${jwt_token}"
+  friendlyName: "BNK Cluster"
+  teemCertUrl: "https://product.apis.f5.com/ee/v1"
+  teemEntitlementUrl: "https://product-s.apis.f5.com/ee/v1"
+  teemInitialConfigUrl: "https://product-s.apis.f5.com/ee/v1"
+  kid: "v1"
+  alg: "RS512"
+  kty: "RSA"
+  exponent: "AQAB"
+  use: "sig"
 
 containerPlatform: ${container_platform}
 
 crds:
-  install: true
+  enabled: true
+  keep: true
