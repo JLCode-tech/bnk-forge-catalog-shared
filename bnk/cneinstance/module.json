@@ -31,7 +31,7 @@
         "reason": "NADs must exist before CNEInstance references them"
       },
       {
-        "module": "k8s/cert-manager",
+        "module": "k8s/bnk-cert-issuer",
         "reason": "ClusterIssuer must exist for certificate management"
       }
     ],
@@ -86,7 +86,7 @@
         "type": "string",
         "description": "ClusterIssuer name",
         "source": "module",
-        "from_module": "k8s/cert-manager",
+        "from_module": "k8s/bnk-cert-issuer",
         "from_output": "cluster_issuer_name",
         "default": "bnk-ca-cluster-issuer"
       },

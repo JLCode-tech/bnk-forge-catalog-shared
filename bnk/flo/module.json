@@ -27,7 +27,7 @@
         "reason": "Needs namespaces, FAR secrets, and FLO version from manifest"
       },
       {
-        "module": "k8s/cert-manager",
+        "module": "k8s/bnk-cert-issuer",
         "reason": "FLO requires ClusterIssuer for certificate management"
       }
     ],
@@ -66,7 +66,7 @@
         "type": "string",
         "description": "ClusterIssuer name for certificate management",
         "source": "module",
-        "from_module": "k8s/cert-manager",
+        "from_module": "k8s/bnk-cert-issuer",
         "from_output": "cluster_issuer_name",
         "default": "bnk-ca-cluster-issuer"
       },
