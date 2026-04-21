@@ -105,6 +105,7 @@
         "name": "external_nad_name",
         "type": "string",
         "description": "Name of external NAD",
+        "value": "external-netdevice",
         "used_by": [
           "bnk/cneinstance"
         ],
@@ -114,6 +115,7 @@
         "name": "internal_nad_name",
         "type": "string",
         "description": "Name of internal NAD",
+        "value": "internal-netdevice",
         "used_by": [
           "bnk/cneinstance"
         ],
