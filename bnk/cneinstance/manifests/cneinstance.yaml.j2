@@ -33,8 +33,8 @@ spec:
       - name: {{ far_secret_name }}
     imagePullPolicy: IfNotPresent
   networkAttachments:
-    - {{ external_nad_name | default("Network Attachment Definitions") }}
-    - {{ internal_nad_name | default("Network Attachment Definitions") }}
+    - {{ external_nad_name | default("external-netdevice") }}
+    - {{ internal_nad_name | default("internal-netdevice") }}
   dynamicRouting:
     enabled: {{ dynamic_routing_enabled | default(true) | lower }}
   firewallACL:

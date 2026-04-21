@@ -36,15 +36,15 @@ variable "namespace" {
 # =============================================================================
 
 variable "external_self_ips" {
-  description = "External self IPs for TMM VLANs (one per TMM replica, from external subnet)"
+  description = "External self IPs for TMM VLANs (one per TMM replica, from external subnet). If empty, auto-derived as .240 from first external subnet CIDR."
   type        = list(string)
-  default     = ["10.0.10.240"]
+  default     = []
 }
 
 variable "internal_self_ips" {
-  description = "Internal self IPs for TMM VLANs (one per TMM replica, from internal subnet)"
+  description = "Internal self IPs for TMM VLANs (one per TMM replica, from internal subnet). If empty, auto-derived as .240 from first internal subnet CIDR."
   type        = list(string)
-  default     = ["10.0.20.240"]
+  default     = []
 }
 
 # =============================================================================

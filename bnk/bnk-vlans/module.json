@@ -51,6 +51,47 @@
         "default": true
       },
       {
+        "name": "external_subnet_cidrs",
+        "type": "list(string)",
+        "description": "External DPDK subnet CIDRs. Wired from VPC module outputs.",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_external_subnet_cidrs",
+        "default": ["10.0.10.0/24"]
+      },
+      {
+        "name": "internal_subnet_cidrs",
+        "type": "list(string)",
+        "description": "Internal DPDK subnet CIDRs. Wired from VPC module outputs.",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_internal_subnet_cidrs",
+        "default": ["10.0.20.0/24"]
+      },
+      {
+        "name": "internal_subnet_id",
+        "type": "string",
+        "description": "Internal subnet ID for discovering the internal ENI on the HP node.",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_internal_subnet_ids[0]",
+        "default": ""
+      },
+      {
+        "name": "external_self_ips",
+        "type": "list(string)",
+        "description": "External self IPs for TMM VLANs. If empty, auto-derived from external subnet CIDR (.240).",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "internal_self_ips",
+        "type": "list(string)",
+        "description": "Internal self IPs for TMM VLANs. If empty, auto-derived from internal subnet CIDR (.240).",
+        "default": [],
+        "source": "user"
+      },
+      {
         "name": "auto_lasthop",
         "type": "string",
         "description": "Auto last-hop setting. Set to AUTO_LASTHOP_ENABLED on AWS/Azure to prevent asymmetric routing.",
@@ -62,20 +103,13 @@
         "type": "string",
         "description": "AWS region for ENI secondary IP registration. Empty disables ENI management.",
         "default": "",
-        "source": "user"
+        "source": "auto"
       },
       {
         "name": "gateway_vips",
         "type": "list(string)",
         "description": "Gateway VIP addresses to register as secondary IPs on the external ENI.",
         "default": [],
-        "source": "user"
-      },
-      {
-        "name": "internal_subnet_id",
-        "type": "string",
-        "description": "Internal subnet ID for discovering the internal ENI on the HP node.",
-        "default": "",
         "source": "user"
       }
     ]

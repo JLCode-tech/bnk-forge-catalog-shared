@@ -37,6 +37,20 @@ locals {
   # Prefix length from subnet CIDR (e.g. "10.0.10.0/24" → 24)
   external_prefixlen = tonumber(split("/", var.external_subnet_cidrs[0])[1])
   internal_prefixlen = tonumber(split("/", var.internal_subnet_cidrs[0])[1])
+
+  # Auto-derive self IPs from subnet CIDR when not explicitly provided.
+  # Uses .240 of the first subnet's network prefix (e.g. "10.0.10.0/24" → "10.0.10.240").
+  # This avoids hardcoded IPs that don't match the actual cloud subnets.
+  _external_network = split("/", var.external_subnet_cidrs[0])[0]
+  _external_octets  = split(".", local._external_network)
+  _external_auto_ip = "${local._external_octets[0]}.${local._external_octets[1]}.${local._external_octets[2]}.240"
+
+  _internal_network = split("/", var.internal_subnet_cidrs[0])[0]
+  _internal_octets  = split(".", local._internal_network)
+  _internal_auto_ip = "${local._internal_octets[0]}.${local._internal_octets[1]}.${local._internal_octets[2]}.240"
+
+  effective_external_self_ips = length(var.external_self_ips) > 0 ? var.external_self_ips : [local._external_auto_ip]
+  effective_internal_self_ips = length(var.internal_self_ips) > 0 ? var.internal_self_ips : [local._internal_auto_ip]
 }
 
 # =============================================================================
@@ -57,7 +71,7 @@ spec:
   - "1.1"
   mtu: ${var.mtu}
   selfip_v4s:
-%{for ip in var.external_self_ips~}
+%{for ip in local.effective_external_self_ips~}
   - ${ip}
 %{endfor~}
   prefixlen_v4: ${local.external_prefixlen}
@@ -77,7 +91,7 @@ spec:
   - "1.2"
   mtu: ${var.mtu}
   selfip_v4s:
-%{for ip in var.internal_self_ips~}
+%{for ip in local.effective_internal_self_ips~}
   - ${ip}
 %{endfor~}
   prefixlen_v4: ${local.internal_prefixlen}
@@ -164,8 +178,8 @@ resource "null_resource" "register_eni_secondary_ips" {
   count = var.aws_region != "" ? 1 : 0
 
   triggers = {
-    external_self_ips = join(",", var.external_self_ips)
-    internal_self_ips = join(",", var.internal_self_ips)
+    external_self_ips = join(",", local.effective_external_self_ips)
+    internal_self_ips = join(",", local.effective_internal_self_ips)
     gateway_vips      = join(",", var.gateway_vips)
   }
 
@@ -180,7 +194,7 @@ resource "null_resource" "register_eni_secondary_ips" {
       if [ -z "$INSTANCE_ID" ]; then
         echo "WARNING: Could not find HP node with app=f5-tmm label"
         echo "ENI secondary IP registration skipped — register manually:"
-        echo "  aws ec2 assign-private-ip-addresses --network-interface-id <ENI_ID> --private-ip-addresses ${join(" ", var.external_self_ips)} ${join(" ", var.gateway_vips)}"
+        echo "  aws ec2 assign-private-ip-addresses --network-interface-id <ENI_ID> --private-ip-addresses ${join(" ", local.effective_external_self_ips)} ${join(" ", var.gateway_vips)}"
         exit 0
       fi
 
@@ -201,7 +215,7 @@ resource "null_resource" "register_eni_secondary_ips" {
         echo "External ENI: $EXT_ENI"
 
         # Collect all IPs to register on external ENI: self-IPs + VIPs
-        EXT_IPS="${join(" ", concat(var.external_self_ips, var.gateway_vips))}"
+        EXT_IPS="${join(" ", concat(local.effective_external_self_ips, var.gateway_vips))}"
 
         if [ -n "$EXT_IPS" ]; then
           echo "Registering on external ENI: $EXT_IPS"
@@ -239,7 +253,7 @@ resource "null_resource" "register_eni_secondary_ips" {
       else
         echo "Internal ENI: $INT_ENI"
 
-        INT_IPS="${join(" ", var.internal_self_ips)}"
+        INT_IPS="${join(" ", local.effective_internal_self_ips)}"
 
         if [ -n "$INT_IPS" ]; then
           echo "Registering on internal ENI: $INT_IPS"
