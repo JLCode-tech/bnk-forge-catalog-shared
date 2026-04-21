@@ -117,8 +117,8 @@ variable "auto_lasthop" {
 # DEPENDENCY GATES
 # =============================================================================
 
-variable "cneinstance_ready" {
-  description = "Gate from CNEInstance module — ensures FLO has deployed CRDs and TMM"
+variable "flo_ready" {
+  description = "Gate from FLO module — ensures FLO is running and will install CRDs"
   type        = bool
   default     = true
 }

@@ -11,6 +11,7 @@
     "engine": "kubernetes",
     "runner_profile": "kubernetes-default",
     "working_directory": ".",
+    "template_engine": "jinja2",
     "lifecycle": {
       "supports_init": false,
       "supports_plan": false,
@@ -20,7 +21,7 @@
       "supports_drift": false
     },
     "entrypoints": {
-      "manifest_path": "manifests/cneinstance.yaml.j2",
+      "manifest_path": "manifests/cneinstance.yaml",
       "namespace": "${instance_namespace}",
       "wait_conditions": [
         {
@@ -154,15 +155,19 @@
         "name": "external_nad_name",
         "type": "string",
         "description": "External network attachment definition name",
-        "default": "Network Attachment Definitions",
-        "source": "user"
+        "default": "external-netdevice",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "external_nad_name"
       },
       {
         "name": "internal_nad_name",
         "type": "string",
         "description": "Internal network attachment definition name",
-        "default": "Network Attachment Definitions",
-        "source": "user"
+        "default": "internal-netdevice",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "internal_nad_name"
       },
       {
         "name": "cloud_provider",

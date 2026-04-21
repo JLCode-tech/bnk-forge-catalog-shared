@@ -12,12 +12,12 @@
   "dependencies": {
     "required": [
       {
-        "module": "bnk/cneinstance",
-        "reason": "CNEInstance must be running before VLAN CRs can be applied"
+        "module": "bnk/flo",
+        "reason": "FLO must be running to install F5SPKVlan CRDs (module waits for CRD at apply time)"
       },
       {
         "module": "k8s/network-setup",
-        "reason": "NAD self IPs must be created first for VLAN IP alignment"
+        "reason": "NADs must exist before VLANs reference the same interfaces"
       }
     ],
     "optional": []
@@ -40,15 +40,6 @@
         "source": "module",
         "from_module": "k8s/bnk-prerequisites",
         "from_output": "operator_namespace"
-      },
-      {
-        "name": "cneinstance_ready",
-        "type": "boolean",
-        "description": "Gate from CNEInstance module",
-        "source": "module",
-        "from_module": "bnk/cneinstance",
-        "from_output": "instance_ready",
-        "default": true
       },
       {
         "name": "external_subnet_cidrs",
@@ -130,7 +121,7 @@
     "optional": ["local", "null"]
   },
   "deployment": {
-    "order": 57,
+    "order": 53,
     "estimated_time": "1 minute",
     "requires_user_input": false,
     "sensitive_inputs": []

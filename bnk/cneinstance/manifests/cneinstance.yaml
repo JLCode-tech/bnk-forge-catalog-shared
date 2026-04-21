@@ -1,48 +1,48 @@
 apiVersion: k8s.f5.com/v1
 kind: CNEInstance
 metadata:
-  name: {{ instance_name }}
-  namespace: {{ instance_namespace }}
+  name: ${instance_name}
+  namespace: ${instance_namespace}
   labels:
-    app.kubernetes.io/name: {{ instance_name }}
+    app.kubernetes.io/name: ${instance_name}
     app.kubernetes.io/component: cne-instance
     app.kubernetes.io/managed-by: bnk-forge
-    app.kubernetes.io/version: "{{ manifest_version }}"
+    app.kubernetes.io/version: "${manifest_version}"
 spec:
   product:
     gatewayAPI: true
     type: BNK
-  manifestVersion: "{{ manifest_version }}"
-  wholeCluster: {{ whole_cluster | default(true) | lower }}
+  manifestVersion: "${manifest_version}"
+  wholeCluster: ${whole_cluster | default(true) | lower}
   dpu:
-    enabled: {{ dpu_enabled | default(false) | lower }}
+    enabled: ${dpu_enabled | default(false) | lower}
   telemetry:
     loggingSubsystem:
       enabled: true
     metricSubsystem:
       enabled: true
   certificate:
-    clusterIssuer: {{ cluster_issuer_name }}
-  deploymentSize: {{ deployment_size | default("Small") }}
+    clusterIssuer: ${cluster_issuer_name}
+  deploymentSize: ${deployment_size | default("Small")}
 {% if storage_class_name is defined and storage_class_name %}
-  storageClassName: {{ storage_class_name }}
+  storageClassName: ${storage_class_name}
 {% endif %}
   registry:
     uri: repo.f5.com
     imagePullSecrets:
-      - name: {{ far_secret_name }}
+      - name: ${far_secret_name}
     imagePullPolicy: IfNotPresent
   networkAttachments:
-    - {{ external_nad_name | default("external-netdevice") }}
-    - {{ internal_nad_name | default("internal-netdevice") }}
+    - ${external_nad_name | default("external-netdevice")}
+    - ${internal_nad_name | default("internal-netdevice")}
   dynamicRouting:
-    enabled: {{ dynamic_routing_enabled | default(true) | lower }}
+    enabled: ${dynamic_routing_enabled | default(true) | lower}
   firewallACL:
-    enabled: {{ firewall_acl_enabled | default(true) | lower }}
+    enabled: ${firewall_acl_enabled | default(true) | lower}
   pseudoCNI:
-    enabled: {{ pseudo_cni_enabled | default(true) | lower }}
+    enabled: ${pseudo_cni_enabled | default(true) | lower}
   intelligentLB:
-    enabled: {{ intelligent_lb_enabled | default(true) | lower }}
+    enabled: ${intelligent_lb_enabled | default(true) | lower}
   coreCollection:
     enabled: false
   advanced:
@@ -52,18 +52,18 @@ spec:
     cneController:
       env:
         - name: TMM_DEFAULT_MTU
-          value: "{{ tmm_default_mtu | default(9000) }}"
+          value: "${tmm_default_mtu | default(9000)}"
 {% if cloud_provider is defined and cloud_provider %}
         - name: CLOUD_ENV
           value: "true"
         - name: CLOUD_PROVIDER
-          value: "{{ cloud_provider }}"
+          value: "${cloud_provider}"
         - name: CLOUD_NETWORK_CONFIGMAP
           value: cloud-network-mapping
 {% endif %}
     tmm:
       env:
         - name: TMM_DEFAULT_MTU
-          value: "{{ tmm_default_mtu | default(9000) }}"
+          value: "${tmm_default_mtu | default(9000)}"
         - name: TMM_IGNORE_GATEWAYS
           value: "TRUE"
