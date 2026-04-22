@@ -1,0 +1,114 @@
+{
+  "module": {
+    "name": "Bedrock Smart-LLM Client",
+    "path": "app/bedrock-smartllm-client",
+    "version": "1.0.0",
+    "layer": "bnk-application",
+    "category": "application",
+    "description": "Tiny Python pod that POSTs varied prompts to the BNK Gateway at a Poisson rate. Emits client-side Prometheus metrics (latency, request-rate, which model served). Deploys in a separate namespace to demonstrate cross-namespace traffic into BNK.",
+    "cloud_specific": false,
+    "supported_platforms": ["any"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "app/bedrock-smartllm-backend",
+        "reason": "Client targets the Gateway VIP the backend module creates"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "gateway_url",
+        "type": "string",
+        "description": "URL the client posts chat completions to. Wired from backend module's gateway_vip output as http://<gateway_vip>.",
+        "source": "module",
+        "from_module": "app/bedrock-smartllm-backend",
+        "from_output": "gateway_vip",
+        "example": "http://10.0.10.100"
+      }
+    ],
+    "optional": [
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace for the client. Default puts it in a separate namespace from the backend.",
+        "default": "bnk-demo-client",
+        "source": "user"
+      },
+      {
+        "name": "create_namespace",
+        "type": "boolean",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "replicas",
+        "type": "number",
+        "description": "How many client pods. Each runs an independent Poisson loop.",
+        "default": 1,
+        "source": "user"
+      },
+      {
+        "name": "request_rate",
+        "type": "number",
+        "description": "Target requests/sec per pod. Poisson-distributed; real bursts.",
+        "default": 1.0,
+        "source": "user"
+      },
+      {
+        "name": "max_tokens",
+        "type": "number",
+        "default": 128,
+        "source": "user"
+      },
+      {
+        "name": "request_timeout_seconds",
+        "type": "number",
+        "default": 30,
+        "source": "user"
+      },
+      {
+        "name": "prometheus_release_label",
+        "type": "string",
+        "default": "kube-prometheus-stack",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace the client runs in",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "deployment_name",
+        "type": "string",
+        "description": "Name of the client Deployment",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3"
+    }
+  },
+  "deployment": {
+    "order": 95,
+    "estimated_time": "1 minute",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
+}
