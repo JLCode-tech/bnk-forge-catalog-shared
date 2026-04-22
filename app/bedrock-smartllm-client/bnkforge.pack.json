@@ -71,18 +71,21 @@
       {
         "name": "max_tokens",
         "type": "number",
+        "description": "max_tokens sent in each chat completion request",
         "default": 128,
         "source": "user"
       },
       {
         "name": "request_timeout_seconds",
         "type": "number",
+        "description": "Timeout per request against the BNK Gateway",
         "default": 30,
         "source": "user"
       },
       {
         "name": "prometheus_release_label",
         "type": "string",
+        "description": "Value of the `release` label Prometheus operator's serviceMonitorSelector matches",
         "default": "kube-prometheus-stack",
         "source": "user"
       },

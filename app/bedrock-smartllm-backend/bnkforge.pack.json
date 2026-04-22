@@ -79,24 +79,28 @@
       {
         "name": "gateway_class",
         "type": "string",
+        "description": "GatewayClass name registered by BNK (via the BNKGatewayClass CR)",
         "default": "bnk-gatewayclass",
         "source": "auto"
       },
       {
         "name": "gateway_name",
         "type": "string",
+        "description": "Name of the BNK Gateway this module creates",
         "default": "llm-gateway",
         "source": "user"
       },
       {
         "name": "httproute_name",
         "type": "string",
+        "description": "Name of the HTTPRoute the analyzer weights between the 3 Bedrock backends",
         "default": "llm-route",
         "source": "user"
       },
       {
         "name": "analyzer_name",
         "type": "string",
+        "description": "Name of the F5BigAnalyzer CR created by this module",
         "default": "smartllm-analyzer",
         "source": "user"
       },
@@ -110,6 +114,7 @@
       {
         "name": "prometheus_endpoint",
         "type": "string",
+        "description": "HTTP URL the analyzer queries for vllm:* metrics",
         "default": "http://kube-prometheus-stack-prometheus.monitoring:9090",
         "source": "user"
       },
