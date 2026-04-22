@@ -13,6 +13,11 @@ output "gateway_vip" {
   description = "VIP the client should POST to."
 }
 
+output "gateway_url" {
+  value       = "http://${var.gateway_vip}"
+  description = "Full base URL (scheme + host) for clients to POST chat completions to. Wired into the client module's gateway_url input."
+}
+
 output "httproute_name" {
   value       = var.httproute_name
   description = "Name of the HTTPRoute whose backendRefs the analyzer weights. Dashboard/UI reads weights from here."

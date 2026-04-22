@@ -23,10 +23,10 @@
       {
         "name": "gateway_url",
         "type": "string",
-        "description": "URL the client posts chat completions to. Wired from backend module's gateway_vip output as http://<gateway_vip>.",
+        "description": "URL the client posts chat completions to. Wired from backend module's gateway_url output (includes http:// scheme).",
         "source": "module",
         "from_module": "app/bedrock-smartllm-backend",
-        "from_output": "gateway_vip",
+        "from_output": "gateway_url",
         "example": "http://10.0.10.100"
       }
     ],

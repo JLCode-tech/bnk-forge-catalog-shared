@@ -132,6 +132,13 @@
         "sensitive": false
       },
       {
+        "name": "gateway_url",
+        "type": "string",
+        "description": "Full base URL (http://<vip>) clients POST chat completions to — wired into client module's gateway_url",
+        "used_by": ["app/bedrock-smartllm-client"],
+        "sensitive": false
+      },
+      {
         "name": "gateway_namespace",
         "type": "string",
         "description": "Namespace the Gateway lives in",
