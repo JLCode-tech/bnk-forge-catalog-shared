@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Bedrock Smart-LLM Client",
+    "path": "app/bedrock-smartllm-client",
+    "version": "1.0.0",
+    "category": "app",
+    "description": "Tiny Python pod that POSTs varied prompts to the BNK Gateway at a Poisson rate. Emits client-side Prometheus metrics (latency, request-rate, which model served)."
+  },
+  "deployment_pack": {
+    "engine": "kubernetes",
+    "runner_profile": "kubernetes-default",
+    "working_directory": ".",
+    "template_engine": "jinja2",
+    "lifecycle": {
+      "supports_init": false,
+      "supports_plan": false,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": false,
+      "supports_drift": false
+    },
+    "entrypoints": {
+      "manifest_path": "manifests/",
+      "namespace": "${namespace}"
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "app/bedrock-smartllm-backend",
+        "reason": "Client targets the Gateway VIP the backend module creates"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "gateway_url",
+        "type": "string",
+        "description": "Full base URL the client POSTs to. Wired from backend module's gateway_url output.",
+        "source": "module",
+        "from_module": "app/bedrock-smartllm-backend",
+        "from_output": "gateway_url",
+        "example": "http://10.0.10.100"
+      }
+    ],
+    "optional": [
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace for the client",
+        "default": "bnk-demo-client",
+        "source": "user"
+      },
+      {
+        "name": "replicas",
+        "type": "number",
+        "description": "How many client pods. Each runs independent Poisson loops.",
+        "default": 1,
+        "source": "user"
+      },
+      {
+        "name": "request_rate",
+        "type": "number",
+        "description": "Target requests/sec per pod (Poisson mean — naturally bursty).",
+        "default": 1.0,
+        "source": "user"
+      },
+      {
+        "name": "max_tokens",
+        "type": "number",
+        "default": 128,
+        "source": "user"
+      },
+      {
+        "name": "request_timeout_seconds",
+        "type": "number",
+        "default": 30,
+        "source": "user"
+      },
+      {
+        "name": "prometheus_release_label",
+        "type": "string",
+        "default": "kube-prometheus-stack",
+        "source": "user"
+      },
+      {
+        "name": "client_image",
+        "type": "string",
+        "description": "Base image (client source ships via ConfigMap + pip-install init container)",
+        "default": "python:3.12-slim",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace the client runs in"
+      },
+      {
+        "name": "deployment_name",
+        "type": "string",
+        "description": "Name of the client Deployment",
+        "value": "smartllm-client"
+      }
+    ]
+  }
+}

@@ -1,0 +1,62 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nova-micro
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/part-of: bedrock-smartllm-demo
+    app.kubernetes.io/managed-by: bnk-forge
+    release: ${prometheus_release_label}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nova-micro
+  namespaceSelector:
+    matchNames:
+    - ${namespace}
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nova-lite
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/part-of: bedrock-smartllm-demo
+    app.kubernetes.io/managed-by: bnk-forge
+    release: ${prometheus_release_label}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nova-lite
+  namespaceSelector:
+    matchNames:
+    - ${namespace}
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: claude-3-haiku
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/part-of: bedrock-smartllm-demo
+    app.kubernetes.io/managed-by: bnk-forge
+    release: ${prometheus_release_label}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: claude-3-haiku
+  namespaceSelector:
+    matchNames:
+    - ${namespace}
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics

@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Bedrock Smart-LLM Backend",
+    "path": "app/bedrock-smartllm-backend",
+    "version": "1.0.0",
+    "category": "app",
+    "description": "Three single-model Bedrock shim pods (Nova Micro, Nova Lite, Claude 3 Haiku) behind a BNK Gateway + HTTPRoute + F5BigAnalyzer. Shim emits vllm:* metrics the builtin LLMLoadMonitor reads natively."
+  },
+  "deployment_pack": {
+    "engine": "kubernetes",
+    "runner_profile": "kubernetes-default",
+    "working_directory": ".",
+    "template_engine": "jinja2",
+    "lifecycle": {
+      "supports_init": false,
+      "supports_plan": false,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": false,
+      "supports_drift": false
+    },
+    "entrypoints": {
+      "manifest_path": "manifests/",
+      "namespace": "${namespace}",
+      "wait_conditions": [
+        {
+          "kind": "Gateway",
+          "group": "gateway.networking.k8s.io",
+          "name": "${gateway_name}",
+          "namespace": "${namespace}",
+          "condition_type": "Programmed",
+          "timeout": 180
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/bnk-gatewayclass",
+        "reason": "BNK Gateway depends on bnk-gatewayclass being registered"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "bedrock_role_arn",
+        "type": "string",
+        "description": "IAM role ARN usable via IRSA. Must trust the EKS OIDC provider + default/bedrock-smartllm SA, and allow bedrock:InvokeModel on the 3 foundation-model ARNs. See README for creation.",
+        "source": "user",
+        "example": "arn:aws:iam::123456789012:role/bnk-bedrock-smartllm"
+      },
+      {
+        "name": "gateway_vip",
+        "type": "string",
+        "description": "IPv4 VIP for the BNK Gateway. Must be in the external VLAN's prefix and unused.",
+        "source": "user",
+        "example": "10.0.10.100"
+      }
+    ],
+    "optional": [
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace for all backend resources",
+        "default": "default",
+        "source": "user"
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region Bedrock calls go to",
+        "default": "ap-southeast-2",
+        "source": "user"
+      },
+      {
+        "name": "gateway_class",
+        "type": "string",
+        "default": "bnk-gatewayclass",
+        "source": "auto"
+      },
+      {
+        "name": "gateway_name",
+        "type": "string",
+        "default": "llm-gateway",
+        "source": "user"
+      },
+      {
+        "name": "httproute_name",
+        "type": "string",
+        "default": "llm-route",
+        "source": "user"
+      },
+      {
+        "name": "analyzer_name",
+        "type": "string",
+        "default": "smartllm-analyzer",
+        "source": "user"
+      },
+      {
+        "name": "analyzer_schedule",
+        "type": "string",
+        "description": "How often the F5BigAnalyzer reconciles (e.g. 1m, 2h)",
+        "default": "1m",
+        "source": "user"
+      },
+      {
+        "name": "prometheus_endpoint",
+        "type": "string",
+        "default": "http://kube-prometheus-stack-prometheus.monitoring:9090",
+        "source": "user"
+      },
+      {
+        "name": "prometheus_release_label",
+        "type": "string",
+        "description": "Value of the `release` label Prometheus operator's serviceMonitorSelector matches",
+        "default": "kube-prometheus-stack",
+        "source": "user"
+      },
+      {
+        "name": "shim_image",
+        "type": "string",
+        "description": "Base image for shim init + runtime containers (ConfigMap-shipped Python source)",
+        "default": "python:3.12-slim",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "gateway_name",
+        "type": "string",
+        "description": "BNK Gateway name — client module targets this"
+      },
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace of the BNK Gateway"
+      },
+      {
+        "name": "gateway_vip",
+        "type": "string",
+        "description": "VIP the BNK Gateway binds on the external VLAN"
+      },
+      {
+        "name": "gateway_url",
+        "type": "string",
+        "description": "Full base URL (http://<vip>) clients POST chat completions to — wired into client module's gateway_url",
+        "value": "http://${gateway_vip}"
+      },
+      {
+        "name": "httproute_name",
+        "type": "string",
+        "description": "Name of the HTTPRoute whose backendRefs the analyzer weights"
+      },
+      {
+        "name": "analyzer_name",
+        "type": "string",
+        "description": "Name of the F5BigAnalyzer CR"
+      }
+    ]
+  }
+}

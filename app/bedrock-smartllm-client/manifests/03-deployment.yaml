@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smartllm-client
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/name: smartllm-client
+    app.kubernetes.io/component: load-generator
+    app.kubernetes.io/part-of: bedrock-smartllm-demo
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+  replicas: ${replicas}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: smartllm-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: smartllm-client
+        app.kubernetes.io/component: load-generator
+        app.kubernetes.io/part-of: bedrock-smartllm-demo
+    spec:
+      initContainers:
+      - name: pip-install
+        image: ${client_image}
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c"]
+        args:
+        - "pip install --no-cache-dir --target /packages -r /src/requirements.txt"
+        volumeMounts:
+        - name: client-source
+          mountPath: /src
+        - name: packages
+          mountPath: /packages
+        resources:
+          requests: { cpu: "50m", memory: "64Mi" }
+          limits: { memory: "128Mi" }
+      containers:
+      - name: client
+        image: ${client_image}
+        imagePullPolicy: IfNotPresent
+        command: ["python", "/src/client.py"]
+        env:
+        - name: GATEWAY_URL
+          value: "${gateway_url}"
+        - name: REQUEST_RATE
+          value: "${request_rate}"
+        - name: MAX_TOKENS
+          value: "${max_tokens}"
+        - name: REQUEST_TIMEOUT
+          value: "${request_timeout_seconds}"
+        - name: PROMPTS_PATH
+          value: "/etc/prompts/prompts.txt"
+        - name: METRICS_PORT
+          value: "9100"
+        - name: CLIENT_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: PYTHONPATH
+          value: "/packages"
+        ports:
+        - name: metrics
+          containerPort: 9100
+        volumeMounts:
+        - name: client-source
+          mountPath: /src
+        - name: packages
+          mountPath: /packages
+        - name: prompts
+          mountPath: /etc/prompts
+        readinessProbe:
+          httpGet: { path: /health, port: metrics }
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests: { cpu: "50m", memory: "96Mi" }
+          limits: { memory: "192Mi" }
+      volumes:
+      - name: client-source
+        configMap:
+          name: smartllm-client-source
+      - name: packages
+        emptyDir: {}
+      - name: prompts
+        configMap:
+          name: smartllm-client-prompts
