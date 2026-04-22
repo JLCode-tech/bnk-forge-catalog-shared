@@ -10,7 +10,7 @@ data:
   requirements.txt: |
     prometheus-client==0.21.1
   client.py: |
-    {% raw %}"""
+    """
     Bedrock Smart-LLM demo client — Poisson-paced loop through the BNK Gateway.
     """
     import json
@@ -134,7 +134,7 @@ data:
 
 
     if __name__ == "__main__":
-        main(){% endraw %}
+        main()
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -146,7 +146,7 @@ metadata:
     app.kubernetes.io/managed-by: bnk-forge
 data:
   prompts.txt: |
-    {% raw %}# Prompt bank — one per line. Lines starting with # are ignored.
+    # Prompt bank — one per line. Lines starting with # are ignored.
     What's the capital of France?
     Summarize the CAP theorem in three sentences.
     Write a haiku about a raincloud.
@@ -166,4 +166,4 @@ data:
     If a function has O(n log n) time complexity, what's its likely algorithm class? Give two examples.
     Write a short bash one-liner that prints the 5 largest files in the current directory tree.
     Explain eventual consistency using a grocery shopping metaphor.
-    What does "idempotent" mean in the context of HTTP methods? Which methods are idempotent?{% endraw %}
+    What does "idempotent" mean in the context of HTTP methods? Which methods are idempotent?
