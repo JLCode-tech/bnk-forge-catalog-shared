@@ -49,8 +49,10 @@
       {
         "name": "bedrock_role_arn",
         "type": "string",
-        "description": "IAM role ARN usable via IRSA. Must trust the EKS OIDC provider + default/bedrock-smartllm SA, and allow bedrock:InvokeModel on the 3 foundation-model ARNs. See README for creation.",
-        "source": "user",
+        "description": "IAM role ARN usable via IRSA. Auto-wired from app/bedrock-smartllm-irsa when both modules are deployed together from the eks-bnk-smartllm-demo blueprint. Trust policy must cover the default/bedrock-smartllm SA with bedrock:InvokeModel on the 3 foundation-model ARNs.",
+        "source": "module",
+        "from_module": "app/bedrock-smartllm-irsa",
+        "from_output": "role_arn",
         "example": "arn:aws:iam::123456789012:role/bnk-bedrock-smartllm"
       },
       {
