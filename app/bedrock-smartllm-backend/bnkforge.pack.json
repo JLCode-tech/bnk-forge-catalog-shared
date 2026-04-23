@@ -146,17 +146,20 @@
       {
         "name": "gateway_name",
         "type": "string",
-        "description": "BNK Gateway name — client module targets this"
+        "description": "BNK Gateway name — client module targets this",
+        "value": "${gateway_name}"
       },
       {
         "name": "gateway_namespace",
         "type": "string",
-        "description": "Namespace of the BNK Gateway"
+        "description": "Namespace of the BNK Gateway",
+        "value": "${namespace}"
       },
       {
         "name": "gateway_vip",
         "type": "string",
-        "description": "VIP the BNK Gateway binds on the external VLAN"
+        "description": "VIP the BNK Gateway binds on the external VLAN",
+        "value": "${gateway_vip}"
       },
       {
         "name": "gateway_url",
@@ -167,12 +170,14 @@
       {
         "name": "httproute_name",
         "type": "string",
-        "description": "Name of the HTTPRoute whose backendRefs the analyzer weights"
+        "description": "Name of the HTTPRoute whose backendRefs the analyzer weights",
+        "value": "${httproute_name}"
       },
       {
         "name": "analyzer_name",
         "type": "string",
-        "description": "Name of the F5BigAnalyzer CR"
+        "description": "Name of the F5BigAnalyzer CR",
+        "value": "${analyzer_name}"
       }
     ]
   }
