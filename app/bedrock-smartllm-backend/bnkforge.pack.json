@@ -40,6 +40,10 @@
       {
         "module": "bnk/bnk-gatewayclass",
         "reason": "BNK Gateway depends on bnk-gatewayclass being registered"
+      },
+      {
+        "module": "app/bedrock-smartllm-irsa",
+        "reason": "SA annotation consumes role_arn output; without this as a declared dep, the scheduler races and apply fails before IRSA finishes"
       }
     ],
     "optional": []
