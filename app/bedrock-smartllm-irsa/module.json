@@ -1,0 +1,135 @@
+{
+  "module": {
+    "name": "Bedrock Smart-LLM IRSA",
+    "path": "app/bedrock-smartllm-irsa",
+    "version": "1.0.0",
+    "layer": "bnk-application",
+    "category": "security",
+    "description": "Creates the IAM role the app/bedrock-smartllm-backend ServiceAccount assumes via IRSA to call Bedrock (InvokeModel + Converse on 3 foundation models). Looks up the EKS cluster's OIDC provider by cluster name; trust policy uses StringEquals (no wildcard) on the SA subject claim.",
+    "cloud_specific": true,
+    "supported_platforms": ["aws"]
+  },
+  "dependencies": {
+    "required": [],
+    "optional": [
+      {
+        "module": "app/bedrock-smartllm-backend",
+        "reason": "The role's trust policy binds to the SA this module creates (default/bedrock-smartllm)",
+        "provides": "IAM role ARN consumed by the backend module's bedrock_role_arn input"
+      }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the EKS cluster hosting the bedrock-smartllm-backend pods",
+        "source": "user",
+        "example": "aws-syd-test-cluster"
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region (informational — foundation-model ARNs use `*` for region)",
+        "default": "ap-southeast-2",
+        "source": "user"
+      },
+      {
+        "name": "role_name",
+        "type": "string",
+        "description": "Name for the created IAM role",
+        "default": "bnk-bedrock-smartllm",
+        "source": "user"
+      },
+      {
+        "name": "sa_namespace",
+        "type": "string",
+        "description": "Kubernetes namespace of the SA (must match backend module's namespace)",
+        "default": "default",
+        "source": "user"
+      },
+      {
+        "name": "sa_name",
+        "type": "string",
+        "description": "Kubernetes ServiceAccount name (must match backend module's SA — currently hardcoded bedrock-smartllm)",
+        "default": "bedrock-smartllm",
+        "source": "user"
+      },
+      {
+        "name": "model_ids",
+        "type": "list(string)",
+        "description": "Bedrock foundation-model IDs the role can invoke",
+        "default": [
+          "amazon.nova-micro-v1:0",
+          "amazon.nova-lite-v1:0",
+          "anthropic.claude-3-haiku-20240307-v1:0"
+        ],
+        "source": "user"
+      },
+      {
+        "name": "tags",
+        "type": "map(string)",
+        "description": "Tags applied to the IAM role",
+        "default": {},
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "role_arn",
+        "type": "string",
+        "description": "IAM role ARN for the backend module's bedrock_role_arn input",
+        "used_by": ["app/bedrock-smartllm-backend"],
+        "sensitive": false
+      },
+      {
+        "name": "role_name",
+        "type": "string",
+        "description": "Name of the created IAM role",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "oidc_provider_arn",
+        "type": "string",
+        "description": "ARN of the EKS OIDC provider the role trusts",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "sa_namespace",
+        "type": "string",
+        "description": "Namespace the role is bound to (must match the backend module's SA namespace)",
+        "used_by": ["app/bedrock-smartllm-backend"],
+        "sensitive": false
+      },
+      {
+        "name": "sa_name",
+        "type": "string",
+        "description": "SA name the role is bound to",
+        "used_by": ["app/bedrock-smartllm-backend"],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["aws"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3"
+    }
+  },
+  "deployment": {
+    "order": 85,
+    "estimated_time": "30 seconds",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}
