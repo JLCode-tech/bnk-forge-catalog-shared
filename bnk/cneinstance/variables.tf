@@ -305,6 +305,68 @@ variable "tmm_pod_annotations" {
   default     = {}
 }
 
+# =============================================================================
+# tmm-init ConfigMap (Doc 3 page 28-29)
+# =============================================================================
+# TMM auto-mounts a ConfigMap named "tmm-init" from its own namespace at
+# /opt/lib/tmm/. The CM contains 3 keys:
+#   static_conf.tcl  — TMM static config (kept empty by default)
+#   tmm_init.tcl     — TMM init TCL: profiles, pools, file_reload directive
+#   user_conf.tcl    — site-specific TCL: per-node gateway switch + static
+#                      routes. Reloaded every 1s by the file_reload directive.
+#
+# Why this matters: the TMM pod's only default route is via the internal
+# control-plane interface (`tmm` 169.254.0.254). Kernel ICMP/TCP responses
+# to a same-VPC client (e.g. a jumphost) leak via that interface and never
+# reach the client. Adding `route 10.0.1.0/24 gw 10.0.11.1` (or whatever
+# matches your client subnet + external gateway) sends responses out via
+# eth1 instead. This is the missing piece for VIP-from-same-VPC to work.
+
+variable "tmm_init_enabled" {
+  description = "Create the tmm-init ConfigMap. Required for kernel-mode TMM to route traffic back to clients on subnets other than the data-plane subnets. Default false to preserve backward compat; set true on AWS kernel-mode deployments."
+  type        = bool
+  default     = false
+}
+
+variable "tmm_init_routes" {
+  description = <<-EOT
+    Static routes added to TMM via tmm-init/user_conf.tcl. Each route maps
+    a destination CIDR to a gateway. Example for aws-syd-test (jumphost in
+    10.0.1.0/24, external gateway 10.0.11.1):
+      [{ destination = "10.0.1.0/24", gateway = "10.0.11.1", description = "jumphost / client subnet via external" }]
+    For multi-AZ TGW deployments use tmm_init_user_conf_tcl_raw to provide
+    the full per-node switch + GRE endpoints (Doc 3 page 28-29 pattern).
+  EOT
+  type = list(object({
+    destination = string # e.g. "10.0.1.0/24" or "10.0.17.25/32"
+    gateway     = string # e.g. "10.0.11.1"
+    description = string # short comment, emitted as TCL comment
+  }))
+  default = []
+}
+
+variable "tmm_init_user_conf_tcl_raw" {
+  description = <<-EOT
+    Optional raw TCL for /opt/lib/tmm/user_conf.tcl. Wins over
+    tmm_init_routes if set (use for multi-AZ TGW per-node switch + GRE
+    endpoints). The file is reloaded every 1s by tmm_init.tcl's file_reload
+    directive, so updates propagate without a TMM restart.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "tmm_init_extra_tcl" {
+  description = <<-EOT
+    Optional extra TCL appended to tmm_init.tcl after the default boilerplate
+    (set_from_env POD_IP + file_reload directive). Use for application-specific
+    profiles (Diameter, GTP, HTTP), pools, snatpools, or bigdb tweaks. See Doc 3
+    page 27 for examples.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "controller_extra_env" {
   description = "Additional environment variables for CNE controller"
   type        = list(object({ name = string, value = string }))

@@ -202,6 +202,34 @@
         "description": "Cloud provider (aws, azure, gcp, or empty for on-prem)",
         "default": "",
         "source": "auto"
+      },
+      {
+        "name": "tmm_init_enabled",
+        "type": "boolean",
+        "description": "Create the tmm-init ConfigMap (Doc 3 page 28-29). Required for kernel-mode TMM to route response traffic back to clients on subnets other than the data-plane subnets. Set true on AWS kernel-mode deployments.",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "tmm_init_routes",
+        "type": "list(object({destination=string,gateway=string,description=string}))",
+        "description": "Static routes added to TMM via tmm-init/user_conf.tcl. Reloaded every 1s without TMM restart.",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "tmm_init_user_conf_tcl_raw",
+        "type": "string",
+        "description": "Optional raw TCL for user_conf.tcl. Wins over tmm_init_routes (use for multi-AZ TGW per-node switch + GRE endpoints).",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "tmm_init_extra_tcl",
+        "type": "string",
+        "description": "Optional extra TCL appended to tmm_init.tcl after the default boilerplate (profiles, pools, snatpools, bigdb tweaks).",
+        "default": "",
+        "source": "user"
       }
     ]
   },
