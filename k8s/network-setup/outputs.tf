@@ -15,6 +15,21 @@ output "namespace" {
   value       = var.namespace
 }
 
+output "tmm_data_plane_mode" {
+  description = "TMM data-plane mode (kernel|sriov). Wire to cneinstance.tmm_data_plane_mode."
+  value       = var.tmm_data_plane_mode
+}
+
+output "external_pci_bus_id" {
+  description = "PCI bus ID of the external ENI. Wire to cneinstance.external_pci_bus_id."
+  value       = var.external_pci_bus_id
+}
+
+output "internal_pci_bus_id" {
+  description = "PCI bus ID of the internal ENI. Wire to cneinstance.internal_pci_bus_id."
+  value       = var.internal_pci_bus_id
+}
+
 output "nads_ready" {
   description = "Flag indicating NADs are created and ready"
   value       = true

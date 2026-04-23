@@ -170,6 +170,33 @@
         "from_output": "internal_nad_name"
       },
       {
+        "name": "tmm_data_plane_mode",
+        "type": "string",
+        "description": "TMM data-plane mode (kernel|sriov). When 'kernel' (default), the module auto-injects the 8 kernel-mode TMM env vars (Doc 3 + extended for second interface), the Multus annotation override naming interfaces eth1/eth2, and a 6Gi memory override. Must match k8s/network-setup and infra/aws/high-performance-nodes.",
+        "default": "kernel",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "tmm_data_plane_mode"
+      },
+      {
+        "name": "external_pci_bus_id",
+        "type": "string",
+        "description": "(kernel mode) PCI bus ID of the external ENI, used to populate PCIDEVICE_INTEL_COM_ETH1 in TMM env.",
+        "default": "0000:00:07.0",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "external_pci_bus_id"
+      },
+      {
+        "name": "internal_pci_bus_id",
+        "type": "string",
+        "description": "(kernel mode) PCI bus ID of the internal ENI, used to populate PCIDEVICE_INTEL_COM_ETH2 in TMM env.",
+        "default": "0000:00:08.0",
+        "source": "module",
+        "from_module": "k8s/network-setup",
+        "from_output": "internal_pci_bus_id"
+      },
+      {
         "name": "cloud_provider",
         "type": "string",
         "description": "Cloud provider (aws, azure, gcp, or empty for on-prem)",

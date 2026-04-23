@@ -31,6 +31,26 @@ resource "local_file" "kubeconfig" {
 locals {
   kubectl = "kubectl --kubeconfig ${local_file.kubeconfig.filename}"
 
+  is_kernel_mode = var.tmm_data_plane_mode == "kernel"
+
+  # Kernel-mode TMM env vars — added when tmm_data_plane_mode = "kernel".
+  # Per F5 Doc 3 (Multi-AZ Network Architecture) advanced.tmm.env, validated
+  # on aws-syd-test. The first 6 are verbatim from the doc (single interface).
+  # ROBIN_VFIO_RESOURCE_2 + PCIDEVICE_INTEL_COM_ETH2 extend the same naming
+  # pattern to the second (internal) interface for in-cluster reverse-proxy
+  # deployments — a two-interface pattern not explicitly documented by F5
+  # but a straightforward extension of the single-interface env vars.
+  kernel_mode_env = local.is_kernel_mode ? [
+    { name = "TMM_GENERIC_SOCKET_DRIVER", value = "true" },
+    { name = "TMM_CALICO_ROUTER", value = "default" },
+    { name = "PAL_CPU_SET", value = "0,2" },
+    { name = "TMM_MAPRES_ADDL_VETHS_ON_DP", value = "TRUE" },
+    { name = "ROBIN_VFIO_RESOURCE_1", value = "eth1" },
+    { name = "PCIDEVICE_INTEL_COM_ETH1", value = var.external_pci_bus_id },
+    { name = "ROBIN_VFIO_RESOURCE_2", value = "eth2" },
+    { name = "PCIDEVICE_INTEL_COM_ETH2", value = var.internal_pci_bus_id },
+  ] : []
+
   # TMM environment variables — these MUST be set explicitly.
   # FLO does NOT set these from CNEInstance defaults.
   tmm_env = concat(
@@ -38,7 +58,50 @@ locals {
       { name = "TMM_DEFAULT_MTU", value = tostring(var.tmm_default_mtu) },
       { name = "TMM_IGNORE_GATEWAYS", value = var.tmm_ignore_gateways ? "TRUE" : "FALSE" },
     ],
+    local.kernel_mode_env,
     var.tmm_extra_env
+  )
+
+  # Multus annotation override — names the data-plane interfaces eth1 / eth2
+  # so they match ROBIN_VFIO_RESOURCE_1/2. Without this, Multus uses default
+  # names net1 / net2 and TMM can't find its interfaces. Kernel mode only.
+  multus_networks_annotation = local.is_kernel_mode ? jsonencode([
+    {
+      name      = var.external_nad_name
+      namespace = var.instance_namespace
+      interface = "eth1"
+    },
+    {
+      name      = var.internal_nad_name
+      namespace = var.instance_namespace
+      interface = "eth2"
+    }
+  ]) : ""
+
+  default_kernel_mode_annotations = local.is_kernel_mode ? {
+    "k8s.v1.cni.cncf.io/networks" = local.multus_networks_annotation
+  } : {}
+
+  # Merge user-supplied tmm_pod_annotations on top of the kernel-mode defaults.
+  # Anything the user sets wins (allows opt-out or override).
+  tmm_annotations = merge(local.default_kernel_mode_annotations, var.tmm_pod_annotations)
+
+  # Resources: in kernel mode default to 6Gi memory (Small + DPDK assumes 2Gi
+  # which OOMKills TMM in kernel mode). User-supplied tmm_resources wins.
+  default_kernel_mode_resources = local.is_kernel_mode ? {
+    requests = { memory = "6Gi" }
+    limits   = { memory = "6Gi" }
+  } : null
+
+  effective_resources = var.tmm_resources != null ? var.tmm_resources : local.default_kernel_mode_resources
+
+  # tmm_block: assemble the advanced.tmm map only with fields that are set.
+  # Empty annotations / null resources stay out so the operator keeps its
+  # defaults for those fields.
+  tmm_block = merge(
+    { env = local.tmm_env },
+    length(local.tmm_annotations) > 0 ? { annotations = local.tmm_annotations } : {},
+    local.effective_resources != null ? { resources = local.effective_resources } : {}
   )
 
   # Controller environment variables
@@ -160,9 +223,7 @@ locals {
           env = local.controller_env
         }
 
-        tmm = {
-          env = local.tmm_env
-        }
+        tmm = local.tmm_block
       }
     }, local.storage_class_field)
   }

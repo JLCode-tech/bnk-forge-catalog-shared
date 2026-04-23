@@ -29,7 +29,7 @@ variable "instance_name" {
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.instance_name))
-    error_message = "Instance name must be a valid Kubernetes resource name"
+    error_message = "The instance_name must be a valid Kubernetes resource name (lowercase alphanumeric and hyphens, starting/ending with alphanumeric)."
   }
 }
 
@@ -92,7 +92,7 @@ variable "cloud_provider" {
 
   validation {
     condition     = contains(["", "aws", "azure"], var.cloud_provider)
-    error_message = "cloud_provider must be one of: '' (empty), 'aws', 'azure'"
+    error_message = "The cloud_provider value must be one of: \"\" (empty), \"aws\", or \"azure\"."
   }
 }
 
@@ -125,7 +125,7 @@ variable "deployment_size" {
 
   validation {
     condition     = contains(["Small", "Medium", "Large", "Max"], var.deployment_size)
-    error_message = "Deployment size must be one of: Small, Medium, Large, Max"
+    error_message = "The deployment_size value must be one of: Small, Medium, Large, or Max."
   }
 }
 
@@ -227,6 +227,82 @@ variable "tmm_extra_env" {
   description = "Additional environment variables for TMM container"
   type        = list(object({ name = string, value = string }))
   default     = []
+}
+
+# =============================================================================
+# TMM DATA-PLANE MODE (kernel | sriov)
+# =============================================================================
+# In "kernel" mode (default, validated per F5 Doc 3) we add the env vars TMM
+# needs to run on the kernel network stack via raw sockets (host-device CNI
+# moves the ENI's kernel netdev into the pod). The Multus annotation override
+# names the interfaces eth1/eth2 so they match ROBIN_VFIO_RESOURCE_1/2. The
+# resources block bumps memory to 6Gi (Small + DPDK assumes 2Gi; kernel mode
+# OOMKills at 2Gi).
+#
+# In "sriov" mode we leave the original DPDK/vfio-pci configuration alone —
+# the SR-IOV device plugin allocates the VF and TMM accesses it via vfio.
+
+variable "tmm_data_plane_mode" {
+  description = <<-EOT
+    TMM data-plane mode. Must match k8s/network-setup.tmm_data_plane_mode.
+      "kernel" (default) — host-device CNI + kernel-mode TMM. Adds the 8
+        kernel-mode env vars, Multus annotation override (eth1/eth2), and
+        bumps memory to 6Gi. Validated per F5 Doc 3 + aws-syd-test.
+      "sriov" — legacy DPDK/vfio-pci. No extra env, no resource override.
+  EOT
+  type        = string
+  default     = "kernel"
+
+  validation {
+    condition     = contains(["kernel", "sriov"], var.tmm_data_plane_mode)
+    error_message = "The tmm_data_plane_mode value must be \"kernel\" or \"sriov\"."
+  }
+}
+
+variable "external_pci_bus_id" {
+  description = "(kernel mode) PCI bus ID of the external ENI. Wire from network-setup.external_pci_bus_id."
+  type        = string
+  default     = "0000:00:07.0"
+}
+
+variable "internal_pci_bus_id" {
+  description = "(kernel mode) PCI bus ID of the internal ENI. Wire from network-setup.internal_pci_bus_id."
+  type        = string
+  default     = "0000:00:08.0"
+}
+
+# =============================================================================
+# TMM POD RESOURCES + ANNOTATIONS (advanced.tmm.resources / advanced.tmm.annotations)
+# =============================================================================
+# When tmm_data_plane_mode = "kernel", these defaults are merged in. When set
+# explicitly they always win.
+
+variable "tmm_resources" {
+  description = <<-EOT
+    Resource requests/limits for the TMM container, merged into
+    advanced.tmm.resources. In kernel mode the operator-default 2Gi from
+    deploymentSize=Small triggers OOMKill; we override to 6Gi. CPU + hugepages
+    keep the operator defaults. Set explicitly to override (e.g.
+    {requests = {memory = "8Gi", cpu = "4"}, limits = {memory = "8Gi", cpu = "4"}}).
+    Pass null (default) to use the kernel-mode default (6Gi memory) or operator
+    defaults in sriov mode.
+  EOT
+  type = object({
+    requests = map(string)
+    limits   = map(string)
+  })
+  default = null
+}
+
+variable "tmm_pod_annotations" {
+  description = <<-EOT
+    Annotations to apply to the TMM pod template (advanced.tmm.annotations).
+    In kernel mode this includes the Multus k8s.v1.cni.cncf.io/networks
+    override that names the interfaces eth1 and eth2 so they match
+    ROBIN_VFIO_RESOURCE_1 and ROBIN_VFIO_RESOURCE_2.
+  EOT
+  type        = map(string)
+  default     = {}
 }
 
 variable "controller_extra_env" {

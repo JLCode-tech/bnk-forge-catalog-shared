@@ -2,6 +2,63 @@
 
 All notable changes to this module will be documented in this file.
 
+## [2.3.0] - 2026-04-23
+
+### Changed — TMM data plane defaults to **kernel mode** (host-device CNI)
+
+Validated on aws-syd-test against F5 Doc 3 ("AWS Cloud Multi-AZ Network
+Architecture Deployment Guide"). The new default `tmm_data_plane_mode =
+"kernel"` matches what F5 actually documents for AWS deployments:
+
+- ENIs stay on the `ena` driver (no vfio-pci binding at boot)
+- The `host-device` CNI moves the kernel netdev for each dedicated ENI into
+  the TMM pod's netns at scheduling time
+- TMM runs with `TMM_GENERIC_SOCKET_DRIVER=true` and uses the kernel network
+  stack via raw sockets (no DPDK)
+
+The previous SR-IOV / DPDK / vfio-pci stack (`sriov-cni-installer`,
+`kube-sriov-device-plugin-amd64`, `dpdk-configurator` DaemonSets +
+`sriovdp-config` ConfigMap + Phase-4 vfio-pci binding in
+`compact_userdata.sh`) is now opt-in via `tmm_data_plane_mode = "sriov"`.
+Code and manifests are retained for telco/DPU deployments that need DPDK,
+but new AWS deployments should use the kernel-mode default.
+
+**Why the change:** the SR-IOV path was hand-rolled and not in any F5 doc.
+On aws-syd-test it caused: VPC-CNI / SR-IOV-device-plugin contention on PCI
+06; TMM data plane unable to ARP for selfips/VIPs from a same-VPC client
+because the dedicated-ENI netdev was bound to vfio-pci with no userspace
+consumer for jumphost traffic; gRPC `errno: 15` config-push rejections.
+The kernel mode path validated end-to-end at L2/L3 with both interfaces
+plumbed (eth1 external + eth2 internal).
+
+**New variables (this module):**
+- `tmm_data_plane_mode` (default `"kernel"`) — `"kernel"` or `"sriov"`
+
+**Variables to wire in matching modules** (must agree across them):
+- `k8s/network-setup`: `tmm_data_plane_mode`, `external_pci_bus_id`,
+  `internal_pci_bus_id`
+- `bnk/cneinstance`: `tmm_data_plane_mode`, `external_pci_bus_id`,
+  `internal_pci_bus_id`. The cneinstance module auto-injects the 8
+  kernel-mode TMM env vars (per Doc 3 + extended for the second interface),
+  the Multus annotation override naming the interfaces eth1/eth2, and the
+  6Gi memory override (operator default 2Gi OOMKills in kernel mode).
+
+**Behavior in kernel mode (default):**
+- The four SR-IOV/DPDK DaemonSets and ConfigMap have `count = 0`
+- The 7 SR-IOV/DPDK script `aws_s3_object` uploads have `count = 0`
+- The `sriov` and `dpdk` node labels (and the `dpdk-enabled` BNK label) are
+  omitted from HP nodes — kept only in `sriov` mode
+- `compact_userdata.sh` Phase 4 (DPDK continuation service) and the
+  post-reboot trigger are gated on `TMM_DATA_PLANE_MODE = "sriov"`. The
+  hugepages + isolcpus + sysctl tuning still applies in both modes
+- `verify_setup` output reflects the active mode
+
+**Operational requirement** (Doc 3 page 30): in kernel mode the CNE
+controller's ServiceAccount needs IRSA + an IAM policy with
+`ec2:AssignPrivateIpAddresses` / `UnassignPrivateIpAddresses` /
+`DescribeInstances` / `DescribeNetworkInterfaces` so the controller can
+attach selfips and VIPs as secondary IPs on the dedicated ENIs.
+
 ## [2.2.0] - 2026-04-23
 
 ### Fixed — Dedicated internal SR-IOV ENI (was missing)

@@ -136,6 +136,13 @@
         "source": "user"
       },
       {
+        "name": "tmm_data_plane_mode",
+        "type": "string",
+        "description": "TMM data-plane mode: 'kernel' (default, host-device CNI per F5 Doc 3 Multi-AZ) or 'sriov' (legacy DPDK/vfio-pci). In kernel mode the SR-IOV / DPDK DaemonSets and the userdata vfio-pci binding are skipped. Must match k8s/network-setup.tmm_data_plane_mode and bnk/cneinstance.tmm_data_plane_mode.",
+        "default": "kernel",
+        "source": "user"
+      },
+      {
         "name": "tmm_node_count",
         "type": "number",
         "description": "Number of nodes to dedicate for TMM (tainted with dpu=true:NoSchedule and labeled app=f5-tmm). Remaining nodes stay untainted for BNK control plane pods.",

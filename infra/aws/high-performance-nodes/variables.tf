@@ -119,6 +119,37 @@ variable "f5_bnk_enabled" {
   default     = true
 }
 
+# =============================================================================
+# TMM DATA-PLANE MODE
+# =============================================================================
+# Controls whether the SR-IOV stack (sriov-cni-installer, sriov-device-plugin,
+# dpdk-configurator DSes + sriovdp-config CM + DPDK userdata binding) is
+# deployed alongside the HP node group.
+#
+# Default "kernel" matches the validated AWS reference architecture:
+#   - ENIs stay on the ena driver (no vfio-pci binding at boot)
+#   - host-device CNI moves the kernel netdev into the TMM pod
+#   - TMM runs with TMM_GENERIC_SOCKET_DRIVER=true
+# Set "sriov" only for legacy DPDK telco/DPU deployments.
+variable "tmm_data_plane_mode" {
+  description = <<-EOT
+    TMM data-plane mode. Must match k8s/network-setup.tmm_data_plane_mode and
+    bnk/cneinstance.tmm_data_plane_mode.
+      "kernel" (default) — host-device CNI + kernel-mode TMM. SR-IOV stack
+        (sriov-cni-installer, sriov-device-plugin, dpdk-configurator DSes +
+        sriovdp-config + DPDK userdata binding) is NOT deployed.
+      "sriov" — legacy DPDK/vfio-pci. SR-IOV stack is deployed; userdata
+        binds the data-plane PCI devices to vfio-pci at boot.
+  EOT
+  type        = string
+  default     = "kernel"
+
+  validation {
+    condition     = contains(["kernel", "sriov"], var.tmm_data_plane_mode)
+    error_message = "The tmm_data_plane_mode value must be \"kernel\" or \"sriov\"."
+  }
+}
+
 variable "f5_tmm_cpu_cores" {
   description = "Number of CPU cores for F5 TMM"
   type        = number
@@ -144,7 +175,7 @@ variable "tmm_node_count" {
   default     = 1
   validation {
     condition     = var.tmm_node_count >= 0
-    error_message = "tmm_node_count must be >= 0."
+    error_message = "The tmm_node_count value must be greater than or equal to 0."
   }
 }
 
