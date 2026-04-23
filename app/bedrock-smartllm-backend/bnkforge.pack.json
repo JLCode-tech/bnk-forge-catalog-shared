@@ -58,8 +58,9 @@
       {
         "name": "gateway_vip",
         "type": "string",
-        "description": "IPv4 VIP for the BNK Gateway. Must be in the external VLAN's prefix and unused.",
+        "description": "IPv4 VIP for the BNK Gateway. Must be in the external VLAN's prefix and unused. Default `10.0.10.100` fits the Sydney demo cluster (external VLAN 10.0.10.0/24) — override if your cluster's external VLAN uses a different CIDR.",
         "source": "user",
+        "default": "10.0.10.100",
         "example": "10.0.10.100"
       }
     ],

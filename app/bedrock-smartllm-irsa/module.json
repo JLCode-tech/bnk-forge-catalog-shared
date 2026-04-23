@@ -24,8 +24,8 @@
       {
         "name": "cluster_name",
         "type": "string",
-        "description": "Name of the EKS cluster hosting the bedrock-smartllm-backend pods",
-        "source": "user",
+        "description": "Name of the EKS cluster hosting the bedrock-smartllm-backend pods. Auto-injected from the project's attached k8s cluster.",
+        "source": "auto",
         "example": "aws-syd-test-cluster"
       }
     ],
