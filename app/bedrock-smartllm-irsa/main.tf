@@ -18,6 +18,16 @@ locals {
   # EKS OIDC issuer comes back as https://oidc.eks.<region>.amazonaws.com/id/<id>
   oidc_issuer_url  = data.aws_eks_cluster.target.identity[0].oidc[0].issuer
   oidc_provider_id = replace(local.oidc_issuer_url, "https://", "")
+
+  # Auto-derive a project-scoped role name when role_name isn't supplied,
+  # so multiple projects in the same AWS account don't collide on a static
+  # "bnk-bedrock-smartllm" name. Users who want a fixed name can pass
+  # role_name explicitly.
+  effective_role_name = (
+    var.role_name != "" ? var.role_name :
+    var.project_name != "" ? "bnk-bedrock-smartllm-${var.project_name}" :
+    "bnk-bedrock-smartllm"
+  )
 }
 
 # The OIDC provider must already be registered in IAM (it is for EKS clusters
@@ -29,7 +39,7 @@ data "aws_iam_openid_connect_provider" "eks" {
 }
 
 resource "aws_iam_role" "bedrock" {
-  name        = var.role_name
+  name        = local.effective_role_name
   description = "IRSA for bnk-forge bedrock-smartllm-backend pods (${var.sa_namespace}/${var.sa_name})"
 
   assume_role_policy = jsonencode({

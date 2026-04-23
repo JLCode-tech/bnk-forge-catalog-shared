@@ -40,9 +40,16 @@
       {
         "name": "role_name",
         "type": "string",
-        "description": "Name for the created IAM role",
-        "default": "bnk-bedrock-smartllm",
+        "description": "Name for the created IAM role. Leave blank to auto-derive as bnk-bedrock-smartllm-<project_name> — avoids collisions across projects in shared AWS accounts.",
+        "default": "",
         "source": "user"
+      },
+      {
+        "name": "project_name",
+        "type": "string",
+        "description": "Forge project name, auto-injected. Used to build the default role_name.",
+        "default": "",
+        "source": "auto"
       },
       {
         "name": "sa_namespace",

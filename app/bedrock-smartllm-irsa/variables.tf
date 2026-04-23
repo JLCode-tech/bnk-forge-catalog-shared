@@ -11,8 +11,14 @@ variable "aws_region" {
 
 variable "role_name" {
   type        = string
-  default     = "bnk-bedrock-smartllm"
-  description = "Name for the IAM role."
+  default     = ""
+  description = "Name for the IAM role. Leave empty to auto-derive as bnk-bedrock-smartllm-<project_name> — keeps per-project deploys collision-free in shared AWS accounts."
+}
+
+variable "project_name" {
+  type        = string
+  default     = ""
+  description = "Forge project name. Injected automatically (source: auto) — used to build a unique default role_name when role_name is not set."
 }
 
 variable "sa_namespace" {
