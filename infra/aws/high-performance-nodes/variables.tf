@@ -165,3 +165,37 @@ variable "eni_attachment_manager_role_arn" {
   type        = string
   default     = null
 }
+
+variable "kubeconfig_path" {
+  description = "Path to kubeconfig used by local-exec provisioners that patch in-cluster resources (e.g. the default aws-node DS)."
+  type        = string
+  default     = "~/.kube/config"
+}
+
+variable "vpc_cni_image" {
+  description = <<-EOT
+    Full image reference for the VPC CNI (aws-node) container on HP nodes.
+    Must match the image/version used by the default kube-system/aws-node
+    DS so behavior is consistent across node types. The HP variant is
+    configured at this module's aws-node-hp-daemonset.yaml.
+  EOT
+  type        = string
+  default     = "602401143452.dkr.ecr.ap-southeast-2.amazonaws.com/amazon-k8s-cni:v1.18.5"
+}
+
+variable "vpc_cni_image_tag" {
+  description = "Version tag value reported via the VPC_CNI_VERSION env on aws-node-hp (matches vpc_cni_image tag)."
+  type        = string
+  default     = "v1.18.5"
+}
+
+variable "hugepages_2mb_count" {
+  description = <<-EOT
+    Number of 2MB hugepages to allocate per HP node. Applied at runtime by
+    the hugepages-setup init container on the eni-attachment-manager DS.
+    Boot-time persistence (GRUB drop-in + systemd service) is handled
+    separately in node userdata — see compact_userdata.sh.
+  EOT
+  type        = number
+  default     = 1024
+}

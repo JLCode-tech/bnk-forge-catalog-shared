@@ -446,6 +446,7 @@ resource "kubernetes_manifest" "eni_attachment_daemonset" {
     region                    = var.region
     vpc_security_group_id     = var.vpc_security_group_id
     cluster_security_group_id = data.aws_security_group.cluster_sg.id
+    hugepages_2mb_count       = var.hugepages_2mb_count
   }))
 }
 
@@ -460,6 +461,75 @@ resource "null_resource" "wait_for_eni_attachment" {
       echo "ENI attachment completed!"
     EOT
   }
+}
+
+# ==============================================
+# VPC CNI (aws-node) SCOPING FOR HP NODES
+# ==============================================
+#
+# Problem: the default kube-system/aws-node DaemonSet pre-attaches a
+# secondary pod-IP ENI at device index 1 on every node it runs on. On HP
+# nodes that slot is reserved for the internal SR-IOV ENI (PCI 06), so
+# VPC CNI and the eni-attachment-manager race — VPC CNI usually wins.
+#
+# Fix (both steps are required):
+#   1. Exclude the default aws-node DS from HP nodes via anti-affinity.
+#   2. Run a dedicated aws-node-hp DS on HP nodes only, with
+#      MAX_ENI=1 + WARM_ENI_TARGET=0 so VPC CNI never adds a secondary
+#      ENI. Pod IPs come from the primary ENI only (30 IPs on c5n.4xlarge
+#      — plenty for a TMM-class workload).
+#
+# Step 1: anti-affinity patch on the default aws-node DS.
+
+resource "null_resource" "exclude_default_aws_node_from_hp" {
+  depends_on = [aws_eks_node_group.x86_high_perf]
+
+  triggers = {
+    # Re-apply if the node-type label key changes
+    hp_label_key = "node-type"
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      : "Patching kube-system/aws-node: anti-affinity to skip node-type=high-performance"
+      kubectl --kubeconfig=${var.kubeconfig_path} patch daemonset aws-node -n kube-system \
+        --type=json -p='[
+          {
+            "op": "add",
+            "path": "/spec/template/spec/affinity",
+            "value": {
+              "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                  "nodeSelectorTerms": [{
+                    "matchExpressions": [{
+                      "key": "node-type",
+                      "operator": "NotIn",
+                      "values": ["high-performance"]
+                    }]
+                  }]
+                }
+              }
+            }
+          }
+        ]' || true
+    EOT
+  }
+}
+
+# Step 2: dedicated aws-node-hp DS scoped to HP nodes with the restrictive
+# env vars. Shares the aws-node ServiceAccount so no extra RBAC is needed.
+
+resource "kubernetes_manifest" "aws_node_hp_daemonset" {
+  depends_on = [
+    null_resource.exclude_default_aws_node_from_hp,
+    aws_eks_node_group.x86_high_perf,
+  ]
+
+  manifest = yamldecode(templatefile("${path.module}/manifests/aws-node-hp-daemonset.yaml", {
+    vpc_cni_image     = var.vpc_cni_image
+    vpc_cni_image_tag = var.vpc_cni_image_tag
+  }))
 }
 
 # ==============================================
