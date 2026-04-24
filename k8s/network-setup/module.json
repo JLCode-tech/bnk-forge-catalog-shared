@@ -9,6 +9,17 @@
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
+  "source": {
+    "kind": "official",
+    "channel": "release/2.2"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": ["terraform", "kubernetes_manifest"]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
   "dependencies": {
     "required": [
       {

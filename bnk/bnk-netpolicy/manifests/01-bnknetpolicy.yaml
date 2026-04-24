@@ -1,0 +1,211 @@
+apiVersion: k8s.f5.com/v1
+kind: BNKNetPolicy
+metadata:
+  name: ${policy_name}
+  namespace: ${policy_namespace}
+  labels:
+    app.kubernetes.io/name: ${policy_name}
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/managed-by: bnk-forge
+{% if common_labels %}
+{% for key, value in common_labels.items() %}
+    ${key}: ${value}
+{% endfor %}
+{% endif %}
+{% if annotations %}
+  annotations:
+{% for key, value in annotations.items() %}
+    ${key}: ${value}
+{% endfor %}
+{% endif %}
+spec:
+  {# iRules configuration #}
+{% if irules %}
+  irules:
+{% for irule in irules %}
+{% if irule.name %}
+    - ref:
+        name: ${irule.name}
+{% if irule.namespace %}
+        namespace: ${irule.namespace}
+{% endif %}
+{% endif %}
+{% if irule.inline %}
+    - inline: |
+        ${irule.inline}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+  {# TCP profile / TCP settings reference (mutually exclusive) #}
+{% if tcp_profile %}
+  tcp:
+{% if tcp_profile.idle_timeout %}
+    idleTimeout: ${tcp_profile.idle_timeout}
+{% endif %}
+{% if tcp_profile.close_wait_timeout %}
+    closeWaitTimeout: ${tcp_profile.close_wait_timeout}
+{% endif %}
+{% if tcp_profile.fin_wait_timeout %}
+    finWaitTimeout: ${tcp_profile.fin_wait_timeout}
+{% endif %}
+{% if tcp_profile.keep_alive_interval %}
+    keepAliveInterval: ${tcp_profile.keep_alive_interval}
+{% endif %}
+{% if tcp_profile.tcp_window_size is not none %}
+    windowSize: ${tcp_profile.tcp_window_size}
+{% endif %}
+{% if tcp_profile.nagle_algorithm is not none %}
+    nagleAlgorithm: ${tcp_profile.nagle_algorithm}
+{% endif %}
+{% if tcp_profile.delayed_acks is not none %}
+    delayedAcks: ${tcp_profile.delayed_acks}
+{% endif %}
+{% if tcp_profile.reset_on_timeout is not none %}
+    resetOnTimeout: ${tcp_profile.reset_on_timeout}
+{% endif %}
+{% if tcp_profile.proxy_buffer_low is not none %}
+    proxyBufferLow: ${tcp_profile.proxy_buffer_low}
+{% endif %}
+{% if tcp_profile.proxy_buffer_high is not none %}
+    proxyBufferHigh: ${tcp_profile.proxy_buffer_high}
+{% endif %}
+{% elif tcp_settings_ref %}
+  tcp:
+    ref:
+      name: ${tcp_settings_ref.name}
+{% if tcp_settings_ref.namespace %}
+      namespace: ${tcp_settings_ref.namespace}
+{% endif %}
+{% endif %}
+
+  {# HTTP profile configuration #}
+{% if http_profile %}
+  http:
+{% if http_profile.xff_enabled is not none %}
+    xffEnabled: ${http_profile.xff_enabled}
+{% endif %}
+{% if http_profile.xff_trusted_proxies %}
+    xffTrustedProxies: ${http_profile.xff_trusted_proxies}
+{% endif %}
+{% if http_profile.max_header_size is not none %}
+    maxHeaderSize: ${http_profile.max_header_size}
+{% endif %}
+{% if http_profile.max_headers_count is not none %}
+    maxHeadersCount: ${http_profile.max_headers_count}
+{% endif %}
+{% if http_profile.request_chunking %}
+    requestChunking: ${http_profile.request_chunking}
+{% endif %}
+{% if http_profile.response_chunking %}
+    responseChunking: ${http_profile.response_chunking}
+{% endif %}
+{% if http_profile.pipeline_mode %}
+    pipelineMode: ${http_profile.pipeline_mode}
+{% endif %}
+{% endif %}
+
+  {# High-speed logging configuration #}
+{% if hsl_logging and hsl_logging.enabled %}
+  logging:
+{% if hsl_logging.publisher_ref %}
+    publisherRef:
+      name: ${hsl_logging.publisher_ref.name}
+{% if hsl_logging.publisher_ref.namespace %}
+      namespace: ${hsl_logging.publisher_ref.namespace}
+{% endif %}
+{% endif %}
+{% if hsl_logging.log_profile_ref %}
+    profileRef:
+      name: ${hsl_logging.log_profile_ref.name}
+{% if hsl_logging.log_profile_ref.namespace %}
+      namespace: ${hsl_logging.log_profile_ref.namespace}
+{% endif %}
+{% endif %}
+{% if hsl_logging.log_format %}
+    format: ${hsl_logging.log_format}
+{% endif %}
+{% if hsl_logging.log_level %}
+    level: ${hsl_logging.log_level}
+{% endif %}
+{% endif %}
+
+  {# Connection pool configuration #}
+{% if connection_pool %}
+  connectionPool:
+{% if connection_pool.max_connections is not none %}
+    maxConnections: ${connection_pool.max_connections}
+{% endif %}
+{% if connection_pool.max_idle_connections is not none %}
+    maxIdleConnections: ${connection_pool.max_idle_connections}
+{% endif %}
+{% if connection_pool.idle_timeout %}
+    idleTimeout: ${connection_pool.idle_timeout}
+{% endif %}
+{% if connection_pool.connection_timeout %}
+    connectionTimeout: ${connection_pool.connection_timeout}
+{% endif %}
+{% if connection_pool.max_requests_per_conn is not none %}
+    maxRequestsPerConnection: ${connection_pool.max_requests_per_conn}
+{% endif %}
+{% endif %}
+
+  {# Session persistence configuration #}
+{% if persistence %}
+  persistence:
+    type: ${persistence.type}
+{% if persistence.timeout %}
+    timeout: ${persistence.timeout}
+{% endif %}
+{% if persistence.cookie_name %}
+    cookieName: ${persistence.cookie_name}
+{% endif %}
+{% if persistence.cookie_method %}
+    cookieMethod: ${persistence.cookie_method}
+{% endif %}
+{% if persistence.cookie_encrypt is not none %}
+    cookieEncrypt: ${persistence.cookie_encrypt}
+{% endif %}
+{% if persistence.hash_algorithm %}
+    hashAlgorithm: ${persistence.hash_algorithm}
+{% endif %}
+{% endif %}
+
+  {# SSL profile configuration #}
+{% if ssl_profile and ssl_profile.enabled %}
+  ssl:
+{% if ssl_profile.cipher_suite %}
+    cipherSuite: ${ssl_profile.cipher_suite}
+{% endif %}
+{% if ssl_profile.min_protocol %}
+    minProtocol: ${ssl_profile.min_protocol}
+{% endif %}
+{% if ssl_profile.max_protocol %}
+    maxProtocol: ${ssl_profile.max_protocol}
+{% endif %}
+{% if ssl_profile.verify_server_cert is not none %}
+    verifyServerCert: ${ssl_profile.verify_server_cert}
+{% endif %}
+{% if ssl_profile.ca_bundle_ref %}
+    caBundleRef:
+      name: ${ssl_profile.ca_bundle_ref.name}
+{% if ssl_profile.ca_bundle_ref.namespace %}
+      namespace: ${ssl_profile.ca_bundle_ref.namespace}
+{% endif %}
+{% endif %}
+{% endif %}
+
+  {# Compression configuration #}
+{% if compression and compression.enabled %}
+  compression:
+    enabled: true
+{% if compression.algorithms %}
+    algorithms: ${compression.algorithms}
+{% endif %}
+{% if compression.min_size is not none %}
+    minSize: ${compression.min_size}
+{% endif %}
+{% if compression.content_types %}
+    contentTypes: ${compression.content_types}
+{% endif %}
+{% endif %}

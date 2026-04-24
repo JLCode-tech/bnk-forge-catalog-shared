@@ -43,6 +43,11 @@ locals {
 # CRD before this module's init/plan/apply.
 
 resource "kubernetes_manifest" "bnk_gatewayclass" {
+  field_manager {
+    name            = "terraform"
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "gateway.networking.k8s.io/v1"
     kind       = "GatewayClass"

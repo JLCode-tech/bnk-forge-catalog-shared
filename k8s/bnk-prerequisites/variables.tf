@@ -17,7 +17,12 @@ variable "forge_kubeconfig_content" {
 # =============================================================================
 
 variable "cne_pull_secret" {
-  description = "Base64-encoded F5 FAR service account key JSON content. Injected as a project secret."
+  description = <<-EOT
+    F5 FAR registry credentials. Accepts TWO formats:
+    Format A: Base64-encoded JSON service account key from F5 (bare key).
+    Format B: Base64-encoded dockerconfigjson ({"auths":{"repo.f5.com":{"auth":"..."}}}).
+    Both are auto-detected. Injected as a project secret.
+  EOT
   type        = string
   sensitive   = true
 
@@ -46,7 +51,7 @@ variable "utils_namespace" {
 variable "gateway_namespace" {
   description = "Namespace for Gateway API resources (Gateway, HTTPRoute, etc.)"
   type        = string
-  default     = "gateway-ns"
+  default     = "bnk-gw"
 }
 
 # =============================================================================
@@ -54,9 +59,9 @@ variable "gateway_namespace" {
 # =============================================================================
 
 variable "bnk_manifest_version" {
-  description = "BNK manifest version to download from FAR (e.g., 2.2.0-3.2226.0-0.0.385)"
+  description = "BNK manifest version to download from FAR (e.g., 2.2.1-3.2226.0-0.0.511)"
   type        = string
-  default     = "2.2.0-3.2226.0-0.0.385"
+  default     = "2.2.1-3.2226.0-0.0.511"
 
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-", var.bnk_manifest_version))

@@ -119,6 +119,37 @@ variable "f5_bnk_enabled" {
   default     = true
 }
 
+# =============================================================================
+# TMM DATA-PLANE MODE
+# =============================================================================
+# Controls whether the SR-IOV stack (sriov-cni-installer, sriov-device-plugin,
+# dpdk-configurator DSes + sriovdp-config CM + DPDK userdata binding) is
+# deployed alongside the HP node group.
+#
+# Default "kernel" matches the validated AWS reference architecture:
+#   - ENIs stay on the ena driver (no vfio-pci binding at boot)
+#   - host-device CNI moves the kernel netdev into the TMM pod
+#   - TMM runs with TMM_GENERIC_SOCKET_DRIVER=true
+# Set "sriov" only for legacy DPDK telco/DPU deployments.
+variable "tmm_data_plane_mode" {
+  description = <<-EOT
+    TMM data-plane mode. Must match k8s/network-setup.tmm_data_plane_mode and
+    bnk/cneinstance.tmm_data_plane_mode.
+      "kernel" (default) — host-device CNI + kernel-mode TMM. SR-IOV stack
+        (sriov-cni-installer, sriov-device-plugin, dpdk-configurator DSes +
+        sriovdp-config + DPDK userdata binding) is NOT deployed.
+      "sriov" — legacy DPDK/vfio-pci. SR-IOV stack is deployed; userdata
+        binds the data-plane PCI devices to vfio-pci at boot.
+  EOT
+  type        = string
+  default     = "kernel"
+
+  validation {
+    condition     = contains(["kernel", "sriov"], var.tmm_data_plane_mode)
+    error_message = "The tmm_data_plane_mode value must be \"kernel\" or \"sriov\"."
+  }
+}
+
 variable "f5_tmm_cpu_cores" {
   description = "Number of CPU cores for F5 TMM"
   type        = number
@@ -144,7 +175,7 @@ variable "tmm_node_count" {
   default     = 1
   validation {
     condition     = var.tmm_node_count >= 0
-    error_message = "tmm_node_count must be >= 0."
+    error_message = "The tmm_node_count value must be greater than or equal to 0."
   }
 }
 
@@ -164,4 +195,38 @@ variable "eni_attachment_manager_role_arn" {
   description = "ARN of the ENI attachment manager IAM role from security module"
   type        = string
   default     = null
+}
+
+variable "kubeconfig_path" {
+  description = "Path to kubeconfig used by local-exec provisioners that patch in-cluster resources (e.g. the default aws-node DS)."
+  type        = string
+  default     = "~/.kube/config"
+}
+
+variable "vpc_cni_image" {
+  description = <<-EOT
+    Full image reference for the VPC CNI (aws-node) container on HP nodes.
+    Must match the image/version used by the default kube-system/aws-node
+    DS so behavior is consistent across node types. The HP variant is
+    configured at this module's aws-node-hp-daemonset.yaml.
+  EOT
+  type        = string
+  default     = "602401143452.dkr.ecr.ap-southeast-2.amazonaws.com/amazon-k8s-cni:v1.18.5"
+}
+
+variable "vpc_cni_image_tag" {
+  description = "Version tag value reported via the VPC_CNI_VERSION env on aws-node-hp (matches vpc_cni_image tag)."
+  type        = string
+  default     = "v1.18.5"
+}
+
+variable "hugepages_2mb_count" {
+  description = <<-EOT
+    Number of 2MB hugepages to allocate per HP node. Applied at runtime by
+    the hugepages-setup init container on the eni-attachment-manager DS.
+    Boot-time persistence (GRUB drop-in + systemd service) is handled
+    separately in node userdata — see compact_userdata.sh.
+  EOT
+  type        = number
+  default     = 1024
 }

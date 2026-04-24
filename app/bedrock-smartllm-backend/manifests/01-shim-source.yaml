@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bedrock-shim-source
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/part-of: bedrock-smartllm-demo
+    app.kubernetes.io/managed-by: bnk-forge
+data:
+  requirements.txt: |
+    boto3==1.35.90
+    fastapi==0.115.6
+    prometheus-client==0.21.1
+    pydantic==2.10.4
+    uvicorn[standard]==0.34.0
+  app.py: |
+    """
+    Bedrock Smart-LLM shim — single-model OpenAI-compat proxy.
+    Deployed 3x by bedrock-smartllm-backend; BNK F5BigAnalyzer weights by vllm:* metrics.
+    """
+    import logging
+    import os
+    import time
+    from contextlib import contextmanager
+
+    import boto3
+    from fastapi import FastAPI, HTTPException
+    from prometheus_client import CONTENT_TYPE_LATEST, Gauge, Histogram, generate_latest
+    from pydantic import BaseModel
+    from starlette.responses import Response
+
+    MODEL_ID = os.environ["MODEL_ID"]
+    MODEL_NAME = os.environ.get("MODEL_NAME", MODEL_ID.replace("/", "-"))
+    AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
+    CHAT_PORT = int(os.environ.get("CHAT_PORT", "8080"))
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    log = logging.getLogger("bedrock-shim")
+    bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+
+    LABEL = {"model_name": MODEL_NAME}
+    m_running = Gauge("vllm:num_requests_running", "Requests in-flight", ["model_name"])
+    m_waiting = Gauge("vllm:num_requests_waiting", "Requests queued", ["model_name"])
+    m_cache = Gauge("vllm:gpu_cache_usage_perc", "KV-cache 0-1 (synthesized)", ["model_name"])
+    m_e2e = Histogram("vllm:e2e_request_latency_seconds", "E2E latency", ["model_name"],
+                     buckets=[0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30])
+    m_ttok = Histogram("vllm:time_per_output_token_seconds", "Per-token time", ["model_name"],
+                     buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1])
+    m_prompt_tok = Histogram("vllm:request_prompt_tokens", "Prompt tokens", ["model_name"],
+                     buckets=[32, 128, 512, 2048, 8192, 32768])
+    m_gen_tok = Histogram("vllm:request_generation_tokens", "Gen tokens", ["model_name"],
+                     buckets=[16, 64, 256, 1024, 4096])
+    m_running.labels(**LABEL).set(0)
+    m_waiting.labels(**LABEL).set(0)
+    m_cache.labels(**LABEL).set(0.0)
+
+
+    class ChatMessage(BaseModel):
+        role: str
+        content: str
+
+
+    class ChatRequest(BaseModel):
+        messages: list[ChatMessage]
+        max_tokens: int | None = 256
+        temperature: float | None = 0.7
+        model: str | None = None
+
+
+    @contextmanager
+    def track_inflight():
+        m_running.labels(**LABEL).inc()
+        try:
+            current = m_running.labels(**LABEL)._value.get()
+            m_cache.labels(**LABEL).set(min(1.0, 0.05 + current * 0.12))
+            yield
+        finally:
+            m_running.labels(**LABEL).dec()
+
+
+    app = FastAPI(title=f"bedrock-shim:{MODEL_NAME}")
+
+
+    @app.get("/health")
+    def health() -> dict:
+        return {"ok": True, "model": MODEL_NAME, "model_id": MODEL_ID}
+
+
+    @app.get("/metrics")
+    def metrics() -> Response:
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+    @app.post("/v1/chat/completions")
+    def chat(req: ChatRequest) -> dict:
+        started = time.monotonic()
+        msgs = [{"role": m.role, "content": [{"text": m.content}]} for m in req.messages]
+        try:
+            with track_inflight():
+                resp = bedrock.converse(
+                    modelId=MODEL_ID, messages=msgs,
+                    inferenceConfig={"maxTokens": req.max_tokens, "temperature": req.temperature},
+                )
+        except Exception as exc:
+            log.exception("bedrock converse failed: %s", exc)
+            raise HTTPException(status_code=502, detail=f"Bedrock error: {exc}") from exc
+
+        elapsed = time.monotonic() - started
+        usage = resp.get("usage", {}) or {}
+        prompt_tokens = int(usage.get("inputTokens", 0))
+        completion_tokens = int(usage.get("outputTokens", 0))
+        m_e2e.labels(**LABEL).observe(elapsed)
+        m_prompt_tok.labels(**LABEL).observe(prompt_tokens or 1)
+        m_gen_tok.labels(**LABEL).observe(completion_tokens or 1)
+        if completion_tokens > 0:
+            m_ttok.labels(**LABEL).observe(elapsed / completion_tokens)
+
+        reply_parts = resp.get("output", {}).get("message", {}).get("content", [])
+        reply_text = "".join(part.get("text", "") for part in reply_parts)
+        return {
+            "id": f"cmpl-{MODEL_NAME}-{int(started * 1000)}",
+            "object": "chat.completion",
+            "model": MODEL_NAME,
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": reply_text},
+                "finish_reason": resp.get("stopReason", "stop"),
+            }],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": int(usage.get("totalTokens", prompt_tokens + completion_tokens)),
+            },
+        }
+
+
+    if __name__ == "__main__":
+        import uvicorn
+        log.info("starting bedrock-shim model=%s region=%s", MODEL_NAME, AWS_REGION)
+        uvicorn.run(app, host="0.0.0.0", port=CHAT_PORT, log_level="info")

@@ -1,0 +1,15 @@
+apiVersion: k8s.f5net.com/v1
+kind: F5BigCneAddresslist
+metadata:
+  name: demo-allowed-sources
+  namespace: ${gateway_namespace}
+  labels:
+    app.kubernetes.io/name: demo-allowed-sources
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: bnk-demo
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+  addresses:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16

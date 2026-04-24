@@ -117,6 +117,44 @@ NADs must be created before deploying CNEInstance (typically via the network-set
 - **Required**: bnk/flo (provides CNEInstance CRD)
 - **Required**: k8s/network-setup (provides NADs) - or manually created NADs
 
+## tmm-init ConfigMap (kernel-mode static routes)
+
+In kernel mode (the default `tmm_data_plane_mode`), the TMM pod's only kernel
+default route is via the internal control-plane interface (`tmm`,
+`169.254.0.254`). Kernel ICMP/TCP responses to a same-VPC client (e.g. a
+jumphost) leak via that interface and never reach the client.
+
+Set `tmm_init_enabled = true` and provide `tmm_init_routes` to render a
+`tmm-init` ConfigMap in the operator namespace. TMM auto-mounts it at
+`/opt/lib/tmm/` and reloads `user_conf.tcl` every 1s (via the `file_reload`
+directive in `tmm_init.tcl`).
+
+```hcl
+module "cneinstance" {
+  source = "../../../bnk/cneinstance"
+  # ... other inputs ...
+
+  tmm_init_enabled = true
+  tmm_init_routes = [
+    {
+      destination = "10.0.1.0/24"        # jumphost / client subnet
+      gateway     = "10.0.11.1"          # external subnet's AWS gateway
+      description = "client subnet via external"
+    },
+    # Add more for backend pod CIDRs, TGW endpoints, etc.
+  ]
+}
+```
+
+For the multi-AZ TGW pattern (per-node gateway switch + GRE tunnel endpoints
+per Doc 3 page 28-29), use `tmm_init_user_conf_tcl_raw` to pass the TCL
+verbatim. For TMM init customizations (Diameter/GTP profiles, pools, bigdb
+tweaks), use `tmm_init_extra_tcl` — appended after the default boilerplate.
+
+This is **required** for kernel-mode AWS deployments to actually route
+client traffic correctly. Per F5 Doc 3 (AWS Cloud Multi-AZ Network
+Architecture Deployment Guide).
+
 ## Notes
 
 - CNEInstance may take several minutes to fully deploy and become ready

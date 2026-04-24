@@ -36,15 +36,15 @@ variable "namespace" {
 # =============================================================================
 
 variable "external_self_ips" {
-  description = "External self IPs for TMM VLANs (one per TMM replica, from external subnet)"
+  description = "External self IPs for TMM VLANs (one per TMM replica, from external subnet). If empty, auto-derived as .240 from first external subnet CIDR."
   type        = list(string)
-  default     = ["10.0.10.240"]
+  default     = []
 }
 
 variable "internal_self_ips" {
-  description = "Internal self IPs for TMM VLANs (one per TMM replica, from internal subnet)"
+  description = "Internal self IPs for TMM VLANs (one per TMM replica, from internal subnet). If empty, auto-derived as .240 from first internal subnet CIDR."
   type        = list(string)
-  default     = ["10.0.20.240"]
+  default     = []
 }
 
 # =============================================================================
@@ -117,8 +117,8 @@ variable "auto_lasthop" {
 # DEPENDENCY GATES
 # =============================================================================
 
-variable "cneinstance_ready" {
-  description = "Gate from CNEInstance module — ensures FLO has deployed CRDs and TMM"
+variable "flo_ready" {
+  description = "Gate from FLO module — ensures FLO is running and will install CRDs"
   type        = bool
   default     = true
 }

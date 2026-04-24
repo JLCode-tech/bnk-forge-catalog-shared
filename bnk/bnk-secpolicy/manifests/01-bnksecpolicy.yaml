@@ -1,0 +1,90 @@
+apiVersion: k8s.f5.com/v1
+kind: BNKSecPolicy
+metadata:
+  name: ${policy_name}
+  namespace: ${policy_namespace}
+  labels:
+    app.kubernetes.io/name: ${policy_name}
+    app.kubernetes.io/component: security-policy
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+{% if enable_firewall and firewall_policy_ref %}
+  firewall:
+    policyRef:
+      name: ${firewall_policy_ref.name}
+{% if firewall_policy_ref.namespace %}
+      namespace: ${firewall_policy_ref.namespace}
+{% endif %}
+{% if firewall_rule_lists %}
+    ruleLists:
+{% for rulelist in firewall_rule_lists %}
+      - name: ${rulelist.name}
+{% if rulelist.namespace %}
+        namespace: ${rulelist.namespace}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% if enable_ddos %}
+  ddos:
+    mode: ${ddos_protection_mode}
+{% if ddos_global_ref %}
+    globalRef:
+      name: ${ddos_global_ref.name}
+{% if ddos_global_ref.namespace %}
+      namespace: ${ddos_global_ref.namespace}
+{% endif %}
+{% endif %}
+{% endif %}
+{% if allowed_source_ranges or denied_source_ranges or address_lists %}
+  accessControl:
+{% if allowed_source_ranges %}
+    allowedSourceRanges:
+{% for cidr in allowed_source_ranges %}
+      - "${cidr}"
+{% endfor %}
+{% endif %}
+{% if denied_source_ranges %}
+    deniedSourceRanges:
+{% for cidr in denied_source_ranges %}
+      - "${cidr}"
+{% endfor %}
+{% endif %}
+{% if address_lists %}
+    addressLists:
+{% for addrlist in address_lists %}
+      - name: ${addrlist.name}
+        action: ${addrlist.action}
+{% if addrlist.namespace %}
+        namespace: ${addrlist.namespace}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% if enable_rate_limiting and rate_limit_config %}
+  rateLimit:
+    requestsPerSecond: ${rate_limit_config.requests_per_second}
+{% if rate_limit_config.burst_size %}
+    burstSize: ${rate_limit_config.burst_size}
+{% endif %}
+{% if rate_limit_config.key %}
+    key: ${rate_limit_config.key}
+{% endif %}
+{% endif %}
+{% if log_profile_ref or hsl_publisher_ref %}
+  logging:
+{% if log_profile_ref %}
+    profileRef:
+      name: ${log_profile_ref.name}
+{% if log_profile_ref.namespace %}
+      namespace: ${log_profile_ref.namespace}
+{% endif %}
+{% endif %}
+{% if hsl_publisher_ref %}
+    hslPublisherRef:
+      name: ${hsl_publisher_ref.name}
+{% if hsl_publisher_ref.namespace %}
+      namespace: ${hsl_publisher_ref.namespace}
+{% endif %}
+{% endif %}
+{% endif %}

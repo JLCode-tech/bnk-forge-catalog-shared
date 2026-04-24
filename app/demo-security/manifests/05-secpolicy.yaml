@@ -1,0 +1,19 @@
+apiVersion: gateway.k8s.f5net.com/v1alpha1
+kind: BNKSecPolicy
+metadata:
+  name: demo-secpolicy
+  namespace: ${gateway_namespace}
+  labels:
+    app.kubernetes.io/name: demo-secpolicy
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: bnk-demo
+    app.kubernetes.io/managed-by: bnk-forge
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ${gateway_name}
+  extensionRefs:
+    - group: k8s.f5net.com
+      kind: F5BigFwPolicy
+      name: demo-fw-policy

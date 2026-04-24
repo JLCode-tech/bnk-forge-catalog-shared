@@ -21,6 +21,7 @@ HUGEPAGES_1GI="${hugepages_1gi}"
 F5_BNK_ENABLED="${f5_bnk_enabled}"
 F5_TMM_CPU_CORES="${f5_tmm_cpu_cores}"
 F5_NUMA_NODE="${f5_numa_node}"
+TMM_DATA_PLANE_MODE="${tmm_data_plane_mode}"
 
 STATE_DIR="/var/lib/dpdk-setup"
 LOG_FILE="/var/log/dpdk-setup.log"
@@ -125,9 +126,12 @@ EOF
     checkpoint "network_opts"
 fi
 
-# PHASE 4: DPDK CONTINUATION SERVICE
-if ! is_checkpoint_complete "dpdk_service"; then
-    log "Phase 4: DPDK continuation service"
+# PHASE 4: DPDK CONTINUATION SERVICE (sriov mode only)
+# In kernel mode the data-plane ENIs stay on the ena driver — host-device CNI
+# moves the kernel netdev into the TMM pod at scheduling time. No vfio-pci
+# binding is needed at boot, so this phase is skipped entirely.
+if [ "$TMM_DATA_PLANE_MODE" = "sriov" ] && ! is_checkpoint_complete "dpdk_service"; then
+    log "Phase 4: DPDK continuation service (sriov mode)"
     retry_with_backoff aws s3 cp "s3://$S3_BUCKET/dpdk-setup.sh" /usr/local/bin/dpdk-setup.sh --region "$REGION"
     chmod +x /usr/local/bin/dpdk-setup.sh
     cat << 'DSVC' > /usr/lib/systemd/system/dpdk-continuation.service
@@ -165,6 +169,8 @@ CSCRIPT
     chmod +x /usr/local/bin/dpdk-continuation.sh
     systemctl enable dpdk-continuation.service
     checkpoint "dpdk_service"
+elif [ "$TMM_DATA_PLANE_MODE" != "sriov" ]; then
+    log "Phase 4: skipped (TMM_DATA_PLANE_MODE=$TMM_DATA_PLANE_MODE — kernel mode keeps ENIs on ena driver)"
 fi
 
 # PHASE 5: NODE CONFIGURATION
@@ -181,32 +187,44 @@ data:
   f5_bnk_enabled: "$F5_BNK_ENABLED"
   s3_bucket: "$S3_BUCKET"
   region: "$REGION"
-  dpdk_enabled: "true"
-  sriov_enabled: "true"
+  tmm_data_plane_mode: "$TMM_DATA_PLANE_MODE"
+  dpdk_enabled: "$([ "$TMM_DATA_PLANE_MODE" = "sriov" ] && echo true || echo false)"
+  sriov_enabled: "$([ "$TMM_DATA_PLANE_MODE" = "sriov" ] && echo true || echo false)"
 NC
     checkpoint "node_config"
 fi
 
 # PHASE 6: REBOOT OR CONTINUE
+# Reboot is still required in both modes — hugepages + isolcpus are kernel
+# params set via grub. The dpdk-continuation service is only triggered when
+# in sriov mode (it does the vfio-pci binding).
 if [ "$NEEDS_REBOOT" = "true" ]; then
     if ! is_checkpoint_complete "reboot_scheduled"; then
         log "Scheduling reboot for kernel params"
-        cat << 'PRV' > /usr/local/bin/post-reboot-validation.sh
+        if [ "$TMM_DATA_PLANE_MODE" = "sriov" ]; then
+            cat << 'PRV' > /usr/local/bin/post-reboot-validation.sh
 #!/bin/bash
-echo "[$(date)] Post-reboot: starting DPDK continuation" >> /var/log/post-reboot.log
+echo "[$(date)] Post-reboot: starting DPDK continuation (sriov mode)" >> /var/log/post-reboot.log
 systemctl start dpdk-continuation.service
 PRV
-        chmod +x /usr/local/bin/post-reboot-validation.sh
-        echo "/usr/local/bin/post-reboot-validation.sh" >> /etc/rc.d/rc.local
-        chmod +x /etc/rc.d/rc.local
-        systemctl enable rc-local
+            chmod +x /usr/local/bin/post-reboot-validation.sh
+            echo "/usr/local/bin/post-reboot-validation.sh" >> /etc/rc.d/rc.local
+            chmod +x /etc/rc.d/rc.local
+            systemctl enable rc-local
+        else
+            log "kernel mode: no post-reboot DPDK continuation needed"
+        fi
         checkpoint "reboot_scheduled"
         nohup bash -c 'sleep 60; reboot' &
     fi
 else
-    log "No reboot needed, starting DPDK continuation"
-    systemctl start dpdk-continuation.service &
+    if [ "$TMM_DATA_PLANE_MODE" = "sriov" ]; then
+        log "No reboot needed, starting DPDK continuation"
+        systemctl start dpdk-continuation.service &
+    else
+        log "No reboot needed and kernel mode active — DPDK continuation skipped"
+    fi
 fi
-log "DPDK userdata setup completed"
+log "Userdata setup completed (mode=$TMM_DATA_PLANE_MODE)"
 
 --==MYBOUNDARY==--

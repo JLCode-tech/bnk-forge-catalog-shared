@@ -55,6 +55,13 @@ locals {
     Environment = var.environment
   }
 
+  # SR-IOV / DPDK stack is only deployed when tmm_data_plane_mode = "sriov".
+  # In "kernel" mode (default, validated per F5 Doc 3 Multi-AZ Network
+  # Architecture) the ENIs stay on the ena driver, host-device CNI moves
+  # the kernel netdev into the TMM pod, and TMM runs with
+  # TMM_GENERIC_SOCKET_DRIVER=true. See variables.tf for full discussion.
+  is_sriov = var.tmm_data_plane_mode == "sriov"
+
   # F5 BNK (BIG-IP Next for Kubernetes) specific node labels for x86_64
   # Per F5 docs: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/node-label.html
   #
@@ -62,26 +69,33 @@ locals {
   # They are applied selectively to only tmm_node_count nodes via the configure_tmm_nodes
   # resource below. This ensures remaining nodes stay available for BNK control plane pods
   # (dSSM, RabbitMQ, CWC, Observer, CRD Conversion, OTEL Collector, etc.)
-  x86_f5_bnk_labels = var.f5_bnk_enabled ? {
+  x86_f5_bnk_labels = var.f5_bnk_enabled ? merge({
     "f5.com/bnk-node"     = "true"
     "f5.com/tmm-capable"  = "true"
     "f5.com/numa-node"    = tostring(var.f5_numa_node)
     "f5.com/cpu-cores"    = tostring(var.f5_tmm_cpu_cores)
     "f5.com/architecture" = "x86_64"
     "workload-type"       = "high-performance"
-    "dpdk-enabled"        = "true"
-  } : {}
+    },
+    # dpdk-enabled label is only meaningful in sriov mode
+    local.is_sriov ? { "dpdk-enabled" = "true" } : {}
+  ) : {}
 
   # Combine all x86_64 labels
   # All high-perf nodes get these labels. TMM-specific labels (app=f5-tmm)
   # are added selectively via configure_tmm_nodes below.
+  # sriov / dpdk labels only set in sriov mode.
   x86_combined_node_labels = merge({
     "node-type"    = "high-performance"
-    "sriov"        = "enabled"
-    "dpdk"         = "enabled"
     "is_worker"    = "true"
     "architecture" = "x86_64"
-  }, local.x86_f5_bnk_labels)
+    },
+    local.is_sriov ? {
+      "sriov" = "enabled"
+      "dpdk"  = "enabled"
+    } : {},
+    local.x86_f5_bnk_labels
+  )
 }
 
 # ==============================================
@@ -144,8 +158,10 @@ resource "aws_s3_bucket_policy" "enforce_ssl" {
   })
 }
 
-# Upload DPDK scripts to S3
+# Upload DPDK / SR-IOV scripts to S3 — only needed in sriov mode (Phase 4 of
+# compact_userdata.sh fetches these to do the vfio-pci binding at boot).
 resource "aws_s3_object" "dpdk_setup_script" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "dpdk-setup.sh"
   source = "${path.module}/scripts/dpdk-setup.sh"
@@ -155,6 +171,7 @@ resource "aws_s3_object" "dpdk_setup_script" {
 }
 
 resource "aws_s3_object" "dpdk_devbind" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "dpdk-devbind.py"
   source = "${path.module}/scripts/dpdk-devbind.py"
@@ -164,6 +181,7 @@ resource "aws_s3_object" "dpdk_devbind" {
 }
 
 resource "aws_s3_object" "sriov_init_script" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "sriov-init.sh"
   source = "${path.module}/scripts/sriov-init.sh"
@@ -173,6 +191,7 @@ resource "aws_s3_object" "sriov_init_script" {
 }
 
 resource "aws_s3_object" "config_sriov_script" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "config-sriov.sh"
   source = "${path.module}/scripts/config-sriov.sh"
@@ -182,6 +201,7 @@ resource "aws_s3_object" "config_sriov_script" {
 }
 
 resource "aws_s3_object" "dpdk_resource_builder" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "dpdk-resource-builder.py"
   source = "${path.module}/scripts/dpdk-resource-builder.py"
@@ -190,8 +210,9 @@ resource "aws_s3_object" "dpdk_resource_builder" {
   tags = local.common_tags
 }
 
-# Upload systemd service files
+# Upload systemd service files — sriov mode only
 resource "aws_s3_object" "sriov_init_service" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "sriov-init.service"
   source = "${path.module}/scripts/sriov-init.service"
@@ -201,6 +222,7 @@ resource "aws_s3_object" "sriov_init_service" {
 }
 
 resource "aws_s3_object" "config_sriov_service" {
+  count  = local.is_sriov ? 1 : 0
   bucket = aws_s3_bucket.dpdk_scripts.id
   key    = "config-sriov.service"
   source = "${path.module}/scripts/config-sriov.service"
@@ -295,13 +317,14 @@ resource "aws_launch_template" "x86_high_perf_nodegroup" {
 
   # Use original compact_userdata.sh with corrected variable names
   user_data = base64encode(templatefile("${path.module}/scripts/compact_userdata.sh", {
-    s3_bucket_name   = aws_s3_bucket.dpdk_scripts.id
-    region           = var.region
-    hugepages_2mi    = var.hugepages_2mi
-    hugepages_1gi    = var.hugepages_1gi
-    f5_bnk_enabled   = var.f5_bnk_enabled ? "true" : "false"
-    f5_tmm_cpu_cores = var.f5_tmm_cpu_cores
-    f5_numa_node     = var.f5_numa_node
+    s3_bucket_name      = aws_s3_bucket.dpdk_scripts.id
+    region              = var.region
+    hugepages_2mi       = var.hugepages_2mi
+    hugepages_1gi       = var.hugepages_1gi
+    f5_bnk_enabled      = var.f5_bnk_enabled ? "true" : "false"
+    f5_tmm_cpu_cores    = var.f5_tmm_cpu_cores
+    f5_numa_node        = var.f5_numa_node
+    tmm_data_plane_mode = var.tmm_data_plane_mode
   }))
 }
 
@@ -446,6 +469,7 @@ resource "kubernetes_manifest" "eni_attachment_daemonset" {
     region                    = var.region
     vpc_security_group_id     = var.vpc_security_group_id
     cluster_security_group_id = data.aws_security_group.cluster_sg.id
+    hugepages_2mb_count       = var.hugepages_2mb_count
   }))
 }
 
@@ -460,6 +484,75 @@ resource "null_resource" "wait_for_eni_attachment" {
       echo "ENI attachment completed!"
     EOT
   }
+}
+
+# ==============================================
+# VPC CNI (aws-node) SCOPING FOR HP NODES
+# ==============================================
+#
+# Problem: the default kube-system/aws-node DaemonSet pre-attaches a
+# secondary pod-IP ENI at device index 1 on every node it runs on. On HP
+# nodes that slot is reserved for the internal SR-IOV ENI (PCI 06), so
+# VPC CNI and the eni-attachment-manager race — VPC CNI usually wins.
+#
+# Fix (both steps are required):
+#   1. Exclude the default aws-node DS from HP nodes via anti-affinity.
+#   2. Run a dedicated aws-node-hp DS on HP nodes only, with
+#      MAX_ENI=1 + WARM_ENI_TARGET=0 so VPC CNI never adds a secondary
+#      ENI. Pod IPs come from the primary ENI only (30 IPs on c5n.4xlarge
+#      — plenty for a TMM-class workload).
+#
+# Step 1: anti-affinity patch on the default aws-node DS.
+
+resource "null_resource" "exclude_default_aws_node_from_hp" {
+  depends_on = [aws_eks_node_group.x86_high_perf]
+
+  triggers = {
+    # Re-apply if the node-type label key changes
+    hp_label_key = "node-type"
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      : "Patching kube-system/aws-node: anti-affinity to skip node-type=high-performance"
+      kubectl --kubeconfig=${var.kubeconfig_path} patch daemonset aws-node -n kube-system \
+        --type=json -p='[
+          {
+            "op": "add",
+            "path": "/spec/template/spec/affinity",
+            "value": {
+              "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                  "nodeSelectorTerms": [{
+                    "matchExpressions": [{
+                      "key": "node-type",
+                      "operator": "NotIn",
+                      "values": ["high-performance"]
+                    }]
+                  }]
+                }
+              }
+            }
+          }
+        ]' || true
+    EOT
+  }
+}
+
+# Step 2: dedicated aws-node-hp DS scoped to HP nodes with the restrictive
+# env vars. Shares the aws-node ServiceAccount so no extra RBAC is needed.
+
+resource "kubernetes_manifest" "aws_node_hp_daemonset" {
+  depends_on = [
+    null_resource.exclude_default_aws_node_from_hp,
+    aws_eks_node_group.x86_high_perf,
+  ]
+
+  manifest = yamldecode(templatefile("${path.module}/manifests/aws-node-hp-daemonset.yaml", {
+    vpc_cni_image     = var.vpc_cni_image
+    vpc_cni_image_tag = var.vpc_cni_image_tag
+  }))
 }
 
 # ==============================================
@@ -520,90 +613,90 @@ resource "null_resource" "wait_for_multus" {
 }
 
 # ==============================================
-# SR-IOV CNI DEPLOYMENT
+# SR-IOV / DPDK STACK (legacy, only deployed when tmm_data_plane_mode="sriov")
 # ==============================================
+# In kernel mode (default) the host-device CNI from k8s/network-setup is the
+# entire data-plane wiring. ENIs stay on ena driver, kernel netdev moves into
+# the TMM pod, TMM uses TMM_GENERIC_SOCKET_DRIVER=true. None of these
+# DaemonSets are needed.
 
 resource "kubernetes_manifest" "sriov_cni_installer" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [null_resource.wait_for_multus]
 
   manifest = yamldecode(file("${path.module}/manifests/sriov-cni-installer-x86.yaml"))
 }
 
-# Wait for SR-IOV CNI installer
-# Note: kubernetes_manifest resources already wait for apply to complete
 resource "null_resource" "wait_for_sriov_cni" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.sriov_cni_installer]
 
   provisioner "local-exec" {
     command = <<-EOT
       echo "Waiting for SR-IOV CNI installer to initialize..."
-      # Give time for the installer daemonset to run on nodes
       sleep 60
       echo "SR-IOV CNI installer deployed - running on nodes"
     EOT
   }
 }
 
-# ==============================================
-# SR-IOV DEVICE PLUGIN DEPLOYMENT
-# ==============================================
-
 resource "kubernetes_manifest" "sriov_serviceaccount" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [null_resource.wait_for_sriov_cni]
 
   manifest = yamldecode(file("${path.module}/manifests/sriov-serviceaccount.yaml"))
 }
 
 resource "kubernetes_manifest" "sriovdp_config" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.sriov_serviceaccount]
 
   manifest = yamldecode(file("${path.module}/manifests/sriovdp-config.yaml"))
 }
 
 resource "kubernetes_manifest" "sriov_device_plugin" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.sriovdp_config]
 
   manifest = yamldecode(file("${path.module}/manifests/sriov-daemonset.yaml"))
 }
 
-# Wait for SR-IOV Device Plugin
-# Note: kubernetes_manifest resources already wait for apply to complete
 resource "null_resource" "wait_for_sriov_device_plugin" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.sriov_device_plugin]
 
   provisioner "local-exec" {
     command = <<-EOT
       echo "Waiting for SR-IOV Device Plugin to initialize..."
-      # Give time for the device plugin daemonset to start on nodes
       sleep 60
       echo "SR-IOV Device Plugin deployed - initializing on nodes"
     EOT
   }
 }
 
-# ==============================================
-# DPDK CONFIGURATOR DEPLOYMENT
-# ==============================================
-
 resource "kubernetes_manifest" "dpdk_serviceaccount" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [null_resource.wait_for_sriov_device_plugin]
 
   manifest = yamldecode(file("${path.module}/manifests/dpdk-serviceaccount.yaml"))
 }
 
 resource "kubernetes_manifest" "dpdk_clusterrole" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.dpdk_serviceaccount]
 
   manifest = yamldecode(file("${path.module}/manifests/dpdk-clusterrole.yaml"))
 }
 
 resource "kubernetes_manifest" "dpdk_clusterrolebinding" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.dpdk_clusterrole]
 
   manifest = yamldecode(file("${path.module}/manifests/dpdk-clusterrolebinding.yaml"))
 }
 
 resource "kubernetes_manifest" "dpdk_daemonset" {
+  count      = local.is_sriov ? 1 : 0
   depends_on = [kubernetes_manifest.dpdk_clusterrolebinding]
 
   manifest = yamldecode(file("${path.module}/manifests/dpdk-daemonset.yaml"))
@@ -621,7 +714,12 @@ resource "kubernetes_manifest" "dpdk_daemonset" {
 # node names, and selectively labels/taints only the first tmm_node_count nodes.
 
 resource "null_resource" "configure_tmm_nodes" {
+  # Depends on Multus being up (required for both modes) and on the SR-IOV
+  # stack when in sriov mode (so the device plugin advertises resources
+  # before TMM is scheduled). In kernel mode the SR-IOV resources are absent
+  # and we fall back to depending on Multus + node readiness only.
   depends_on = [
+    null_resource.wait_for_multus,
     kubernetes_manifest.dpdk_daemonset,
     null_resource.wait_for_x86_nodes
   ]
@@ -727,11 +825,16 @@ resource "null_resource" "verify_setup" {
       echo
       
       echo "=== Deployed Components ==="
+      echo "- TMM data-plane mode: ${var.tmm_data_plane_mode}"
       echo "- Multus CNI DaemonSet (all high-perf nodes)"
-      echo "- SR-IOV CNI Installer DaemonSet (all high-perf nodes)"
-      echo "- SR-IOV Device Plugin DaemonSet (all high-perf nodes)"
-      echo "- DPDK Configurator DaemonSet (all high-perf nodes)"
       echo "- ENI Attachment Manager DaemonSet (all high-perf nodes)"
+      if [ "${var.tmm_data_plane_mode}" = "sriov" ]; then
+        echo "- SR-IOV CNI Installer DaemonSet (sriov mode)"
+        echo "- SR-IOV Device Plugin DaemonSet (sriov mode)"
+        echo "- DPDK Configurator DaemonSet (sriov mode)"
+      else
+        echo "- (kernel mode: NAD type=host-device + pciBusID; no SR-IOV stack)"
+      fi
       echo
       echo "=== Node Topology ==="
       echo "- ${var.tmm_node_count} node(s): app=f5-tmm label + dpu=true:NoSchedule (TMM only)"

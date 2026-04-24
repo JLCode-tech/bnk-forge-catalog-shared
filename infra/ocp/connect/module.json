@@ -1,13 +1,92 @@
 {
-  "name": "OpenShift Cluster Connection",
-  "description": "Validates and connects to an existing OpenShift cluster",
-  "category": "infra",
-  "platform": "ocp",
-  "engine": "opentofu",
-  "inputs": {
-    "providers": {
-      "required": ["null", "local"]
-    }
+  "module": {
+    "name": "OpenShift Cluster Connection",
+    "path": "infra/ocp/connect",
+    "version": "1.0.0",
+    "layer": "infrastructure",
+    "category": "infra",
+    "description": "Validates and connects to an existing OpenShift cluster",
+    "cloud_specific": true,
+    "supported_platforms": ["ocp"]
   },
-  "outputs": ["kubeconfig_content", "cluster_name", "cluster_endpoint"]
+  "source": {
+    "kind": "official",
+    "channel": "release/2.2"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": ["terraform", "shell"]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name identifier for this OCP cluster",
+        "source": "user"
+      },
+      {
+        "name": "api_server_url",
+        "type": "string",
+        "description": "OpenShift API server URL (e.g., https://api.cluster.example.com:6443)",
+        "source": "user"
+      }
+    ],
+    "optional": [
+      {
+        "name": "kubeconfig_content",
+        "type": "string",
+        "description": "Kubeconfig YAML content for the OCP cluster",
+        "default": "",
+        "source": "project_secret"
+      },
+      {
+        "name": "oc_token",
+        "type": "string",
+        "description": "OpenShift token (alternative to kubeconfig)",
+        "default": "",
+        "source": "project_secret"
+      },
+      {
+        "name": "skip_tls_verify",
+        "type": "boolean",
+        "description": "Skip TLS certificate verification (use only for self-signed certs in dev/test)",
+        "default": false,
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "kubeconfig_content",
+        "type": "string",
+        "description": "Kubeconfig YAML content for the connected OCP cluster"
+      },
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name identifier for the connected OCP cluster"
+      },
+      {
+        "name": "cluster_endpoint",
+        "type": "string",
+        "description": "API server endpoint URL for the connected OCP cluster"
+      }
+    ]
+  },
+  "providers": {
+    "required": ["null", "local"],
+    "optional": []
+  },
+  "deployment": {
+    "order": 10
+  }
 }

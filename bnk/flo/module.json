@@ -9,6 +9,17 @@
     "cloud_specific": false,
     "supported_platforms": ["any"]
   },
+  "source": {
+    "kind": "official",
+    "channel": "release/2.2"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": ["terraform", "helm", "kubernetes_manifest", "shell"]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
   "dependencies": {
     "required": [
       {
@@ -16,7 +27,7 @@
         "reason": "Needs namespaces, FAR secrets, and FLO version from manifest"
       },
       {
-        "module": "k8s/cert-manager",
+        "module": "k8s/bnk-cert-issuer",
         "reason": "FLO requires ClusterIssuer for certificate management"
       }
     ],
@@ -55,7 +66,7 @@
         "type": "string",
         "description": "ClusterIssuer name for certificate management",
         "source": "module",
-        "from_module": "k8s/cert-manager",
+        "from_module": "k8s/bnk-cert-issuer",
         "from_output": "cluster_issuer_name",
         "default": "bnk-ca-cluster-issuer"
       },

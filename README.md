@@ -7,6 +7,8 @@
 
 This repository contains the official BNK-Forge module library - a curated collection of OpenTofu/Terraform modules for deploying infrastructure, Kubernetes prerequisites, and BIG-IP Next for Kubernetes (BNK) components.
 
+It is also the **canonical metadata source of truth** for official modules on `release/2.2`.
+
 **Last Tested:** 2026-02-10 (full 14-module stack deployed on aws-sydney-bnk-demo-cluster)
 
 > **IMPORTANT:** Always use the `release/2.2` branch for production deployments. `main` mirrors the latest stable release.
@@ -32,6 +34,20 @@ Then sync the catalog at **Settings > Environment Config > Sync Modules**.
 ## Overview
 
 This is a **read-only reference library** that is synced into the BNK-Forge tool. Users select modules from this catalog through the BNK-Forge UI.
+
+## Canonical Catalog Contract (release/2.2)
+
+- Metadata contract: `MODULE_METADATA_SCHEMA.md` (`module-metadata/v2alpha1`)
+- Canonical release manifest: `catalog/releases/release-2.2-official.json`
+- Validation command: `python3 scripts/validate_module_metadata.py`
+
+For official modules in this baseline, metadata explicitly separates:
+
+- `source.kind` (module provenance)
+- `execution.engine` (runtime engine)
+- `execution.deploy_models` (render/deploy behaviors, including first-class `helm`)
+
+Release-specific assertions are enforced by the release manifest, while generic schema checks remain release-agnostic. The manifest must explicitly classify every official `k8s/` and `bnk/` module as `active`, `legacy`, or `deprecated` to prevent silent fallback.
 
 ## Repository Structure
 
@@ -143,7 +159,7 @@ Each module includes:
 - `variables.tf` - Input variables with validation
 - `outputs.tf` - Output values with descriptions
 - `versions.tf` - Provider requirements
-- `module.json` - BNK-Forge metadata for auto-wiring
+- `module.json` - BNK-Forge metadata for auto-wiring, source, and execution contract
 - `README.md` - Documentation
 
 ## Usage

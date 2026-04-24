@@ -12,12 +12,12 @@
   "dependencies": {
     "required": [
       {
-        "module": "bnk/cneinstance",
-        "reason": "CNEInstance must be running before VLAN CRs can be applied"
+        "module": "bnk/flo",
+        "reason": "FLO must be running to install F5SPKVlan CRDs (module waits for CRD at apply time)"
       },
       {
         "module": "k8s/network-setup",
-        "reason": "NAD self IPs must be created first for VLAN IP alignment"
+        "reason": "NADs must exist before VLANs reference the same interfaces"
       }
     ],
     "optional": []
@@ -42,13 +42,45 @@
         "from_output": "operator_namespace"
       },
       {
-        "name": "cneinstance_ready",
-        "type": "boolean",
-        "description": "Gate from CNEInstance module",
+        "name": "external_subnet_cidrs",
+        "type": "list(string)",
+        "description": "External DPDK subnet CIDRs. Wired from VPC module outputs.",
         "source": "module",
-        "from_module": "bnk/cneinstance",
-        "from_output": "instance_ready",
-        "default": true
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_external_subnet_cidrs",
+        "default": ["10.0.10.0/24"]
+      },
+      {
+        "name": "internal_subnet_cidrs",
+        "type": "list(string)",
+        "description": "Internal DPDK subnet CIDRs. Wired from VPC module outputs.",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_internal_subnet_cidrs",
+        "default": ["10.0.20.0/24"]
+      },
+      {
+        "name": "internal_subnet_id",
+        "type": "string",
+        "description": "Internal subnet ID for discovering the internal ENI on the HP node.",
+        "source": "module",
+        "from_module": "infra/aws/vpc",
+        "from_output": "private_internal_subnet_ids[0]",
+        "default": ""
+      },
+      {
+        "name": "external_self_ips",
+        "type": "list(string)",
+        "description": "External self IPs for TMM VLANs. If empty, auto-derived from external subnet CIDR (.240).",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "internal_self_ips",
+        "type": "list(string)",
+        "description": "Internal self IPs for TMM VLANs. If empty, auto-derived from internal subnet CIDR (.240).",
+        "default": [],
+        "source": "user"
       },
       {
         "name": "auto_lasthop",
@@ -62,20 +94,13 @@
         "type": "string",
         "description": "AWS region for ENI secondary IP registration. Empty disables ENI management.",
         "default": "",
-        "source": "user"
+        "source": "auto"
       },
       {
         "name": "gateway_vips",
         "type": "list(string)",
         "description": "Gateway VIP addresses to register as secondary IPs on the external ENI.",
         "default": [],
-        "source": "user"
-      },
-      {
-        "name": "internal_subnet_id",
-        "type": "string",
-        "description": "Internal subnet ID for discovering the internal ENI on the HP node.",
-        "default": "",
         "source": "user"
       }
     ]
@@ -96,7 +121,7 @@
     "optional": ["local", "null"]
   },
   "deployment": {
-    "order": 57,
+    "order": 53,
     "estimated_time": "1 minute",
     "requires_user_input": false,
     "sensitive_inputs": []

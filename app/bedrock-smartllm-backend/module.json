@@ -1,0 +1,186 @@
+{
+  "module": {
+    "name": "Bedrock Smart-LLM Backend",
+    "path": "app/bedrock-smartllm-backend",
+    "version": "1.0.0",
+    "layer": "bnk-application",
+    "category": "application",
+    "description": "Three single-model Bedrock shim pods (Nova Micro, Nova Lite, Claude 3 Haiku) behind a BNK Gateway + HTTPRoute. F5BigAnalyzer CR weights traffic using real Prometheus metrics from the shims (vllm:* shape, matches the builtin LLMLoadMonitor script).",
+    "cloud_specific": true,
+    "supported_platforms": ["aws"]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "bnk/bnk-gatewayclass",
+        "reason": "BNK Gateway depends on the bnk-gatewayclass being registered"
+      }
+    ],
+    "optional": [
+      {
+        "module": "k8s/network-setup",
+        "reason": "External VLAN must be attached for the Gateway VIP to be reachable",
+        "provides": "External-network addressing for the VIP"
+      }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "bedrock_role_arn",
+        "type": "string",
+        "description": "IAM role ARN with bedrock:InvokeModel on the three model foundation-model ARNs, trusting the EKS OIDC provider + this module's ServiceAccount. See README for creation snippet.",
+        "source": "user",
+        "example": "arn:aws:iam::123456789012:role/bnk-bedrock-smartllm"
+      },
+      {
+        "name": "gateway_vip",
+        "type": "string",
+        "description": "IPv4 VIP for the BNK Gateway. Must be in the external VLAN's prefix and unused.",
+        "source": "user",
+        "example": "10.0.10.100"
+      }
+    ],
+    "optional": [
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace for all resources",
+        "default": "default",
+        "source": "user"
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region Bedrock calls are routed to. Pre-check model availability per region.",
+        "default": "ap-southeast-2",
+        "source": "user"
+      },
+      {
+        "name": "models",
+        "type": "map(object)",
+        "description": "Map of backend name → { model_id, weight }. Weights should sum to 100.",
+        "default": {
+          "nova-micro": {
+            "model_id": "amazon.nova-micro-v1:0",
+            "weight": 33
+          },
+          "nova-lite": {
+            "model_id": "amazon.nova-lite-v1:0",
+            "weight": 33
+          },
+          "claude-3-haiku": {
+            "model_id": "anthropic.claude-3-haiku-20240307-v1:0",
+            "weight": 34
+          }
+        },
+        "source": "user"
+      },
+      {
+        "name": "gateway_class",
+        "type": "string",
+        "default": "bnk-gatewayclass",
+        "source": "auto"
+      },
+      {
+        "name": "prometheus_endpoint",
+        "type": "string",
+        "description": "Prometheus URL the analyzer queries",
+        "default": "http://kube-prometheus-stack-prometheus.monitoring:9090",
+        "source": "user"
+      },
+      {
+        "name": "prometheus_release_label",
+        "type": "string",
+        "description": "Value of the 'release' label matched by Prometheus operator's serviceMonitorSelector",
+        "default": "kube-prometheus-stack",
+        "source": "user"
+      },
+      {
+        "name": "analyzer_schedule",
+        "type": "string",
+        "default": "1m",
+        "source": "user"
+      },
+      {
+        "name": "gateway_name",
+        "type": "string",
+        "default": "llm-gateway",
+        "source": "user"
+      },
+      {
+        "name": "httproute_name",
+        "type": "string",
+        "default": "llm-route",
+        "source": "user"
+      },
+      {
+        "name": "analyzer_name",
+        "type": "string",
+        "default": "smartllm-analyzer",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "gateway_name",
+        "type": "string",
+        "description": "BNK Gateway name — client module targets this",
+        "used_by": ["app/bedrock-smartllm-client"],
+        "sensitive": false
+      },
+      {
+        "name": "gateway_url",
+        "type": "string",
+        "description": "Full base URL (http://<vip>) clients POST chat completions to — wired into client module's gateway_url",
+        "used_by": ["app/bedrock-smartllm-client"],
+        "sensitive": false
+      },
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace the Gateway lives in",
+        "used_by": ["app/bedrock-smartllm-client"],
+        "sensitive": false
+      },
+      {
+        "name": "gateway_vip",
+        "type": "string",
+        "description": "The VIP the client should POST to",
+        "used_by": ["app/bedrock-smartllm-client"],
+        "sensitive": false
+      },
+      {
+        "name": "httproute_name",
+        "type": "string",
+        "description": "Name of the HTTPRoute whose backendRefs the analyzer weights",
+        "used_by": [],
+        "sensitive": false
+      },
+      {
+        "name": "analyzer_name",
+        "type": "string",
+        "description": "Name of the F5BigAnalyzer CR",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["kubernetes"],
+    "optional": []
+  },
+  "backend": {
+    "recommendations": {
+      "aws": "s3"
+    }
+  },
+  "deployment": {
+    "order": 90,
+    "estimated_time": "3 minutes",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}
