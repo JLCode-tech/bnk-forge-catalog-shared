@@ -18,6 +18,9 @@
       "supports_destroy": true,
       "supports_refresh": true,
       "supports_drift": true
+    },
+    "entrypoints": {
+      "module_root": "."
     }
   },
   "dependencies": {
