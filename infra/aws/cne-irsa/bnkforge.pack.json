@@ -9,7 +9,7 @@
   },
   "deployment_pack": {
     "engine": "opentofu",
-    "runner_profile": "aws-default",
+    "runner_profile": "opentofu-default",
     "working_directory": ".",
     "lifecycle": {
       "supports_init": true,
