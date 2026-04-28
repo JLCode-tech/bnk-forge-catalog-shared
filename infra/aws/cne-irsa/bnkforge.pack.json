@@ -4,7 +4,7 @@
     "name": "AWS CNE Controller IRSA",
     "path": "infra/aws/cne-irsa",
     "version": "0.1.0",
-    "category": "iam",
+    "category": "infra",
     "description": "IRSA + allow-ec2-vip IAM policy for the F5 CNE controller's ServiceAccount. Required when bnk/cneinstance.tmm_data_plane_mode = \"kernel\" so the controller can attach Gateway VIPs and F5SPKVlan selfips as secondary IPs on the dedicated ENIs."
   },
   "deployment_pack": {
