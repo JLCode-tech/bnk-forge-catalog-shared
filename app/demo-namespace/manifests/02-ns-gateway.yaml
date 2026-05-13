@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ${gateway_namespace}
-  labels:
-    app.kubernetes.io/part-of: bnk-demo
-    app.kubernetes.io/managed-by: bnk-forge

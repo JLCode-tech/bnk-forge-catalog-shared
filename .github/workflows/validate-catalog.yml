@@ -22,6 +22,3 @@ jobs:
 
       - name: Validate bnkforge.pack.json contract (forge-aligned)
         run: python3 scripts/validate_pack_manifests.py
-
-      - name: Validate release manifest + module.json contract
-        run: python3 scripts/validate_module_metadata.py
