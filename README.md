@@ -1,138 +1,56 @@
-# BNK-Forge Module Library
+# bnk-forge-catalog-shared
 
-Curated OpenTofu / Terraform modules for deploying [F5 BIG-IP Next for Kubernetes (BNK)](https://clouddocs.f5.com/bigip-next-for-kubernetes/) — infrastructure, Kubernetes prerequisites, BNK platform components, and demo applications.
+**Upstream library** of the cloud-agnostic Kubernetes primitives that per-cloud BNK Forge catalog repos vendor from. Not a deployment catalog.
 
-> ## ⚠️ This branch (`main`) is intentionally empty
->
-> `main` is a **landing page** — it points to the active release branches. **All real module code lives on `release/X.Y` branches.**
->
-> Pick the release branch that matches the F5 BNK version you want to deploy.
+> `main` is a **landing page**. The real content lives on the `release/X.Y` branches. Pick the branch matching the BNK release you're targeting.
 
----
+## Are you in the right place?
 
-## Active release branches
+| Goal | Where to go |
+|---|---|
+| Deploy BNK on **AWS EKS** via Forge | [`bnk-forge-catalog-aws-eks`](https://github.com/JLCode-tech/bnk-forge-catalog-aws-eks) |
+| Deploy BNK on **IBM ROKS** via Forge | [`jgruberf5/bnk-forge-ibm-roks-cluster`](https://github.com/jgruberf5/bnk-forge-ibm-roks-cluster) |
+| Deploy BNK on **Azure / GCP / on-prem** | Planned per-cloud catalogs — not started yet |
+| Existing Forge installation already pointing at `bnk-forge-modules` | [`bnk-forge-modules`](https://github.com/JLCode-tech/bnk-forge-modules) — keep using it; no migration needed |
+| **You're a per-cloud catalog maintainer** and need to vendor from here | Stay on this page — keep reading |
+| **You're adding a new shared cloud-agnostic primitive** | Stay on this page — keep reading |
 
-| Branch | F5 BNK version | Status | Use this if you... |
-|---|---|---|---|
-| **[`release/2.2`](https://github.com/JLCode-tech/bnk-forge-modules/tree/release/2.2)** | BNK 2.2 GA | **Active — current stable** | Are deploying BNK today |
-| `release/2.3` | BNK 2.3 (when GA) | Not yet open | Want the next release |
+## What this repo holds
 
-History of past releases lives in their respective `release/X.Y` branches (never deleted).
+Exactly **three** modules. Cloud-agnostic Kubernetes primitives. Anything that touches a cloud API, cloud-specific IAM, or cloud-specific networking goes in a per-cloud catalog, not here.
 
----
+- `bnk-prerequisites` — namespaces, FAR pull secrets, BNK manifest download, version parsing
+- `cert-manager` — Jetstack Helm install with BNK-tuned defaults
+- `bnk-cert-issuer` — BNK-managed self-signed CA + ClusterIssuer + OTEL certs (pure manifest)
 
-## Quick start
+Full module details live on `release/2.2` — see [the release-branch README](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/README.md) and [`CATALOG_REPO_CONTRACT.md`](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/CATALOG_REPO_CONTRACT.md).
 
-Clone the **release branch** that matches your target BNK version, not `main`:
+## Release branches
+
+| Branch | F5 BNK version | Status |
+|---|---|---|
+| [`release/2.2`](https://github.com/JLCode-tech/bnk-forge-catalog-shared/tree/release/2.2) | BNK 2.2 GA | Active |
+| `release/2.3` | BNK 2.3 (when GA) | Not yet open |
+
+Past releases are kept on their `release/X.Y` branches indefinitely.
+
+## How per-cloud catalogs consume this
+
+Each per-cloud catalog carries vendored copies of these three modules under its own `modules/` directory, applied via its `scripts/vendor-refresh.sh` and pinned in `VENDORED.pin`. When this repo pushes to a `release/*` branch, [`.github/workflows/notify-downstream.yml`](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/.github/workflows/notify-downstream.yml) fans out a `bnk-forge-modules-released` dispatch event to every downstream catalog, which then opens a refresh PR automatically.
+
+See the [catalog repo contract](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/CATALOG_REPO_CONTRACT.md) for the full vendoring discipline.
+
+## Quick start for maintainers
 
 ```bash
-# Latest stable
-git clone -b release/2.2 https://github.com/JLCode-tech/bnk-forge-modules.git
-
-cd bnk-forge-modules
-cat VERSION   # see the rev you're at (e.g. 2.2-rev.27)
+git clone -b release/2.2 https://github.com/JLCode-tech/bnk-forge-catalog-shared.git
+cd bnk-forge-catalog-shared
+python3 scripts/validate_pack_manifests.py   # CI runs this on every PR
 ```
 
-Once cloned, see the release branch's own `README.md` and `DEPENDENCY_GRAPH.md` for the module catalog and deployment order.
+Read [`CATALOG_REPO_CONTRACT.md`](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/CATALOG_REPO_CONTRACT.md) before opening a PR — it codifies layout, naming, schema, and validation requirements for every `bnk-forge-catalog-*` repo.
 
----
+## Reference
 
-## Repository conventions
-
-### Branch model
-
-- **`main`** — this landing page only. No code. Auto-tracks the latest stable `release/X.Y` for documentation purposes.
-- **`release/X.Y`** — protected, PR-only. One per BNK release. Receives bug fixes and minor enhancements that maintain compatibility with that BNK version.
-- **`feature/X.Y-foo`** — topic branches. Open against the targeted `release/X.Y`; deleted after merge.
-
-### Cross-release fixes
-
-A fix that applies to multiple BNK versions is cherry-picked from one `release/X.Y` to another via PR. Never direct-pushed.
-
-### Branch protection
-
-Both `main` and `release/*` branches are protected:
-- PR required (no direct push)
-- Squash or rebase merge only (linear history)
-- No force-pushes, no branch deletion
-- All conversations resolved before merge
-
-CI status checks will be added as the validation harness comes online.
-
----
-
-## What's where on a release branch
-
-Each `release/X.Y` branch contains the full module catalog:
-
-```
-infra/                      Cloud-specific infrastructure modules
-  ├── aws/                  EKS, VPC, security, high-performance nodes, IRSA, ...
-  ├── gcp/                  (release/2.3+)
-  ├── azure/                (release/2.3+)
-  ├── ocp/                  OpenShift on-prem
-  ├── ubuntu/               Bare-metal Ubuntu
-  └── k8s/                  Generic K8s helpers
-
-k8s/                        Cloud-AGNOSTIC Kubernetes plumbing
-  ├── bnk-prerequisites/    Namespaces (f5-bnk, f5-utils)
-  ├── cert-manager/         Helm install
-  ├── network-setup/        NetworkAttachmentDefinitions for TMM
-  └── ...
-
-bnk/                        Cloud-AGNOSTIC BNK platform CRs
-  ├── flo/                  F5 Lifecycle Operator
-  ├── cneinstance/          CNEInstance CR (FLO deploys TMM, CNE controller, etc.)
-  ├── bnk-vlans/            F5SPKVlan CRs
-  ├── gateway/              Gateway API resources
-  └── ...
-
-app/                        Demo + reference applications
-  ├── demo-*                Cloud-agnostic demo apps
-  └── bedrock-smartllm-*    AWS-specific (Bedrock) — declared via module.json
-```
-
-### Architecture rules
-
-- **`infra/{cloud}/`** is cloud-specific by design.
-- **`k8s/`** and **`bnk/`** must be cloud-agnostic — no `aws`/`google`/`azurerm` providers in their `versions.tf`.
-- **`app/`** may be cloud-coupled but must declare it via `module.json` (`cloud_specific`, `supported_platforms`).
-
-A CI gate enforces these rules on every PR.
-
----
-
-## Reference docs
-
-On each release branch:
-
-- **`README.md`** — module catalog, version compatibility matrix, deployment overview
-- **`DEPENDENCY_GRAPH.md`** — module dependency map and deployment order
-- **`MODULE_METADATA_SCHEMA.md`** — `module.json` contract for cataloging
-- **`VERSION`** — the release branch's revision (e.g. `2.2-rev.27`)
-- **`docs/plans/`** — multi-step refactor planning docs (when active work is in flight)
-- **Per-module `README.md`** + `CHANGELOG.md` + `bnkforge.pack.json` + `module.json`
-
----
-
-## Related
-
-- **F5 BIG-IP Next for Kubernetes** — official docs: <https://clouddocs.f5.com/bigip-next-for-kubernetes/>
-- **`bnk-forge-v2`** (private) — the BNK-Forge control plane app that consumes this module library to render and apply Terraform stacks
-- **F5 BNK Multi-AZ Network Architecture Deployment Guide** (Doc 3) — primary reference for AWS kernel-mode TMM deployments
-
----
-
-## Contributing
-
-1. Open an issue describing the change against a target `release/X.Y` branch
-2. Branch as `feature/X.Y-<short-name>` from `release/X.Y`
-3. Open PR back to that `release/X.Y`
-4. PR must squash-merge or rebase-merge (no merge commits)
-5. Bump `VERSION` (`X.Y-rev.N` → `X.Y-rev.N+1`) in the same PR
-
-For cross-release backports / forwardports: cherry-pick the merge commit and open a separate PR per target branch.
-
----
-
-*This README is the only file maintained on `main`. To work with modules, switch to a `release/X.Y` branch.*
+- [F5 BIG-IP Next for Kubernetes](https://clouddocs.f5.com/bigip-next-for-kubernetes/)
+- [BNK Forge Catalog Repo Contract](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/CATALOG_REPO_CONTRACT.md)
