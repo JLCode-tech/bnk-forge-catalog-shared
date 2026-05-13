@@ -1,186 +1,57 @@
-# BNK-Forge Official Module Library
+# BNK Forge — Shared Cloud-Agnostic Modules
 
-![Version](https://img.shields.io/badge/Version-2.2--rev.25-blue)
-![Branch](https://img.shields.io/badge/Branch-release/2.2-green)
-![F5 BNK](https://img.shields.io/badge/F5_BNK-2.2_GA-orange)
-![Status](https://img.shields.io/badge/Status-Tested-brightgreen)
+Canonical source for the cloud-agnostic Kubernetes primitives that every per-cloud BNK Forge catalog repo depends on. Per-cloud catalogs (`bnk-forge-catalog-aws-eks`, future `bnk-forge-catalog-azure-aks`, etc.) **vendor** these modules at a pinned `release/2.x` tag — they don't fork them.
 
-This repository contains the official BNK-Forge module library - a curated collection of OpenTofu/Terraform modules for deploying infrastructure, Kubernetes prerequisites, and BIG-IP Next for Kubernetes (BNK) components.
+This repo follows the [BNK Forge Catalog Repo Contract](./CATALOG_REPO_CONTRACT.md). All `bnk-forge-catalog-*` repos must.
 
-It is also the **canonical metadata source of truth** for official modules on `release/2.2`.
+## Modules
 
-**Last Tested:** 2026-02-10 (full 14-module stack deployed on aws-sydney-bnk-demo-cluster)
+| Module path | Purpose |
+| --- | --- |
+| [`modules/bnk-prerequisites`](./modules/bnk-prerequisites) | Foundation module — creates BNK namespaces, FAR image pull secrets, downloads the BNK manifest, and parses component versions. Everything else in the BNK stack depends on it. |
+| [`modules/cert-manager`](./modules/cert-manager) | Deploys Jetstack cert-manager with BNK-compatible defaults (CRDs, controller/webhook replica counts, OTEL telemetry cert flow). |
+| [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer used by FLO and OTEL certificate flows. Pure-manifest module rendered by Forge's backend engine. |
 
-> **IMPORTANT:** Always use the `release/2.2` branch for production deployments. `main` mirrors the latest stable release.
+These are the only modules that belong in this repo. Anything cloud-specific (FLO install with IAM, CNEInstance with chassis config, NAD with NIC drivers) lives in a per-cloud catalog repo.
 
-## Version Compatibility
+## Repo model
 
-| Module Branch | bnk-forge-v2 | F5 BNK Version | Status |
-|---------------|--------------|----------------|--------|
-| **release/2.2** | 2.6.x | 2.2 GA | **Current - Tested** |
-| main | Mirrors latest stable | N/A | Snapshot of release/2.2 |
+This is a **long-lived repo** with **branches per BNK release**:
 
-### Configuring BNK-Forge to Use This Library
+- `release/2.2` — BNK 2.2 content (current)
+- `release/2.3`, `release/2.4`, `release/3.x` — as BNK ships them
 
-In BNK-Forge v2, go to **Settings > Defaults** and set:
+`main` tracks the most recent release branch. Customers select which BNK version they consume by pointing Forge's Module Source — or a per-cloud catalog's vendor pin — at the matching branch or tag.
 
-```
-Module Library Git URL: https://github.com/JLCode-tech/bnk-forge-modules.git
-Module Library Git Ref: release/2.2
-```
+## How per-cloud catalogs consume these modules
 
-Then sync the catalog at **Settings > Environment Config > Sync Modules**.
+Each per-cloud catalog repo carries a copy of these modules under its own `modules/` tree, applied via `scripts/vendor-refresh.sh` and pinned in `VENDORED.pin`. The vendor script:
 
-## Overview
+- Clones this repo at a known ref
+- Copies the three modules into the per-cloud repo's `modules/` directory
+- Rewrites `module.path` and `dependencies[].module` in each pack JSON to the per-cloud naming (e.g. `modules/eks-cluster-install-cert-manager` for the AWS catalog)
+- Records the resolved commit SHA in `VENDORED.pin`
 
-This is a **read-only reference library** that is synced into the BNK-Forge tool. Users select modules from this catalog through the BNK-Forge UI.
+Vendor refreshes are automatic — see [`.github/workflows/notify-downstream.yml`](./.github/workflows/notify-downstream.yml). When this repo pushes to a `release/*` branch, it fans out `bnk-forge-modules-released` dispatch events to each per-cloud catalog repo, which then runs their vendor-refresh workflow and opens a PR if drift is detected.
 
-## Canonical Catalog Contract (release/2.2)
+## Forge compatibility
 
-- Metadata contract: `MODULE_METADATA_SCHEMA.md` (`module-metadata/v2alpha1`)
-- Canonical release manifest: `catalog/releases/release-2.2-official.json`
-- Validation command: `python3 scripts/validate_module_metadata.py`
+This repo is intended to be added in Forge as both a **Module Source** and a **Blueprint Source** — Forge auto-links the dual role. Customers who want only the shared primitives (e.g. for an on-prem deployment that doesn't fit a per-cloud blueprint) can register this repo directly.
 
-For official modules in this baseline, metadata explicitly separates:
+## Validation
 
-- `source.kind` (module provenance)
-- `execution.engine` (runtime engine)
-- `execution.deploy_models` (render/deploy behaviors, including first-class `helm`)
+Every PR runs `python3 scripts/validate_pack_manifests.py` via `.github/workflows/validate-catalog.yml`. The validator enforces the v2alpha1 `bnkforge.pack.json` schema against every module. To run locally:
 
-Release-specific assertions are enforced by the release manifest, while generic schema checks remain release-agnostic. The manifest must explicitly classify every official `k8s/` and `bnk/` module as `active`, `legacy`, or `deprecated` to prevent silent fallback.
-
-## Repository Structure
-
-```
-bnk-forge-modules/
-├── infra/                    # Infrastructure modules
-│   └── aws/
-│       ├── vpc/              # AWS VPC with public/private subnets
-│       ├── eks/              # Amazon EKS cluster
-│       ├── security/         # Security groups, IAM, jumphost
-│       ├── storage/          # EBS gp3, EFS, volume snapshots
-│       └── high-performance-nodes/  # SR-IOV, DPDK, hugepages, Multus
-├── k8s/                      # Kubernetes prerequisite modules
-│   ├── bnk-prerequisites/    # Namespaces, FAR secrets, manifest parsing
-│   ├── cert-manager/         # F5 cert-manager (TLS certificates)
-│   └── network-setup/        # Multus CNI network attachment definitions
-├── bnk/                      # BIG-IP Next for Kubernetes modules
-│   ├── flo/                  # F5 Lifecycle Operator (core operator)
-│   ├── cneinstance/          # CNEInstance CR (triggers FLO component deployment)
-│   ├── bnk-vlans/            # F5SPKVlan CRs (TMM data-plane IPs + AWS ENI)
-│   ├── bnk-gatewayclass/     # Standard GatewayClass (gateway.networking.k8s.io/v1)
-│   ├── bnk-gateway-ext/      # F5BnkGateway CR (IPAM integration)
-│   ├── gateway/              # Gateway API Gateway instances
-│   ├── routes/               # HTTPRoute, GRPCRoute, L4Route
-│   ├── bnk-netpolicy/        # BNKNetPolicy (TCP profiles, iRules, logging)
-│   ├── bnk-secpolicy/        # BNKSecPolicy (firewall, DDoS, ACL)
-│   └── far-setup/            # FAR image pull secrets (legacy — use bnk-prerequisites)
-├── app/                      # Demo application modules
-│   ├── demo-namespace/       # Demo namespace setup
-│   ├── demo-apps/            # Backend demo applications
-│   ├── demo-gateway/         # Demo Gateway instance
-│   ├── demo-routes/          # Demo HTTPRoute configuration
-│   ├── demo-security/        # Demo security policies
-│   ├── demo-irules/          # Demo iRules
-│   ├── demo-ai-proxy/        # LiteLLM Bedrock proxy
-│   ├── demo-ai-analyzer/     # F5BigAnalyzer for AI Intelligent LB
-│   ├── demo-observability/   # Fluent Bit + Loki logging
-│   ├── demo-traffic/         # In-cluster traffic generator
-│   └── demo-ec2-traffic/     # EC2-based external traffic source
-└── templates/                # Module templates
+```bash
+python3 scripts/validate_pack_manifests.py
 ```
 
-## BNK Deployment Flow (v2.2)
+## Related repos
 
-### 1. Infrastructure (AWS)
-| Order | Module | Purpose |
-|-------|--------|---------|
-| 1 | `infra/aws/vpc` | VPC, subnets, NAT gateway |
-| 2 | `infra/aws/security` | Security groups, IAM, jumphost |
-| 3 | `infra/aws/eks` | EKS cluster and node groups |
-| 4 | `infra/aws/storage` | EBS gp3 storage class, EFS |
-| 5 | `infra/aws/high-performance-nodes` | SR-IOV, DPDK, hugepages, TMM node pool |
+- [`JLCode-tech/bnk-forge-catalog-aws-eks`](https://github.com/JLCode-tech/bnk-forge-catalog-aws-eks) — AWS EKS catalog
+- [`JLCode-tech/bnk-forge-modules`](https://github.com/JLCode-tech/bnk-forge-modules) — legacy/transitional repo; existing Forge installations may still point here. Content mirrors this repo for the shared primitives; per-cloud modules in the legacy repo will retire as customers migrate.
+- [`jgruberf5/bnk-forge-ibm-roks-cluster`](https://github.com/jgruberf5/bnk-forge-ibm-roks-cluster) — IBM ROKS catalog (community-maintained reference).
 
-### 2. Kubernetes Prerequisites
-| Order | Module | Purpose |
-|-------|--------|---------|
-| 6 | `k8s/bnk-prerequisites` | Namespaces, FAR secrets, manifest download |
-| 7 | `k8s/cert-manager` | TLS certificate management (ClusterIssuer) |
-| 8 | `k8s/network-setup` | Multus CNI network attachment definitions |
+## Contributing
 
-### 3. BNK Platform
-| Order | Module | Purpose |
-|-------|--------|---------|
-| 9 | `bnk/flo` | F5 Lifecycle Operator (Helm) |
-| 10 | `bnk/cneinstance` | CNEInstance CR — triggers FLO to deploy all BNK components |
-| 11 | `bnk/bnk-vlans` | F5SPKVlan CRs — TMM data-plane IP configuration |
-
-### 4. Gateway API
-| Order | Module | Purpose |
-|-------|--------|---------|
-| 12 | `bnk/bnk-gatewayclass` | Standard GatewayClass |
-| 13 | `bnk/gateway` | Gateway instances (listeners, TLS, policies) |
-| 14 | `bnk/routes` | HTTPRoute, GRPCRoute, L4Route |
-
-### FLO Auto-Deploys
-When CNEInstance + GatewayClass are applied, FLO automatically deploys:
-- CWC (Cluster-Wide Controller)
-- DSSM (Distributed Session State Manager)
-- TMM (Traffic Management Microkernel)
-- F5 Ingress, Fluentd, Observer, OTEL, RabbitMQ
-- All CRDs
-
-## Module Categories
-
-### Infrastructure (infra)
-Cloud infrastructure components - networks, compute, storage
-- **Workflow Compatibility**: Greenfield only
-- **Providers**: AWS (Azure, GCP planned)
-
-### Kubernetes (k8s)
-Kubernetes cluster prerequisites and add-ons
-- **Workflow Compatibility**: Greenfield, Partial
-- **Providers**: Cloud-agnostic
-
-### BNK Applications (bnk)
-BIG-IP Next for Kubernetes components
-- **Workflow Compatibility**: Greenfield, Partial, Minimal
-- **Providers**: Cloud-agnostic (requires Kubernetes)
-
-### Demo Applications (app)
-Reference demo stack with GenAI architecture
-- **Workflow Compatibility**: Greenfield
-- **Providers**: AWS (Bedrock integration)
-
-## Module Standards
-
-Each module includes:
-- `main.tf` - Resources
-- `variables.tf` - Input variables with validation
-- `outputs.tf` - Output values with descriptions
-- `versions.tf` - Provider requirements
-- `module.json` - BNK-Forge metadata for auto-wiring, source, and execution contract
-- `README.md` - Documentation
-
-## Usage
-
-**Do not clone or modify this repository directly.**
-
-Users interact through BNK-Forge UI:
-1. Select modules from the catalog
-2. Configure variables
-3. Deploy
-
-## Reference Documentation
-
-- [F5 Lifecycle Operator](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/bnk-f5-lifecycle-operator.html)
-- [BIG-IP Next for Kubernetes CRDs](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/spk-custom-resources.html)
-- [Gateway API](https://gateway-api.sigs.k8s.io/)
-
-## Related Repositories
-
-- **bnk-forge-v2**: Main BNK-Forge application
-
----
-
-For more information, see the [BNK-Forge Documentation](https://github.com/JLCode-tech/bnk-forge-v2)
+Read [`CATALOG_REPO_CONTRACT.md`](./CATALOG_REPO_CONTRACT.md) before opening a PR. The contract defines layout, naming, schema, and validation requirements for every catalog repo in the `bnk-forge-catalog-*` family.
