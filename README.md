@@ -1,57 +1,45 @@
-# BNK Forge — Shared Cloud-Agnostic Modules
+# bnk-forge-catalog-shared
 
-Canonical source for the cloud-agnostic Kubernetes primitives that every per-cloud BNK Forge catalog repo depends on. Per-cloud catalogs (`bnk-forge-catalog-aws-eks`, future `bnk-forge-catalog-azure-aks`, etc.) **vendor** these modules at a pinned `release/2.x` tag — they don't fork them.
+**Upstream library** of the cloud-agnostic Kubernetes primitives that every per-cloud BNK Forge catalog vendors from. Not a deployment catalog.
 
-This repo follows the [BNK Forge Catalog Repo Contract](./CATALOG_REPO_CONTRACT.md). All `bnk-forge-catalog-*` repos must.
+> If you're an end user trying to deploy BNK on AWS, IBM, Azure, GCP, or on-prem — **you don't register this repo in Forge directly**. Pick a per-cloud catalog (`bnk-forge-catalog-aws-eks`, `bnk-forge-catalog-ibm-roks` from jgruberf5, etc.); it already carries vendored copies of these primitives.
 
-## Modules
+## Who consumes this repo
 
-| Module path | Purpose |
-| --- | --- |
-| [`modules/bnk-prerequisites`](./modules/bnk-prerequisites) | Foundation module — creates BNK namespaces, FAR image pull secrets, downloads the BNK manifest, and parses component versions. Everything else in the BNK stack depends on it. |
-| [`modules/cert-manager`](./modules/cert-manager) | Deploys Jetstack cert-manager with BNK-compatible defaults (CRDs, controller/webhook replica counts, OTEL telemetry cert flow). |
-| [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer used by FLO and OTEL certificate flows. Pure-manifest module rendered by Forge's backend engine. |
+| Consumer | How |
+|---|---|
+| **Per-cloud catalog repos** (`bnk-forge-catalog-aws-eks`, future Azure / GCP / on-prem) | Vendor these modules via `scripts/vendor-refresh.sh` at a pinned tag, then rename them on the way in (e.g. `cert-manager` → `eks-cluster-install-cert-manager`). |
+| **Catalog maintainers** | Author or update the modules here. Changes propagate to per-cloud catalogs via `notify-downstream.yml` → vendor-refresh PRs. |
+| **Direct Forge users** *(unusual)* | Only if you're on bare-metal Kubernetes with no per-cloud blueprint that fits, and you want just the shared primitives. Register as a Module Source pointing at `release/2.x`. |
 
-These are the only modules that belong in this repo. Anything cloud-specific (FLO install with IAM, CNEInstance with chassis config, NAD with NIC drivers) lives in a per-cloud catalog repo.
+## What's here
 
-## Repo model
+Three cloud-agnostic Kubernetes primitives. That's it. Anything that touches a cloud API, cloud-specific IAM, or cloud-specific networking does **not** belong here.
 
-This is a **long-lived repo** with **branches per BNK release**:
+| Module | What it does | When you'd use it |
+|---|---|---|
+| [`modules/bnk-prerequisites`](./modules/bnk-prerequisites) | Creates BNK namespaces, FAR image pull secrets, downloads the BNK manifest, parses component versions. | First step of every BNK install — everything else depends on it. |
+| [`modules/cert-manager`](./modules/cert-manager) | Deploys Jetstack cert-manager with BNK-tuned defaults (CRDs, controller/webhook replica counts, OTEL cert pre-wiring). | After bnk-prerequisites, before FLO. FLO certs and OTEL flows need this. |
+| [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer + OTEL server certs. Pure-manifest module — no Terraform code. | After cert-manager. Provides the issuer that FLO references. |
 
-- `release/2.2` — BNK 2.2 content (current)
-- `release/2.3`, `release/2.4`, `release/3.x` — as BNK ships them
+## Branches
 
-`main` tracks the most recent release branch. Customers select which BNK version they consume by pointing Forge's Module Source — or a per-cloud catalog's vendor pin — at the matching branch or tag.
+`release/2.2`, `release/2.3` (when 2.3 ships), … one per BNK release. `main` tracks the most recent release branch. Per-cloud catalogs pin to a specific branch or tag.
 
-## How per-cloud catalogs consume these modules
+## For maintainers: adding or changing a primitive
 
-Each per-cloud catalog repo carries a copy of these modules under its own `modules/` tree, applied via `scripts/vendor-refresh.sh` and pinned in `VENDORED.pin`. The vendor script:
+Before opening a PR:
 
-- Clones this repo at a known ref
-- Copies the three modules into the per-cloud repo's `modules/` directory
-- Rewrites `module.path` and `dependencies[].module` in each pack JSON to the per-cloud naming (e.g. `modules/eks-cluster-install-cert-manager` for the AWS catalog)
-- Records the resolved commit SHA in `VENDORED.pin`
+- The module must be **cloud-agnostic**. No cloud APIs, no cloud-specific auth, no cloud-specific networking. If it has any of those, it goes in a per-cloud catalog instead.
+- Follow [`CATALOG_REPO_CONTRACT.md`](./CATALOG_REPO_CONTRACT.md) for layout, `bnkforge.pack.json` schema, and naming.
+- Run `python3 scripts/validate_pack_manifests.py` locally — CI also runs it.
 
-Vendor refreshes are automatic — see [`.github/workflows/notify-downstream.yml`](./.github/workflows/notify-downstream.yml). When this repo pushes to a `release/*` branch, it fans out `bnk-forge-modules-released` dispatch events to each per-cloud catalog repo, which then runs their vendor-refresh workflow and opens a PR if drift is detected.
-
-## Forge compatibility
-
-This repo is intended to be added in Forge as both a **Module Source** and a **Blueprint Source** — Forge auto-links the dual role. Customers who want only the shared primitives (e.g. for an on-prem deployment that doesn't fit a per-cloud blueprint) can register this repo directly.
-
-## Validation
-
-Every PR runs `python3 scripts/validate_pack_manifests.py` via `.github/workflows/validate-catalog.yml`. The validator enforces the v2alpha1 `bnkforge.pack.json` schema against every module. To run locally:
-
-```bash
-python3 scripts/validate_pack_manifests.py
-```
+When this repo pushes to `release/*`, `.github/workflows/notify-downstream.yml` fans out a `bnk-forge-modules-released` `repository_dispatch` event to every per-cloud catalog repo. Each downstream's `vendor-refresh.yml` workflow re-runs and opens a refresh PR if its vendored copies have drifted.
 
 ## Related repos
 
-- [`JLCode-tech/bnk-forge-catalog-aws-eks`](https://github.com/JLCode-tech/bnk-forge-catalog-aws-eks) — AWS EKS catalog
-- [`JLCode-tech/bnk-forge-modules`](https://github.com/JLCode-tech/bnk-forge-modules) — legacy/transitional repo; existing Forge installations may still point here. Content mirrors this repo for the shared primitives; per-cloud modules in the legacy repo will retire as customers migrate.
-- [`jgruberf5/bnk-forge-ibm-roks-cluster`](https://github.com/jgruberf5/bnk-forge-ibm-roks-cluster) — IBM ROKS catalog (community-maintained reference).
-
-## Contributing
-
-Read [`CATALOG_REPO_CONTRACT.md`](./CATALOG_REPO_CONTRACT.md) before opening a PR. The contract defines layout, naming, schema, and validation requirements for every catalog repo in the `bnk-forge-catalog-*` family.
+| Repo | Role |
+|---|---|
+| [`bnk-forge-modules`](https://github.com/JLCode-tech/bnk-forge-modules) | Legacy / transitional source. Existing Forge installations still point here. Will gradually shed content as per-cloud catalogs absorb it. |
+| [`bnk-forge-catalog-aws-eks`](https://github.com/JLCode-tech/bnk-forge-catalog-aws-eks) | AWS EKS deployment catalog. Vendors from here. |
+| [`jgruberf5/bnk-forge-ibm-roks-cluster`](https://github.com/jgruberf5/bnk-forge-ibm-roks-cluster) | IBM ROKS deployment catalog (community-maintained). Does not vendor from here — has its own full stack. |
