@@ -1,0 +1,72 @@
+name: notify-downstream
+
+# When this repo (bnk-forge-catalog-shared) pushes to a release branch,
+# dispatch an event to every per-cloud catalog repo so their
+# vendor-refresh workflows fire immediately. Each per-cloud repo's
+# .github/workflows/vendor-refresh.yml listens for the
+# `bnk-forge-modules-released` repository_dispatch event.
+#
+# Cron in each downstream repo acts as the safety net if a dispatch
+# is missed (e.g. token expired, recipient repo workflow disabled).
+
+on:
+  push:
+    branches:
+      - 'release/*'
+
+  # Manual trigger for ad-hoc fan-out, optionally scoping to one downstream.
+  workflow_dispatch:
+    inputs:
+      only_repo:
+        description: 'Only dispatch to this downstream repo (leave empty for all)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine release ref
+        id: ref
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Notifying downstreams of push to: $REF"
+
+      - name: Dispatch bnk-forge-modules-released event
+        env:
+          # DISPATCH_TOKEN must be a PAT (classic or fine-grained) with
+          # `repo` scope to the target downstream repos. Set it in repo
+          # Settings -> Secrets and variables -> Actions.
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          REF: ${{ steps.ref.outputs.ref }}
+          ONLY: ${{ inputs.only_repo }}
+        run: |
+          # Downstream catalog repos to notify. Add new per-cloud repos here.
+          downstreams=(
+            "JLCode-tech/bnk-forge-catalog-aws-eks"
+            # "JLCode-tech/bnk-forge-catalog-azure-aks"   # planned
+            # "JLCode-tech/bnk-forge-catalog-gcp-gke"     # planned
+            # "JLCode-tech/bnk-forge-catalog-onprem-k8s"  # planned
+          )
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::DISPATCH_TOKEN secret not set; cannot dispatch to private repos. Public repos still work."
+          fi
+
+          for repo in "${downstreams[@]}"; do
+            if [[ -n "$ONLY" && "$repo" != "$ONLY" ]]; then
+              echo "Skipping $repo (only_repo filter set to $ONLY)"
+              continue
+            fi
+            echo "Dispatching bnk-forge-modules-released to $repo (ref=$REF)"
+            gh api "repos/$repo/dispatches" \
+              -f event_type=bnk-forge-modules-released \
+              -f "client_payload[ref]=$REF" \
+              -f "client_payload[source_repo]=${GITHUB_REPOSITORY}" \
+              -f "client_payload[source_sha]=${GITHUB_SHA}" \
+              || echo "::warning::Failed to dispatch to $repo — check token scopes and that the recipient workflow exists."
+          done
