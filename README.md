@@ -14,13 +14,14 @@
 
 ## What's here
 
-Three cloud-agnostic Kubernetes primitives. That's it. Anything that touches a cloud API, cloud-specific IAM, or cloud-specific networking does **not** belong here.
+Cloud-agnostic Kubernetes primitives. Anything that touches a cloud API, cloud-specific IAM, or cloud-specific networking does **not** belong here.
 
 | Module | What it does | When you'd use it |
 |---|---|---|
 | [`modules/bnk-prerequisites`](./modules/bnk-prerequisites) | Creates BNK namespaces, FAR image pull secrets, downloads the BNK manifest, parses component versions. | First step of every BNK install — everything else depends on it. |
 | [`modules/cert-manager`](./modules/cert-manager) | Deploys Jetstack cert-manager with BNK-tuned defaults (CRDs, controller/webhook replica counts, OTEL cert pre-wiring). | After bnk-prerequisites, before FLO. FLO certs and OTEL flows need this. |
 | [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer + OTEL server certs. Pure-manifest module — no Terraform code. | After cert-manager. Provides the issuer that FLO references. |
+| [`modules/install-multus`](./modules/install-multus) | Installs Multus CNI (meta-CNI for multi-interface pods). Pure k8s logic; no cloud bits. | When BNK TMM needs the 3-interface model. Per-cloud catalogs chain a cloud-specific NAD-creation module after this. |
 
 ## Branches
 
