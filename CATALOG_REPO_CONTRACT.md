@@ -276,6 +276,33 @@ If a catalog repo vendors modules from `bnk-forge-catalog-shared` (or any other 
 
 See [`VENDORED.md`](https://github.com/JLCode-tech/bnk-forge-catalog-aws-eks/blob/release/2.2/VENDORED.md) in `bnk-forge-catalog-aws-eks` for a working example.
 
+## Tag conventions
+
+Per-cloud catalog repos rely on cloud-provider resource tags to discover infrastructure the cluster admin has pre-staged (e.g. dedicated subnets for the BNK data plane). The shared convention across all `bnk-forge-catalog-*` repos:
+
+| Tag key | Purpose |
+|---|---|
+| `f5-bnk-role` | Marks a cloud resource for a specific BNK role. Discovered by the catalog's `cluster-register` (or equivalent) module via the cloud provider's tag-filter data source. |
+
+### Defined `f5-bnk-role` values
+
+| Value | Applied to | Discovered by | Used by |
+|---|---|---|---|
+| `tmm-external` | Cloud subnets the customer dedicates to TMM data-plane VIPs (typically one per AZ for multi-AZ deployments). On AWS: tagged on `aws_subnet` resources. | `cluster-register` exposes them as `tmm_external_subnets_by_az` (shape: list of `{name = <az>, subnets = [{cidr, subnet_id}, ...]}`). | `cneinstall` (or per-cloud equivalent) auto-builds the BNKGateway CR's `defaultListenerNetworks` with one entry per discovered subnet — customers don't need to set `vip_cidr` explicitly. |
+
+### Adding a new role
+
+1. Define the role value (lowercase, hyphen-separated, e.g. `tmm-internal`, `cwc-dedicated`).
+2. Document it in the table above, plus what consumes it.
+3. Per-cloud catalogs add the discovery in their `cluster-register` equivalent with a matching tag-filter data source for that cloud (`aws_subnet` data source / tags, `azurerm_subnet` / tags, GCP `google_compute_subnetwork` / labels, etc.).
+4. The role value is the same across clouds; the underlying tag mechanism varies. Document any cloud-specific quirks in the per-cloud catalog's README, not here.
+
+### Why cloud tags and not Kubernetes labels?
+
+Cloud-provider tags are discoverable from outside the cluster via Terraform/OpenTofu data sources. Kubernetes labels require the kubeconfig to be active and a `kubernetes` provider, which complicates the `cluster-register` flow (it has to produce the kubeconfig in the first place). Cloud-side tags are simpler and stable across cluster recreates.
+
+The exception is **TMM node placement**, which F5 documents as the Kubernetes node label `app=f5-tmm` — that's a manual `kubectl label node` step the cluster admin performs, not a Terraform-discovered tag. See [the F5 docs](https://clouddocs.f5.com/bigip-next-for-kubernetes/2.0.0-LA/node-label.html).
+
 ## Validation
 
 Before opening a PR in any catalog repo, run the equivalent of:
