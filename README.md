@@ -23,6 +23,7 @@ Cloud-agnostic Kubernetes primitives. Anything that touches a cloud API, cloud-s
 | [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer + OTEL server certs. Pure-manifest module — no Terraform code. | After cert-manager. Provides the issuer that FLO references. |
 | [`modules/install-multus`](./modules/install-multus) | Installs Multus CNI (meta-CNI for multi-interface pods). Pure k8s logic; no cloud bits. | When BNK TMM needs the 3-interface model. Per-cloud catalogs chain a cloud-specific NAD-creation module after this. |
 | [`modules/cneinstance-ready-gate`](./modules/cneinstance-ready-gate) | Honest readiness gate for a CNEInstance — polls the operator's `.status` (`F5TmmAvailable && CNEControllerAvailable`, with a `status.state` fallback), dumps pod diagnostics and fails closed on timeout. Pure k8s logic; no cloud bits. | After the per-cloud cneinstall step, to gate downstream work (License, traffic) on the operator actually reporting the instance functional. |
+| [`modules/license-activation-gate`](./modules/license-activation-gate) | Server-side-applies the BNK `License` CR (connected mode, JWT inlined safely), then honestly gates on `.status.state == "Active"`; dumps pod diagnostics and fails closed on timeout. Ported from awsbnkctl phase23/phase25. | After the CNEInstance readiness gate. Closes the D-017 licensing-success gap so a deploy fails unless the operator actually activated the license. |
 
 ## Branches
 
