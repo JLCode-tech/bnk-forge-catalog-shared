@@ -1,0 +1,117 @@
+{
+  "module": {
+    "name": "Install F5SPKVlan + GatewayClass",
+    "path": "modules/install-spkvlan-gatewayclass",
+    "version": "0.1.0-alpha",
+    "layer": "kubernetes",
+    "category": "bnk",
+    "description": "Cloud-agnostic: apply F5SPKVlan and GatewayClass CRs for the BNK host-device data-plane pattern. Without these CRs a Programmed CNEInstance cannot pass traffic.",
+    "cloud_specific": false,
+    "supported_platforms": [
+      "any"
+    ]
+  },
+  "source": {
+    "kind": "official",
+    "channel": "release/2.3"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": [
+      "kubernetes_manifest"
+    ]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/install-hugepages",
+        "reason": "Runs after CNEInstance Reconciled; hugepages must be ready for TMM to schedule."
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Cluster name for GatewayClass CR naming.",
+        "source": "module"
+      },
+      {
+        "name": "tmm_ext_selfip",
+        "type": "string",
+        "description": "External SelfIP (cloud-specific, e.g. AWS secondary ENI IP).",
+        "source": "module"
+      }
+    ],
+    "optional": [
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "CNE namespace for F5SPKVlan CRs.",
+        "default": "f5-cne-system",
+        "source": "user"
+      },
+      {
+        "name": "tmm_int_selfip",
+        "type": "string",
+        "description": "Internal SelfIP (dual-interface only).",
+        "default": "",
+        "source": "module"
+      },
+      {
+        "name": "tmm_selfip_prefixlen",
+        "type": "number",
+        "description": "Prefix length for SelfIPs.",
+        "default": 24,
+        "source": "module"
+      },
+      {
+        "name": "has_internal_interface",
+        "type": "boolean",
+        "description": "Apply int-vlan F5SPKVlan (dual-interface pattern).",
+        "default": false,
+        "source": "user"
+      },
+      {
+        "name": "crd_wait_timeout",
+        "type": "string",
+        "description": "kubectl wait timeout for CRDs.",
+        "default": "600s",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "gatewayclass_name",
+        "type": "string",
+        "description": "Name of applied GatewayClass CR.",
+        "used_by": ["operator Gateway CRs"],
+        "sensitive": false
+      },
+      {
+        "name": "spkvlan_gatewayclass_ready",
+        "type": "boolean",
+        "description": "Gate output: both CRs applied.",
+        "used_by": ["traffic validation steps"],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": ["local", "null"],
+    "optional": []
+  },
+  "deployment": {
+    "order": 70,
+    "estimated_time": "15 minutes",
+    "requires_user_input": true,
+    "sensitive_inputs": []
+  }
+}

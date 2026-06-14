@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Install F5SPKVlan + GatewayClass",
+    "path": "modules/install-spkvlan-gatewayclass",
+    "version": "0.1.0-alpha",
+    "category": "bnk",
+    "description": "Cloud-agnostic primitive: apply F5SPKVlan and GatewayClass custom resources for the BNK host-device data-plane pattern. F5SPKVlan binds TMM trunks to named VLANs with SelfIPs; GatewayClass registers the cne-controller as a Gateway API implementation. SelfIP values are cloud-specific inputs (e.g. AWS ENI secondary IPs). Matches awsbnkctl Phase 23b."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/install-hugepages",
+        "reason": "Hugepages must be configured on BNK nodes before TMM can schedule; this module runs after CNEInstance reaches Reconciled which requires hugepages."
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Logical name of the BNK cluster. Used to derive the GatewayClass CR name (<cluster_name>-gatewayclass). Supplied by the per-cloud wrapper module from its cluster identity output.",
+        "source": "user",
+        "sensitive": false
+      },
+      {
+        "name": "tmm_ext_selfip",
+        "type": "string",
+        "description": "SelfIP address for the external TMM VLAN (trunk 1.1). Cloud-specific: on AWS, a secondary private IP on the external ENI derived from the external data-plane subnet. Supplied by the per-cloud wrapper module.",
+        "source": "user",
+        "sensitive": false
+      }
+    ],
+    "optional": [
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Kubernetes namespace for CNEInstance and F5SPKVlan CRs. Default: f5-cne-system.",
+        "source": "user",
+        "default": "f5-cne-system"
+      },
+      {
+        "name": "tmm_int_selfip",
+        "type": "string",
+        "description": "SelfIP for the internal TMM VLAN (trunk 1.2). Required when has_internal_interface=true. Cloud-specific secondary IP on the internal host interface.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "tmm_selfip_prefixlen",
+        "type": "number",
+        "description": "IPv4 prefix length for both SelfIPs (e.g. 24 for /24). Must match the data-plane subnet prefix length.",
+        "source": "user",
+        "default": 24
+      },
+      {
+        "name": "has_internal_interface",
+        "type": "boolean",
+        "description": "When true, apply the int-vlan F5SPKVlan CR (dual-interface TMM pattern).",
+        "source": "user",
+        "default": false
+      },
+      {
+        "name": "gatewayclass_name",
+        "type": "string",
+        "description": "GatewayClass CR name. Empty = auto-derive as <cluster_name>-gatewayclass.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "crd_wait_timeout",
+        "type": "string",
+        "description": "kubectl wait timeout for F5SPKVlan + GatewayClass CRDs to be Established. FLO installs these CRDs after CNEInstance reconciles (can take 10+ min on cold cluster).",
+        "source": "user",
+        "default": "600s"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "gatewayclass_name",
+        "type": "string",
+        "description": "Name of the GatewayClass CR applied. Operator Gateway CRs must reference this via .spec.gatewayClassName."
+      },
+      {
+        "name": "f5spkvlan_ext_applied",
+        "type": "boolean",
+        "description": "True once the ext-vlan F5SPKVlan CR has been applied."
+      },
+      {
+        "name": "spkvlan_gatewayclass_ready",
+        "type": "boolean",
+        "description": "Gate output — true once both F5SPKVlan and GatewayClass CRs are applied. Downstream Gateway CRs and traffic steps depend on this."
+      }
+    ]
+  }
+}
