@@ -10,6 +10,11 @@ output "operator_namespace" {
   value       = kubernetes_namespace_v1.operator.metadata[0].name
 }
 
+output "instance_namespace" {
+  description = "Name of the instance namespace (CNEInstance CR + the components FLO co-locates with it). Falls back to operator_namespace when instance_namespace is empty (legacy single-namespace mode). Consumers wire this via from_output to place the CNEInstance / NADs / IRSA SA when running a two-namespace split (e.g. AWS gold-standard f5-cne-core/f5-cne-system)."
+  value       = var.instance_namespace != "" ? var.instance_namespace : var.operator_namespace
+}
+
 output "utils_namespace" {
   description = "Name of the utilities namespace"
   value       = kubernetes_namespace_v1.utils.metadata[0].name

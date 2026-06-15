@@ -93,6 +93,15 @@
         "sensitive": false
       },
       {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Instance namespace name (CNEInstance CR + co-located components). Falls back to operator_namespace when empty. Consumed via from_output for two-namespace splits.",
+        "used_by": [
+          "bnk/cneinstance"
+        ],
+        "sensitive": false
+      },
+      {
         "name": "utils_namespace",
         "type": "string",
         "description": "Utilities namespace name",

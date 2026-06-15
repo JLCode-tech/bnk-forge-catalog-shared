@@ -98,6 +98,11 @@
         "description": "Operator namespace name (FLO + all BNK components)."
       },
       {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Instance namespace name (CNEInstance CR + co-located components). Falls back to operator_namespace when empty. Consumed via from_output for two-namespace splits."
+      },
+      {
         "name": "utils_namespace",
         "type": "string",
         "description": "Utilities namespace name."
