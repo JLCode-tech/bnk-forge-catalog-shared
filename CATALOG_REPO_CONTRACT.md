@@ -15,7 +15,7 @@ Repository names follow the pattern **`bnk-forge-catalog-<target>`** where `<tar
 
 | Repo name | Target |
 |---|---|
-| `bnk-forge-catalog-shared` | This repo — shared cloud-agnostic k8s primitives |
+| `bnk-forge-catalog-shared` | This repo — shared cloud-agnostic k8s primitives and post-BNK blueprints |
 | `bnk-forge-catalog-aws-eks` | AWS EKS |
 | `bnk-forge-catalog-azure-aks` | Azure AKS (planned) |
 | `bnk-forge-catalog-gcp-gke` | GCP GKE (planned) |
@@ -93,7 +93,15 @@ Modules under `modules/` follow `<target>-<step>` naming:
 
 The `<target>` prefix scopes the module name to the deployment target so cross-catalog naming collisions don't happen.
 
-The shared catalog repo (`bnk-forge-catalog-shared`) follows the same `modules/<name>/` layout as every other catalog repo. Its module names are not deployment-target-scoped (no `eks-`/`aks-`/`gke-` prefix) because they're cloud-agnostic primitives — they go by their canonical names: `bnk-prerequisites`, `cert-manager`, `bnk-cert-issuer`. Per-cloud catalogs rename them on vendor (e.g. to `eks-cluster-install-cert-manager`) via their `scripts/vendor-refresh.sh`.
+The shared catalog repo (`bnk-forge-catalog-shared`) follows the same
+`modules/<name>/` and `blueprints/<name>/` layout as every other catalog repo.
+Its module and blueprint names are not deployment-target-scoped (no
+`eks-`/`aks-`/`gke-` prefix) because they're cloud-agnostic primitives or
+cloud-agnostic post-BNK blueprints — they go by canonical names such as
+`bnk-prerequisites`, `cert-manager`, `bnk-cert-issuer`, or
+`bnk-live-observability-foundation`. Per-cloud catalogs rename vendored modules
+on import (e.g. to `eks-cluster-install-cert-manager`) via their
+`scripts/vendor-refresh.sh`.
 
 ## Module structure
 

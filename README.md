@@ -1,20 +1,30 @@
 # bnk-forge-catalog-shared
 
-**Upstream library** of the cloud-agnostic Kubernetes primitives that every per-cloud BNK Forge catalog vendors from. Not a deployment catalog.
+**Shared cloud-agnostic BNK Forge catalog** for Kubernetes primitives and post-BNK
+blueprints that apply across AWS, Azure, GCP, IBM, on-prem, and other Kubernetes
+targets.
 
-> If you're an end user trying to deploy BNK on AWS, IBM, Azure, GCP, or on-prem — **you don't register this repo in Forge directly**. Pick a per-cloud catalog (`bnk-forge-catalog-aws-eks`, `bnk-forge-catalog-ibm-roks` from jgruberf5, etc.); it already carries vendored copies of these primitives.
+> If you're an end user trying to create cloud infrastructure or install BNK on
+> AWS, IBM, Azure, GCP, or on-prem — start with the matching per-cloud catalog
+> (`bnk-forge-catalog-aws-eks`, `bnk-forge-catalog-ibm-roks` from jgruberf5,
+> etc.). Use this repo directly for shared Kubernetes-only primitives or
+> post-BNK blueprints that are intentionally cloud-agnostic.
 
 ## Who consumes this repo
 
 | Consumer | How |
 |---|---|
 | **Per-cloud catalog repos** (`bnk-forge-catalog-aws-eks`, future Azure / GCP / on-prem) | Vendor these modules via `scripts/vendor-refresh.sh` at a pinned tag, then rename them on the way in (e.g. `cert-manager` → `eks-cluster-install-cert-manager`). |
-| **Catalog maintainers** | Author or update the modules here. Changes propagate to per-cloud catalogs via `notify-downstream.yml` → vendor-refresh PRs. |
-| **Direct Forge users** *(unusual)* | Only if you're on bare-metal Kubernetes with no per-cloud blueprint that fits, and you want just the shared primitives. Register as a Module Source pointing at `release/2.x`. |
+| **Catalog maintainers** | Author or update shared modules and shared post-BNK blueprints here. Module changes propagate to per-cloud catalogs via `notify-downstream.yml` → vendor-refresh PRs. |
+| **Direct Forge users** | Register this repo when you want shared Kubernetes-only modules or cloud-agnostic post-BNK blueprints. Provider-specific cluster creation, BNK installation, and cloud-service demos still belong in per-cloud catalogs. |
 
 ## What's here
 
-Cloud-agnostic Kubernetes primitives. Anything that touches a cloud API, cloud-specific IAM, or cloud-specific networking does **not** belong here.
+Cloud-agnostic Kubernetes content. Anything that touches a cloud API,
+cloud-specific IAM, cloud-specific networking, or a provider-specific service
+(for example AWS Bedrock or Azure OpenAI) does **not** belong here.
+
+## Modules
 
 | Module | What it does | When you'd use it |
 |---|---|---|
@@ -23,15 +33,33 @@ Cloud-agnostic Kubernetes primitives. Anything that touches a cloud API, cloud-s
 | [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer + OTEL server certs. Pure-manifest module — no Terraform code. | After cert-manager. Provides the issuer that FLO references. |
 | [`modules/install-multus`](./modules/install-multus) | Installs Multus CNI (meta-CNI for multi-interface pods). Pure k8s logic; no cloud bits. | When BNK TMM needs the 3-interface model. Per-cloud catalogs chain a cloud-specific NAD-creation module after this. |
 
+## Blueprints
+
+Shared blueprints in this repo are deployable only when they are cloud-agnostic
+and useful across Kubernetes targets. They should assume any required cluster or
+BNK platform prerequisites already exist unless the blueprint explicitly creates
+Kubernetes-only resources.
+
+| Blueprint | What it does | When you'd use it |
+|---|---|---|
+| `blueprints/bnk-live-observability-foundation` *(planned)* | Deploys a reusable Loki + collector foundation for live BNK PoC telemetry. Defaults are compatible with Forge AI Gateway observability (`llm-egress/loki:3100`). | After BNK is installed, before deploying traffic-producing PoCs that need shared live observability. |
+
+Provider-specific blueprints stay in their provider catalog. For example, an
+AWS Bedrock + LiteLLM traffic demo belongs in `bnk-forge-catalog-aws-eks`; an
+Azure OpenAI traffic demo belongs in an Azure catalog.
+
 ## Branches
 
 `release/2.2`, `release/2.3` (when 2.3 ships), … one per BNK release. `main` tracks the most recent release branch. Per-cloud catalogs pin to a specific branch or tag.
 
-## For maintainers: adding or changing a primitive
+## For maintainers: adding or changing shared content
 
 Before opening a PR:
 
-- The module must be **cloud-agnostic**. No cloud APIs, no cloud-specific auth, no cloud-specific networking. If it has any of those, it goes in a per-cloud catalog instead.
+- Modules and blueprints must be **cloud-agnostic**. No cloud APIs, no
+  cloud-specific auth, no cloud-specific networking, and no provider-specific
+  managed services. If it has any of those, it goes in a per-cloud catalog
+  instead.
 - Follow [`CATALOG_REPO_CONTRACT.md`](./CATALOG_REPO_CONTRACT.md) for layout, `bnkforge.pack.json` schema, and naming.
 - Run `python3 scripts/validate_pack_manifests.py` locally — CI also runs it.
 
