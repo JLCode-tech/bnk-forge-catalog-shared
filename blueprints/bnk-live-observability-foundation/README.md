@@ -1,42 +1,22 @@
 # BNK Live Observability Foundation
 
-A cloud-agnostic, post-BNK blueprint that deploys a minimal Loki + Fluent Bit log stack
-for **real live telemetry** from BNK PoC workloads. Works with **any Kubernetes cluster** via
-direct kubeconfig — no pre-existing Forge cluster registration required.
-
-This is the foundation that traffic-producing blueprints write into — it is not a data
-generator and does not include LiteLLM, Bedrock, OpenAI, or any AI provider credentials.
+A cloud-agnostic, post-BNK shared blueprint that deploys a minimal Loki + Fluent Bit log stack
+for **real live telemetry** from BNK PoC workloads. This is the foundation that traffic-producing
+blueprints write into — it is not a data generator and does not include LiteLLM, Bedrock, OpenAI,
+or any AI provider credentials.
 
 ## What this blueprint deploys
 
 ```
-adopt  ──►  namespace  ──►  loki  ──►  collector  ──►  readiness
+namespace  ──►  loki  ──►  collector  ──►  readiness
 ```
 
 | Step | Module | What it creates |
 |---|---|---|
-| 1 | `live-observability-cluster-adopt` | Validates kubeconfig connectivity; gates downstream modules |
-| 2 | `live-observability-namespace` | Kubernetes namespace (default: `llm-egress`) with BNK Forge labels |
-| 3 | `live-observability-loki` | Single-replica Grafana Loki Deployment + ClusterIP Service (no Helm) |
-| 4 | `live-observability-collector` | Fluent Bit DaemonSet with Lua label-promotion filter + Loki output |
-| 5 | `live-observability-readiness` | Readiness gate: polls `kubectl get --raw /api/v1/namespaces/.../services/.../proxy/ready` |
-
-## Imported-blueprint UX (how this blueprint is used)
-
-When you import this blueprint into Forge:
-
-1. Forge creates a **new project**.
-2. The deploy dialog prompts you for **all required inputs** (see table below).
-3. You provide:
-   - `cluster_name` — a human-readable name for your cluster (e.g. `my-onprem-k8s`).
-   - `kubeconfig_content` — your full kubeconfig, pasted into the sensitive textarea.
-4. Optionally override namespace, Loki service name/port, retention, etc.
-5. Forge runs the module chain end-to-end. No existing cluster registration needed.
-
-> **After the blueprint deploys** — register the same cluster manually in Forge
-> (**Settings → Clusters → Add cluster**, same `cluster_name`) to enable the
-> **PR #393 Loki dashboard** cluster-selector. This is a one-time manual step;
-> the deployed Loki stack works regardless of registration status.
+| 1 | `live-observability-namespace` | Kubernetes namespace (default: `llm-egress`) with BNK Forge labels |
+| 2 | `live-observability-loki` | Single-replica Grafana Loki Deployment + ClusterIP Service (no Helm) |
+| 3 | `live-observability-collector` | Fluent Bit DaemonSet with Lua label-promotion filter + Loki output |
+| 4 | `live-observability-readiness` | Readiness gate: polls `kubectl get --raw /api/v1/namespaces/.../services/.../proxy/ready` |
 
 ## Defaults match Forge AI Gateway (PR #393)
 
@@ -46,17 +26,15 @@ When you import this blueprint into Forge:
 | `loki_service_name` | `loki` | `loki_service_name` |
 | `loki_port` | `3100` | `loki_port` |
 
-**If you change any of these defaults you must update the matching Forge AI Gateway settings**
-in the project that uses this foundation, and vice-versa.
+**If you change any of these defaults you must update the matching Forge AI Gateway settings** in the project that uses this foundation, and vice-versa. The service name and port must match across both sides.
 
-## Required inputs
+## Prerequisites
 
-| Name | Sensitive | Description |
-|---|---|---|
-| `cluster_name` | no | Human-readable cluster name. Used for logging and Forge registration guidance. |
-| `kubeconfig_content` | **yes** | Full plain-text kubeconfig for the target cluster. Supports any Kubernetes cluster (EKS, AKS, GKE, ROKS, on-prem). |
+- A running Kubernetes cluster registered in Forge.
+- BNK installed on the cluster (required if you intend to use Forge AI Gateway features that query Loki — otherwise the observability stack is standalone).
+- No cloud credentials, no cloud-specific prerequisites.
 
-## Optional inputs
+## Inputs
 
 | Name | Default | Description |
 |---|---|---|
@@ -72,45 +50,17 @@ in the project that uses this foundation, and vice-versa.
 
 | Source module | Output | Description |
 |---|---|---|
-| `live-observability-cluster-adopt` | `cluster_name` | Cluster name (pass-through) |
-| `live-observability-cluster-adopt` | `cluster_api_server` | API server URL (diagnostics) |
-| `live-observability-cluster-adopt` | `adopt_ready` | Connectivity gate |
 | `live-observability-namespace` | `observability_namespace` | Namespace name |
 | `live-observability-loki` | `loki_endpoint` | In-cluster Loki push URL |
 | `live-observability-loki` | `loki_service_name` | Resolved service name |
 | `live-observability-readiness` | `observability_ready` | Stack readiness gate |
 | `live-observability-readiness` | `loki_proxy_url` | K8s API-server proxy path (diagnostics) |
 
-## Registering the cluster in Forge (required for PR #393 dashboard)
-
-This blueprint deploys to your cluster via a directly-provided kubeconfig. The **Forge
-cluster database row** is not created automatically — Forge's auto-registration contract
-requires either SSH-fetched kubeconfig access or a cloud-provider-specific register module.
-
-To enable the Loki dashboard after deploy:
-
-1. Forge UI → **Settings → Clusters → Add cluster**.
-2. Name: same value as `cluster_name` input.
-3. Kubeconfig: same kubeconfig you provided.
-4. In **AI Gateway → Loki settings**, set:
-   - `observability_namespace` = `llm-egress` (or your custom value)
-   - `loki_service_name` = `loki`
-   - `loki_port` = `3100`
-
-## Kubeconfig wiring
-
-The `kubeconfig_content` blueprint input is wired directly to every module's
-`forge_kubeconfig_content` input. This is the correct approach for imported blueprints
-that create a new Forge project: the normal Forge-injected `local.forge_kubeconfig`
-mechanism (generated `bnk_forge_providers.tf`) only fires when a project has a registered
-cluster. Since this blueprint creates the project fresh, the direct wiring is explicit and
-reliable.
-
 ## AI Gateway log contract
 
-Producer blueprints that emit real logs into this foundation MUST write JSON-structured log
-lines with the following fields. Only logs matching this schema will be promoted to Loki stream
-labels and be queryable by Forge AI Gateway ranking and filter features.
+Producer blueprints that emit real logs into this foundation MUST write JSON-structured log lines
+with the following fields. Only logs matching this schema will be promoted to Loki stream labels
+and be queryable by Forge AI Gateway ranking and filter features.
 
 ### Loki stream selector
 
@@ -146,8 +96,9 @@ labels and be queryable by Forge AI Gateway ranking and filter features.
 ```
 
 `model` and `status` are promoted to Loki **stream labels** by the Fluent Bit Lua filter.
-Do NOT set `model` to a per-request unique value (e.g. a UUID) — that explodes label
-cardinality and degrades Loki performance.
+Queries on stream labels use the Loki index and are fast regardless of data volume. Do NOT
+set `model` to a per-request unique value (e.g. a UUID) — that explodes label cardinality
+and degrades Loki performance.
 
 ### Reference LogQL queries
 
@@ -175,24 +126,22 @@ sum(rate({job="llm-gateway"}[5m]))
 
 Loki uses `emptyDir` storage — **log data does not survive pod restarts**. This is intentional
 for PoC environments to keep the blueprint stateless and cluster-portable. For production or
-longer-lived deployments, replace the `emptyDir` volume with a PersistentVolumeClaim.
+longer-lived deployments, replace the `emptyDir` volume with a PersistentVolumeClaim backed by
+an appropriate StorageClass and increase `loki_retention_hours` accordingly.
 
 ## How traffic-producing blueprints integrate
 
 A traffic-producing blueprint (e.g. `bnk-ai-gateway-litellm-aws` in `bnk-forge-catalog-aws-eks`)
 should:
 
-1. List `bnk-live-observability-foundation` as a **prerequisite blueprint** in its
-   `forge-blueprint.json`.
-2. Accept `observability_namespace`, `loki_service_name`, and `loki_port` as inputs
-   (pass-through from the foundation).
-3. Configure its AI Gateway or proxy to emit logs in the JSON format above to
-   stdout/stderr, where Fluent Bit picks them up automatically.
+1. List `bnk-live-observability-foundation` as a **prerequisite blueprint** in its `forge-blueprint.json`.
+2. Accept `observability_namespace`, `loki_service_name`, and `loki_port` as inputs (pass-through from the foundation).
+3. Configure its AI Gateway or proxy to emit logs in the JSON format above to stdout/stderr, where Fluent Bit picks them up automatically.
 4. Optionally, configure the AI Gateway to push directly to Loki at
    `http://<loki_service_name>.<observability_namespace>.svc.cluster.local:<loki_port>/loki/api/v1/push`
    in addition to or instead of stdout.
 
 ## Maturity
 
-`preview` — release/2.3. The module chain has been validated against the `bnkforge.pack.json`
-schema. End-to-end cluster testing is the next step before `beta`.
+`preview` — new blueprint (release/2.3). The module chain has been validated against the
+`bnkforge.pack.json` schema. End-to-end cluster testing is the next step before `beta`.

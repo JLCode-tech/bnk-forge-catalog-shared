@@ -2,9 +2,9 @@
   "schema_version": 1,
   "blueprint": {
     "id": "bnk-live-observability-foundation",
-    "version": "0.1.2-alpha",
+    "version": "0.1.3-alpha",
     "name": "BNK Live Observability Foundation",
-    "description": "Deploys a reusable cloud-agnostic Loki log store and Fluent Bit collector foundation for live BNK PoC telemetry. Works with any Kubernetes cluster via direct kubeconfig — no existing Forge cluster registration required. Defaults match Forge AI Gateway observability settings (observability_namespace=llm-egress, loki_service_name=loki, loki_port=3100). This blueprint creates a new Forge project; after deploy, register the same cluster in Forge (Settings > Clusters) to enable the PR #393 Loki dashboard. Producer blueprints emit real structured JSON logs into Loki; this blueprint does not generate synthetic data."
+    "description": "Deploys a reusable cloud-agnostic Loki log store and Fluent Bit collector foundation for live BNK PoC telemetry. Deploy this into an existing Forge project whose Kubernetes cluster is already registered — the cluster kubeconfig is supplied automatically by Forge, no kubeconfig input is required. Defaults are compatible with Forge AI Gateway observability settings (observability_namespace=llm-egress, loki_service_name=loki, loki_port=3100). Run this blueprint after BNK is installed and before deploying traffic-producing PoCs. Producer blueprints emit real structured JSON logs into Loki; this blueprint does not generate synthetic data."
   },
   "bnk_version": "2.3",
   "compatibility": {
@@ -28,7 +28,6 @@
     "poc"
   ],
   "outcomes": [
-    "Cluster kubeconfig validated and connectivity confirmed",
     "Kubernetes namespace 'llm-egress' (or custom) created and labelled",
     "Loki log store running as a single-replica Deployment with ClusterIP Service",
     "Fluent Bit DaemonSet collecting live pod logs and forwarding JSON-structured records to Loki",
@@ -38,18 +37,10 @@
   "prerequisites": [
     {
       "type": "kubernetes_cluster",
-      "description": "A Kubernetes cluster kubeconfig must be available. The kubeconfig is provided as a blueprint input — no prior Forge cluster registration is required. BNK must already be installed if you intend to use Forge AI Gateway features that query Loki. After this blueprint deploys, register the cluster in Forge (Settings > Clusters) to enable the PR #393 Loki dashboard cluster-selector."
+      "description": "An existing Forge project with a registered Kubernetes cluster. Deploy this blueprint into that project — Forge injects the project's cluster kubeconfig into every module automatically (local.forge_kubeconfig). BNK must already be installed if you intend to use AI Gateway features that query Loki."
     }
   ],
   "input_summary": [
-    {
-      "label": "Cluster name",
-      "value": "Required. A human-readable name for the cluster (e.g. 'my-onprem-k8s'). Used in Forge project labels and registration guidance."
-    },
-    {
-      "label": "Kubeconfig",
-      "value": "Required (sensitive). Full plain-text kubeconfig for the target cluster. Stored as a project secret. Supports any Kubernetes cluster."
-    },
     {
       "label": "Observability namespace",
       "value": "Default: llm-egress. Must match the observability_namespace setting in Forge AI Gateway (PR #393)."
@@ -68,24 +59,7 @@
     }
   ],
   "inputs": {
-    "required": [
-      {
-        "name": "cluster_name",
-        "type": "string",
-        "description": "Human-readable name for the target cluster (e.g. 'my-onprem-k8s'). Used in Forge project labels. After deploy, register this same cluster in Forge (Settings > Clusters > Add cluster) to enable the PR #393 Loki dashboard.",
-        "sensitive": false,
-        "source": "user",
-        "order": 1
-      },
-      {
-        "name": "kubeconfig_content",
-        "type": "string",
-        "description": "Full plain-text kubeconfig for the target Kubernetes cluster. Supports any cluster (EKS, AKS, GKE, ROKS, on-prem). Stored as a project secret and passed to every module as forge_kubeconfig_content. Never logged or stored in plaintext outputs.",
-        "sensitive": true,
-        "source": "user",
-        "order": 2
-      }
-    ],
+    "required": [],
     "optional": [
       {
         "name": "observability_namespace",
@@ -93,7 +67,7 @@
         "description": "Kubernetes namespace for all live observability components. Must match the observability_namespace value in Forge AI Gateway settings.",
         "sensitive": false,
         "source": "user",
-        "order": 3,
+        "order": 1,
         "default": "llm-egress"
       },
       {
@@ -102,7 +76,7 @@
         "description": "Kubernetes Service name for Loki. Must match the loki_service_name value in Forge AI Gateway settings.",
         "sensitive": false,
         "source": "user",
-        "order": 4,
+        "order": 2,
         "default": "loki"
       },
       {
@@ -111,7 +85,7 @@
         "description": "Loki HTTP port. Must match the loki_port value in Forge AI Gateway settings.",
         "sensitive": false,
         "source": "user",
-        "order": 5,
+        "order": 3,
         "default": 3100
       },
       {
@@ -120,7 +94,7 @@
         "description": "Loki chunk and index retention in hours. Default 24 h is suitable for PoC environments with emptyDir storage. Use 168 for a 7-day rolling window.",
         "sensitive": false,
         "source": "user",
-        "order": 6,
+        "order": 4,
         "default": 24
       },
       {
@@ -129,7 +103,7 @@
         "description": "Deploy the Fluent Bit DaemonSet for live pod log collection. Set false if your cluster already has a log collector or you only want direct-push producers.",
         "sensitive": false,
         "source": "user",
-        "order": 7,
+        "order": 5,
         "default": true
       },
       {
@@ -138,7 +112,7 @@
         "description": "Value for the bnk-forge/poc label added to the observability namespace. Useful for grouping resources in multi-PoC clusters.",
         "sensitive": false,
         "source": "user",
-        "order": 8,
+        "order": 6,
         "default": "default"
       },
       {
@@ -147,33 +121,20 @@
         "description": "Seconds to wait for Loki to become ready. Increase if your cluster has slow image pulls.",
         "sensitive": false,
         "source": "user",
-        "order": 9,
+        "order": 7,
         "default": 120
       }
     ]
   },
   "modules": [
     {
-      "id": "adopt",
-      "name": "Adopt cluster via kubeconfig",
-      "description": "Validates kubeconfig connectivity to the target cluster. Writes kubeconfig to disk (0600) and confirms kubectl can reach the API server before any Kubernetes resources are created. Does not auto-register the cluster in Forge — see README for manual registration instructions.",
-      "module": "modules/live-observability-cluster-adopt",
-      "version": "0.1.0-alpha",
-      "depends_on": [],
-      "inputs": {
-        "cluster_name": "${cluster_name}",
-        "kubeconfig_content": "${kubeconfig_content}"
-      }
-    },
-    {
       "id": "namespace",
       "name": "Create observability namespace",
       "description": "Creates and labels the Kubernetes namespace for all live observability components.",
       "module": "modules/live-observability-namespace",
       "version": "0.1.0-alpha",
-      "depends_on": ["adopt"],
+      "depends_on": [],
       "inputs": {
-        "forge_kubeconfig_content": "${kubeconfig_content}",
         "observability_namespace": "${observability_namespace}",
         "poc_label": "${poc_label}"
       }
@@ -184,9 +145,8 @@
       "description": "Deploys single-replica Grafana Loki as plain Kubernetes manifests with a ClusterIP Service.",
       "module": "modules/live-observability-loki",
       "version": "0.1.0-alpha",
-      "depends_on": ["adopt", "namespace"],
+      "depends_on": ["namespace"],
       "inputs": {
-        "forge_kubeconfig_content": "${kubeconfig_content}",
         "observability_namespace": "${observability_namespace}",
         "loki_service_name": "${loki_service_name}",
         "loki_port": "${loki_port}",
@@ -199,9 +159,8 @@
       "description": "Deploys Fluent Bit as a DaemonSet that tails live pod logs, promotes model/status/job as Loki labels, and forwards to Loki.",
       "module": "modules/live-observability-collector",
       "version": "0.1.0-alpha",
-      "depends_on": ["adopt", "namespace", "loki"],
+      "depends_on": ["namespace", "loki"],
       "inputs": {
-        "forge_kubeconfig_content": "${kubeconfig_content}",
         "observability_namespace": "${observability_namespace}",
         "loki_service_name": "${loki_service_name}",
         "loki_port": "${loki_port}",
@@ -214,9 +173,8 @@
       "description": "Polls Loki /ready via the Kubernetes API-server service proxy. Marks the foundation ready for traffic-producing blueprints.",
       "module": "modules/live-observability-readiness",
       "version": "0.1.0-alpha",
-      "depends_on": ["adopt", "namespace", "loki", "collector"],
+      "depends_on": ["namespace", "loki", "collector"],
       "inputs": {
-        "forge_kubeconfig_content": "${kubeconfig_content}",
         "observability_namespace": "${observability_namespace}",
         "loki_service_name": "${loki_service_name}",
         "loki_port": "${loki_port}",
