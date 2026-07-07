@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Live Observability Loki",
+    "path": "modules/live-observability-loki",
+    "version": "0.1.0-alpha",
+    "category": "k8s",
+    "description": "Cloud-agnostic primitive: deploy a single-replica Grafana Loki log store as plain Kubernetes manifests (no Helm). Service name and port match Forge AI Gateway defaults (loki:3100). PoC retention — emptyDir storage, configurable retention hours. Receives log streams from live-observability-collector; queried by Forge AI Gateway ranking/filter features."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/live-observability-namespace",
+        "reason": "The observability namespace must exist before Loki resources are created."
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "observability_namespace",
+        "type": "string",
+        "description": "Namespace where Loki is deployed. Must match the namespace created by live-observability-namespace. Forge auto-wires this from the upstream module output.",
+        "source": "module",
+        "from_module": "modules/live-observability-namespace",
+        "from_output": "observability_namespace",
+        "default": "llm-egress"
+      },
+      {
+        "name": "loki_service_name",
+        "type": "string",
+        "description": "Kubernetes Service name for Loki. Must match the Forge AI Gateway loki_service_name setting (PR #393 default: loki).",
+        "source": "user",
+        "default": "loki"
+      },
+      {
+        "name": "loki_port",
+        "type": "number",
+        "description": "Port on which Loki's HTTP API listens. Must match the Forge AI Gateway loki_port setting (PR #393 default: 3100).",
+        "source": "user",
+        "default": 3100
+      },
+      {
+        "name": "loki_retention_hours",
+        "type": "number",
+        "description": "Loki chunk and index retention in hours. Default 24 (1 day) is suitable for PoC. Set to 168 (7 days) if you need a longer rolling window.",
+        "source": "user",
+        "default": 24
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "loki_endpoint",
+        "type": "string",
+        "description": "In-cluster Loki push URL (http://<svc>.<ns>.svc.cluster.local:<port>/loki/api/v1/push). Provided for documentation; downstream modules use loki_service_name and loki_port separately."
+      },
+      {
+        "name": "loki_service_name",
+        "type": "string",
+        "description": "Resolved Loki Kubernetes Service name. Consumed by live-observability-collector and live-observability-readiness."
+      },
+      {
+        "name": "loki_port",
+        "type": "number",
+        "description": "Resolved Loki HTTP port. Consumed by live-observability-collector and live-observability-readiness."
+      },
+      {
+        "name": "loki_namespace",
+        "type": "string",
+        "description": "Namespace where Loki is deployed. Consumed by live-observability-collector to construct the in-cluster DNS hostname."
+      },
+      {
+        "name": "loki_ready",
+        "type": "boolean",
+        "description": "Gate output — true once Loki manifests have been applied and the Deployment has rolled out. Downstream collector module depends on this."
+      }
+    ]
+  }
+}

@@ -32,6 +32,10 @@ cloud-specific IAM, cloud-specific networking, or a provider-specific service
 | [`modules/cert-manager`](./modules/cert-manager) | Deploys Jetstack cert-manager with BNK-tuned defaults (CRDs, controller/webhook replica counts, OTEL cert pre-wiring). | After bnk-prerequisites, before FLO. FLO certs and OTEL flows need this. |
 | [`modules/bnk-cert-issuer`](./modules/bnk-cert-issuer) | Creates the BNK-managed self-signed CA + CA-backed ClusterIssuer + OTEL server certs. Pure-manifest module — no Terraform code. | After cert-manager. Provides the issuer that FLO references. |
 | [`modules/install-multus`](./modules/install-multus) | Installs Multus CNI (meta-CNI for multi-interface pods). Pure k8s logic; no cloud bits. | When BNK TMM needs the 3-interface model. Per-cloud catalogs chain a cloud-specific NAD-creation module after this. |
+| [`modules/live-observability-namespace`](./modules/live-observability-namespace) | Creates and labels the Kubernetes namespace for live observability components (default: `llm-egress`). | First step of the `bnk-live-observability-foundation` blueprint. |
+| [`modules/live-observability-loki`](./modules/live-observability-loki) | Deploys single-replica Grafana Loki as plain Kubernetes manifests. No Helm. Service name/port match Forge AI Gateway defaults (`loki:3100`). | After live-observability-namespace. Receives logs from the collector; queried by Forge AI Gateway. |
+| [`modules/live-observability-collector`](./modules/live-observability-collector) | Deploys Fluent Bit DaemonSet that tails live pod logs, parses JSON, promotes `model`/`status`/`job` as Loki stream labels, and forwards to Loki. Real log collection — not a generator. | After live-observability-loki. Activated by `enable_pod_log_collection=true` (default). |
+| [`modules/live-observability-readiness`](./modules/live-observability-readiness) | Polls Loki `/ready` via the Kubernetes API-server service proxy path. Gate output used by traffic-producing blueprints. | Final step of the `bnk-live-observability-foundation` blueprint. |
 
 ## Blueprints
 
@@ -40,9 +44,9 @@ and useful across Kubernetes targets. They should assume any required cluster or
 BNK platform prerequisites already exist unless the blueprint explicitly creates
 Kubernetes-only resources.
 
-| Blueprint | What it does | When you'd use it |
-|---|---|---|
-| `blueprints/bnk-live-observability-foundation` *(planned)* | Deploys a reusable Loki + collector foundation for live BNK PoC telemetry. Defaults are compatible with Forge AI Gateway observability (`llm-egress/loki:3100`). | After BNK is installed, before deploying traffic-producing PoCs that need shared live observability. |
+| Blueprint | What it does | Module chain | When you'd use it |
+|---|---|---|---|
+| [`blueprints/bnk-live-observability-foundation`](./blueprints/bnk-live-observability-foundation) | Deploys a reusable Loki + Fluent Bit foundation for live BNK PoC telemetry. Defaults match Forge AI Gateway observability settings (`llm-egress/loki:3100`). No synthetic data, no AI provider credentials. | namespace → loki → collector → readiness | After BNK is installed, before deploying traffic-producing PoCs that need shared live observability. |
 
 Provider-specific blueprints stay in their provider catalog. For example, an
 AWS Bedrock + LiteLLM traffic demo belongs in `bnk-forge-catalog-aws-eks`; an

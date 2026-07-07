@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Live Observability Readiness",
+    "path": "modules/live-observability-readiness",
+    "version": "0.1.0-alpha",
+    "category": "k8s",
+    "description": "Cloud-agnostic gate: verify the Loki service is reachable and responding to health checks via the Kubernetes API-server service proxy path. Runs kubectl get --raw to confirm /ready returns 200 before marking the observability stack as available to traffic-producing blueprints."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/live-observability-loki",
+        "reason": "Loki must be deployed before its readiness can be verified."
+      },
+      {
+        "module": "modules/live-observability-collector",
+        "reason": "Collector must be deployed before the overall stack readiness is confirmed."
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "observability_namespace",
+        "type": "string",
+        "description": "Namespace where Loki is running. Auto-wired from live-observability-namespace.",
+        "source": "module",
+        "from_module": "modules/live-observability-namespace",
+        "from_output": "observability_namespace",
+        "default": "llm-egress"
+      },
+      {
+        "name": "loki_service_name",
+        "type": "string",
+        "description": "Loki service name. Auto-wired from live-observability-loki.",
+        "source": "module",
+        "from_module": "modules/live-observability-loki",
+        "from_output": "loki_service_name",
+        "default": "loki"
+      },
+      {
+        "name": "loki_port",
+        "type": "number",
+        "description": "Loki HTTP port. Must match the live-observability-loki deployment.",
+        "source": "user",
+        "default": 3100
+      },
+      {
+        "name": "readiness_timeout_seconds",
+        "type": "number",
+        "description": "Total seconds to wait for Loki to become ready via the K8s API-server proxy path. Default 120 is sufficient for cold-start PoC clusters.",
+        "source": "user",
+        "default": 120
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "observability_ready",
+        "type": "boolean",
+        "description": "True when Loki returned a 200 /ready response via the K8s API-server service proxy. Traffic-producing blueprints should depend on this output before starting log emission."
+      },
+      {
+        "name": "loki_proxy_url",
+        "type": "string",
+        "description": "The K8s API-server proxy path used to verify readiness. Useful for diagnostics."
+      }
+    ]
+  }
+}

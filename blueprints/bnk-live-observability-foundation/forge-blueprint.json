@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "blueprint": {
+    "id": "bnk-live-observability-foundation",
+    "version": "0.1.0-alpha",
+    "name": "BNK Live Observability Foundation",
+    "description": "Deploys a reusable cloud-agnostic Loki log store and Fluent Bit collector foundation for live BNK PoC telemetry. Defaults are compatible with Forge AI Gateway observability settings (observability_namespace=llm-egress, loki_service_name=loki, loki_port=3100). Run this blueprint after BNK is installed and before deploying traffic-producing PoCs. Producer blueprints emit real structured JSON logs into Loki; this blueprint does not generate synthetic data."
+  },
+  "bnk_version": "2.3",
+  "compatibility": {
+    "supported_platform_profiles": ["any"],
+    "required_capabilities": []
+  },
+  "category": "app",
+  "icon": "activity",
+  "color": "cyan",
+  "estimated_time": "5-10 minutes",
+  "estimated_cost": "No cloud cost — Kubernetes-only resources",
+  "difficulty": "beginner",
+  "maturity": "preview",
+  "tags": [
+    "observability",
+    "loki",
+    "fluent-bit",
+    "cloud-agnostic",
+    "post-bnk",
+    "ai-gateway",
+    "poc"
+  ],
+  "outcomes": [
+    "Kubernetes namespace 'llm-egress' (or custom) created and labelled",
+    "Loki log store running as a single-replica Deployment with ClusterIP Service",
+    "Fluent Bit DaemonSet collecting live pod logs and forwarding JSON-structured records to Loki",
+    "Loki /ready confirmed via Kubernetes API-server proxy",
+    "Foundation ready for traffic-producing blueprints to emit real logs"
+  ],
+  "prerequisites": [
+    {
+      "type": "kubernetes_cluster",
+      "description": "A running Kubernetes cluster registered in Forge. BNK must already be installed if you intend to use AI Gateway features that query Loki."
+    }
+  ],
+  "input_summary": [
+    {
+      "label": "Observability namespace",
+      "value": "Default: llm-egress. Must match the observability_namespace setting in Forge AI Gateway (PR #393)."
+    },
+    {
+      "label": "Loki service name / port",
+      "value": "Default: loki / 3100. Must match the Forge AI Gateway loki_service_name and loki_port settings."
+    },
+    {
+      "label": "Loki retention",
+      "value": "Default: 24 hours (PoC). Set loki_retention_hours=168 for a 7-day rolling window."
+    },
+    {
+      "label": "Pod log collection",
+      "value": "Default: enabled. Set enable_pod_log_collection=false to skip the Fluent Bit DaemonSet if your cluster already has a log collector."
+    }
+  ],
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "observability_namespace",
+        "type": "string",
+        "description": "Kubernetes namespace for all live observability components. Must match the observability_namespace value in Forge AI Gateway settings.",
+        "sensitive": false,
+        "source": "user",
+        "order": 1,
+        "default": "llm-egress"
+      },
+      {
+        "name": "loki_service_name",
+        "type": "string",
+        "description": "Kubernetes Service name for Loki. Must match the loki_service_name value in Forge AI Gateway settings.",
+        "sensitive": false,
+        "source": "user",
+        "order": 2,
+        "default": "loki"
+      },
+      {
+        "name": "loki_port",
+        "type": "number",
+        "description": "Loki HTTP port. Must match the loki_port value in Forge AI Gateway settings.",
+        "sensitive": false,
+        "source": "user",
+        "order": 3,
+        "default": 3100
+      },
+      {
+        "name": "loki_retention_hours",
+        "type": "number",
+        "description": "Loki chunk and index retention in hours. Default 24 h is suitable for PoC environments with emptyDir storage. Use 168 for a 7-day rolling window.",
+        "sensitive": false,
+        "source": "user",
+        "order": 4,
+        "default": 24
+      },
+      {
+        "name": "enable_pod_log_collection",
+        "type": "boolean",
+        "description": "Deploy the Fluent Bit DaemonSet for live pod log collection. Set false if your cluster already has a log collector or you only want direct-push producers.",
+        "sensitive": false,
+        "source": "user",
+        "order": 5,
+        "default": true
+      },
+      {
+        "name": "poc_label",
+        "type": "string",
+        "description": "Value for the bnk-forge/poc label added to the observability namespace. Useful for grouping resources in multi-PoC clusters.",
+        "sensitive": false,
+        "source": "user",
+        "order": 6,
+        "default": "default"
+      },
+      {
+        "name": "readiness_timeout_seconds",
+        "type": "number",
+        "description": "Seconds to wait for Loki to become ready. Increase if your cluster has slow image pulls.",
+        "sensitive": false,
+        "source": "user",
+        "order": 7,
+        "default": 120
+      }
+    ]
+  },
+  "modules": [
+    {
+      "id": "namespace",
+      "name": "Create observability namespace",
+      "description": "Creates and labels the Kubernetes namespace for all live observability components.",
+      "module": "modules/live-observability-namespace",
+      "version": "0.1.0-alpha",
+      "depends_on": [],
+      "inputs": {
+        "observability_namespace": "${observability_namespace}",
+        "poc_label": "${poc_label}"
+      }
+    },
+    {
+      "id": "loki",
+      "name": "Deploy Loki log store",
+      "description": "Deploys single-replica Grafana Loki as plain Kubernetes manifests with a ClusterIP Service.",
+      "module": "modules/live-observability-loki",
+      "version": "0.1.0-alpha",
+      "depends_on": ["namespace"],
+      "inputs": {
+        "observability_namespace": "${observability_namespace}",
+        "loki_service_name": "${loki_service_name}",
+        "loki_port": "${loki_port}",
+        "loki_retention_hours": "${loki_retention_hours}"
+      }
+    },
+    {
+      "id": "collector",
+      "name": "Deploy Fluent Bit collector",
+      "description": "Deploys Fluent Bit as a DaemonSet that tails live pod logs, promotes model/status/job as Loki labels, and forwards to Loki.",
+      "module": "modules/live-observability-collector",
+      "version": "0.1.0-alpha",
+      "depends_on": ["namespace", "loki"],
+      "inputs": {
+        "observability_namespace": "${observability_namespace}",
+        "loki_service_name": "${loki_service_name}",
+        "loki_port": "${loki_port}",
+        "enable_pod_log_collection": "${enable_pod_log_collection}"
+      }
+    },
+    {
+      "id": "readiness",
+      "name": "Verify observability stack readiness",
+      "description": "Polls Loki /ready via the Kubernetes API-server service proxy. Marks the foundation ready for traffic-producing blueprints.",
+      "module": "modules/live-observability-readiness",
+      "version": "0.1.0-alpha",
+      "depends_on": ["namespace", "loki", "collector"],
+      "inputs": {
+        "observability_namespace": "${observability_namespace}",
+        "loki_service_name": "${loki_service_name}",
+        "loki_port": "${loki_port}",
+        "readiness_timeout_seconds": "${readiness_timeout_seconds}"
+      }
+    }
+  ]
+}
