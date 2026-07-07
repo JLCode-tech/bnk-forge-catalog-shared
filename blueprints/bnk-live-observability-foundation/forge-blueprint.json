@@ -2,13 +2,13 @@
   "schema_version": 1,
   "blueprint": {
     "id": "bnk-live-observability-foundation",
-    "version": "0.1.0-alpha",
+    "version": "0.1.1-alpha",
     "name": "BNK Live Observability Foundation",
     "description": "Deploys a reusable cloud-agnostic Loki log store and Fluent Bit collector foundation for live BNK PoC telemetry. Defaults are compatible with Forge AI Gateway observability settings (observability_namespace=llm-egress, loki_service_name=loki, loki_port=3100). Run this blueprint after BNK is installed and before deploying traffic-producing PoCs. Producer blueprints emit real structured JSON logs into Loki; this blueprint does not generate synthetic data."
   },
   "bnk_version": "2.3",
   "compatibility": {
-    "supported_platform_profiles": ["any"],
+    "supported_platform_profiles": ["eks", "aks", "gke", "roks", "ocp", "generic_onprem"],
     "required_capabilities": []
   },
   "category": "app",
