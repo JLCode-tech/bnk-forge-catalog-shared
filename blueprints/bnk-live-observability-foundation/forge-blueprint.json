@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "bnk-live-observability-foundation",
-    "version": "0.1.3-alpha",
+    "version": "0.1.4-alpha",
     "name": "BNK Live Observability Foundation",
     "description": "Deploy a cloud-agnostic Loki + Fluent Bit logging foundation into an existing Forge project. Run after BNK is installed and before traffic-producing PoCs — the cluster kubeconfig is supplied automatically."
   },
