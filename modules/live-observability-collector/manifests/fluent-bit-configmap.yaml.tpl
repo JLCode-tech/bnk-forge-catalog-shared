@@ -77,7 +77,7 @@ data:
         URI               /loki/api/v1/push
         tls               off
         Label_Keys        $job,$model,$status
-        Remove_Keys       job,model,status
+        Remove_Keys       job
         Line_Format       json
         Auto_Kubernetes_Labels off
 
@@ -97,15 +97,25 @@ data:
 
   promote_labels.lua: |
     -- promote_labels.lua
-    -- Extract job / model / status from a parsed JSON log record so that
-    -- the Loki output plugin can use them as stream labels.
-    -- Records without these fields are forwarded with empty label values.
+    -- Promote job/model/status as Loki stream labels and lift all metric fields
+    -- from log_processed to the record root so LogQL can unwrap them directly.
+    -- model/status are kept in the body (Remove_Keys only removes job) so that
+    -- the forge backend can read them from the log line JSON.
     function promote_loki_labels(tag, timestamp, record)
       local log = record["log_processed"]
       if type(log) == "table" then
-        record["job"]    = log["job"]    or ""
-        record["model"]  = log["model"]  or ""
-        record["status"] = log["status"] or ""
+        record["job"]        = log["job"]        or ""
+        record["model"]      = log["model"]      or ""
+        record["status"]     = log["status"]     or ""
+        record["latency_ms"] = log["latency_ms"]
+        record["prompt_tk"]  = log["prompt_tk"]
+        record["comp_tk"]    = log["comp_tk"]
+        record["total_tk"]   = log["total_tk"]
+        record["cached"]     = log["cached"]
+        record["cost"]       = log["cost"]
+        record["userq"]      = log["userq"]
+        record["req_body"]   = log["req_body"]
+        record["resp_body"]  = log["resp_body"]
       else
         record["job"]    = ""
         record["model"]  = ""
