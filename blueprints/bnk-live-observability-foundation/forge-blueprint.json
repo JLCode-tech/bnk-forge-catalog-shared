@@ -4,7 +4,7 @@
     "id": "bnk-live-observability-foundation",
     "version": "0.1.3-alpha",
     "name": "BNK Live Observability Foundation",
-    "description": "Deploys a reusable cloud-agnostic Loki log store and Fluent Bit collector foundation for live BNK PoC telemetry. Deploy this into an existing Forge project whose Kubernetes cluster is already registered — the cluster kubeconfig is supplied automatically by Forge, no kubeconfig input is required. Defaults are compatible with Forge AI Gateway observability settings (observability_namespace=llm-egress, loki_service_name=loki, loki_port=3100). Run this blueprint after BNK is installed and before deploying traffic-producing PoCs. Producer blueprints emit real structured JSON logs into Loki; this blueprint does not generate synthetic data."
+    "description": "Deploy a cloud-agnostic Loki + Fluent Bit logging foundation into an existing Forge project. Run after BNK is installed and before traffic-producing PoCs — the cluster kubeconfig is supplied automatically."
   },
   "bnk_version": "2.3",
   "compatibility": {
@@ -37,13 +37,13 @@
   "prerequisites": [
     {
       "type": "kubernetes_cluster",
-      "description": "An existing Forge project with a registered Kubernetes cluster. Deploy this blueprint into that project — Forge injects the project's cluster kubeconfig into every module automatically (local.forge_kubeconfig). BNK must already be installed if you intend to use AI Gateway features that query Loki."
+      "description": "An existing Forge project with a registered Kubernetes cluster. BNK must already be installed to use AI Gateway features that query Loki."
     }
   ],
   "input_summary": [
     {
       "label": "Observability namespace",
-      "value": "Default: llm-egress. Must match the observability_namespace setting in Forge AI Gateway (PR #393)."
+      "value": "Default: llm-egress. Must match the observability_namespace setting in Forge AI Gateway."
     },
     {
       "label": "Loki service name / port",
