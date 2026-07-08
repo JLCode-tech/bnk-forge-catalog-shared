@@ -23,7 +23,7 @@ data:
         Tag               kube.*
         Path              /var/log/containers/*.log
         Parser            cri
-        DB                /var/log/flb_kube.db
+        DB                /var/log/fluent-bit/flb_kube.db
         Mem_Buf_Limit     10MB
         Skip_Long_Lines   on
         Refresh_Interval  10
