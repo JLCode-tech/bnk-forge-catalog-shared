@@ -14,6 +14,9 @@ data:
         Log_Level     warn
         Daemon        off
         Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
 
     # ------------------------------------------------------------------
     # INPUT: tail all container logs from /var/log/containers/*.log
@@ -23,7 +26,7 @@ data:
         Tag               kube.*
         Path              /var/log/containers/*.log
         Parser            cri
-        DB                /var/log/fluent-bit/flb_kube.db
+        DB                /fluent-bit/state/flb_kube.db
         Mem_Buf_Limit     10MB
         Skip_Long_Lines   on
         Refresh_Interval  10
@@ -73,7 +76,6 @@ data:
         Port              ${loki_port}
         URI               /loki/api/v1/push
         tls               off
-        Labels            job=$${job}, model=$${model}, status=$${status}
         Label_Keys        $job,$model,$status
         Remove_Keys       job,model,status
         Line_Format       json

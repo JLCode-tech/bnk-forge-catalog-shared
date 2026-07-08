@@ -57,7 +57,7 @@ spec:
             - name: config
               mountPath: /fluent-bit/etc
             - name: state
-              mountPath: /var/log/fluent-bit
+              mountPath: /fluent-bit/state
             - name: varlog
               mountPath: /var/log
               readOnly: true
