@@ -56,6 +56,8 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /fluent-bit/etc
+            - name: state
+              mountPath: /var/log/fluent-bit
             - name: varlog
               mountPath: /var/log
               readOnly: true
@@ -67,6 +69,8 @@ spec:
         - name: config
           configMap:
             name: fluent-bit-config
+        - name: state
+          emptyDir: {}
         - name: varlog
           hostPath:
             path: /var/log
